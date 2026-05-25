@@ -1,7 +1,7 @@
-import { Controller, Get, Post, Body, Query, UseGuards, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, ParseIntPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ServicesService } from './services.service';
-import { CreateServiceDto, CreateServicePriceDto } from './dto/service.dto';
+import { CreateServiceDto, CreateServicePriceDto, UpdateServiceDto } from './dto/service.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -30,6 +30,13 @@ export class ServicesController {
     @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
   ) {
     return this.servicesService.findAllServices(page, limit);
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER)
+  @ApiOperation({ summary: 'Update service' })
+  async updateService(@Param('id') id: string, @Body() updateServiceDto: UpdateServiceDto) {
+    return this.servicesService.updateService(id, updateServiceDto);
   }
 
   @Post('prices')

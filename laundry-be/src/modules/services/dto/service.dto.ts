@@ -1,6 +1,28 @@
 import { IsString, IsOptional, IsBoolean, IsNumber, IsInt } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
+export class UpdateServiceDto {
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  name?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  serviceType?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @ApiProperty({ required: false })
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
+}
+
 export class CreateServiceDto {
   @ApiProperty()
   @IsString()

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { CreateServiceDto, CreateServicePriceDto } from './dto/service.dto';
+import { CreateServiceDto, CreateServicePriceDto, UpdateServiceDto } from './dto/service.dto';
 
 @Injectable()
 export class ServicesService {
@@ -33,6 +33,16 @@ export class ServicesService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  async updateService(id: string, updateServiceDto: UpdateServiceDto) {
+    const service = await this.prisma.service.findUnique({ where: { id } });
+    if (!service) throw new NotFoundException('Service not found');
+
+    return this.prisma.service.update({
+      where: { id },
+      data: updateServiceDto,
+    });
   }
 
   async createServicePrice(createServicePriceDto: CreateServicePriceDto) {
