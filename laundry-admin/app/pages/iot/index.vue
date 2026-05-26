@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { h, resolveComponent } from 'vue'
 import { useApi } from '~/composables/useApi'
 import type { PaginatedResponse, IotDevice, Outlet } from '~/types'
 
@@ -8,241 +7,203 @@ const toast = useToast()
 
 const devices = ref<IotDevice[]>([])
 const outlets = ref<Outlet[]>([])
-const meta = ref({ total: 0, page: 1, limit: 10, totalPages: 1 })
 const loading = ref(false)
+const search = ref('')
+
 const showModal = ref(false)
 const editTarget = ref<IotDevice | null>(null)
-const deleteTarget = ref<IotDevice | null>(null)
-const showDeleteModal = ref(false)
-
-const deviceTypeItems = [
-  { label: 'Kiosk', value: 'KIOSK' },
-  { label: 'Timbangan Digital', value: 'DIGITAL_SCALE' },
-  { label: 'Printer Struk', value: 'RECEIPT_PRINTER' },
-  { label: 'Printer Label', value: 'LABEL_PRINTER' },
-  { label: 'Smart Locker', value: 'SMART_LOCKER' },
-  { label: 'Mesin Cuci', value: 'WASHING_MACHINE' },
-  { label: 'Pengering', value: 'DRYER_MACHINE' },
-  { label: 'Scanner QR', value: 'QR_SCANNER' },
-]
 
 const form = reactive({
   outletId: '',
   deviceCode: '',
-  deviceType: 'KIOSK',
+  deviceType: 'WASHING_MACHINE',
   name: '',
-  manufacturer: '',
-  model: '',
-  firmwareVersion: '',
 })
 
-const statusColor: Record<string, string> = {
-  ONLINE: 'success',
-  OFFLINE: 'neutral',
-  ERROR: 'error',
-  MAINTENANCE: 'warning',
-}
-
-const deviceTypeIcon: Record<string, string> = {
-  KIOSK: 'i-heroicons-computer-desktop',
-  DIGITAL_SCALE: 'i-heroicons-scale',
-  RECEIPT_PRINTER: 'i-heroicons-printer',
-  LABEL_PRINTER: 'i-heroicons-printer',
-  SMART_LOCKER: 'i-heroicons-lock-closed',
-  WASHING_MACHINE: 'i-heroicons-arrow-path',
-  DRYER_MACHINE: 'i-heroicons-fire',
-  QR_SCANNER: 'i-heroicons-qr-code',
-}
-
-const columns = [
-  { accessorKey: 'deviceCode', header: 'Kode' },
-  { accessorKey: 'name', header: 'Nama' },
-  {
-    id: 'deviceType',
-    header: 'Tipe',
-    cell: ({ row }: any) => {
-      const UIcon = resolveComponent('UIcon')
-      const icon = deviceTypeIcon[row.original.deviceType] || 'i-heroicons-cpu-chip'
-      return h('div', { class: 'flex items-center gap-1.5' }, [
-        h(UIcon, { name: icon, class: 'text-gray-400' }),
-        h('span', { class: 'text-xs' }, row.original.deviceType.replace(/_/g, ' ')),
-      ])
-    },
-  },
-  { id: 'outlet', header: 'Outlet', cell: ({ row }: any) => row.original.outlet?.name || '-' },
-  {
-    id: 'status',
-    header: 'Status',
-    cell: ({ row }: any) => {
-      const UBadge = resolveComponent('UBadge')
-      const color = statusColor[row.original.status] || 'neutral'
-      return h(UBadge, { color, variant: 'soft', size: 'xs' }, () => row.original.status)
-    },
-  },
-  {
-    id: 'lastHeartbeatAt',
-    header: 'Heartbeat',
-    cell: ({ row }: any) => h('span', { class: 'text-xs text-gray-500' }, row.original.lastHeartbeatAt ? new Date(row.original.lastHeartbeatAt).toLocaleString('id-ID') : 'Belum ada'),
-  },
-  {
-    id: 'actions',
-    header: '',
-    cell: ({ row }: any) => {
-      const UButton = resolveComponent('UButton')
-      return h('div', { class: 'flex gap-1 justify-end' }, [
-        h(UButton, { icon: 'i-heroicons-pencil', variant: 'ghost', size: 'xs', onClick: () => openEdit(row.original) }),
-        h(UButton, { icon: 'i-heroicons-trash', variant: 'ghost', color: 'error', size: 'xs', onClick: () => confirmDelete(row.original) }),
-      ])
-    },
-  },
+const deviceTypeItems = [
+  { label: 'Mesin Cuci (Washer)', value: 'WASHING_MACHINE' },
+  { label: 'Mesin Pengering (Dryer)', value: 'DRYER_MACHINE' },
+  { label: 'KIOSK', value: 'KIOSK' },
+  { label: 'Timbangan Digital', value: 'DIGITAL_SCALE' },
 ]
 
-async function load(page = 1) {
+const outletOptions = computed(() => outlets.value.map(o => ({ label: o.name, value: o.id })))
+
+const filteredDevices = computed(() => {
+  const keyword = search.value.trim().toLowerCase()
+  if (!keyword) return devices.value
+  return devices.value.filter(d => `${d.name} ${d.deviceCode} ${d.outlet?.name || ''}`.toLowerCase().includes(keyword))
+})
+
+function machineCondition(status: string) {
+  if (status === 'ONLINE') return { label: 'Normal', className: 'bg-[#1fa150] text-white' }
+  if (status === 'MAINTENANCE') return { label: 'Maintenance', className: 'bg-[#e28a05] text-white' }
+  return { label: 'Need Service', className: 'bg-[#d6280b] text-white' }
+}
+
+function machineActive(status: string) {
+  return status !== 'OFFLINE'
+}
+
+async function load() {
   loading.value = true
   try {
     const [devRes, outletRes] = await Promise.all([
-      api.get<PaginatedResponse<IotDevice>>(`/iot/devices?page=${page}&limit=10`),
+      api.get<PaginatedResponse<IotDevice>>('/iot/devices?page=1&limit=100'),
       api.get<PaginatedResponse<Outlet>>('/outlets?page=1&limit=100'),
     ])
     devices.value = devRes.data
-    meta.value = devRes.meta
     outlets.value = outletRes.data
   } catch (e: any) {
-    toast.add({ title: 'Gagal memuat perangkat', description: e.message, color: 'error' })
+    toast.add({ title: 'Gagal memuat mesin', description: e.message, color: 'error' })
   } finally {
     loading.value = false
   }
 }
-
-const outletOptions = computed(() =>
-  outlets.value.map(o => ({ label: o.name, value: o.id }))
-)
 
 function openCreate() {
   editTarget.value = null
   Object.assign(form, {
     outletId: outlets.value[0]?.id || '',
     deviceCode: '',
-    deviceType: 'KIOSK',
+    deviceType: 'WASHING_MACHINE',
     name: '',
-    manufacturer: '',
-    model: '',
-    firmwareVersion: '',
   })
   showModal.value = true
 }
 
-function openEdit(d: IotDevice) {
-  editTarget.value = d
+function openEdit(device: IotDevice) {
+  editTarget.value = device
   Object.assign(form, {
-    outletId: d.outletId,
-    deviceCode: d.deviceCode,
-    deviceType: d.deviceType,
-    name: d.name,
-    manufacturer: d.manufacturer || '',
-    model: d.model || '',
-    firmwareVersion: d.firmwareVersion || '',
+    outletId: device.outletId,
+    deviceCode: device.deviceCode,
+    deviceType: device.deviceType,
+    name: device.name,
   })
   showModal.value = true
 }
 
 async function save() {
   try {
-    const payload = { ...form }
     if (editTarget.value) {
-      await api.patch(`/iot/devices/${editTarget.value.id}`, payload)
-      toast.add({ title: 'Perangkat diperbarui', color: 'success' })
+      await api.patch(`/iot/devices/${editTarget.value.id}`, {
+        name: form.name,
+      })
+      toast.add({ title: 'Mesin diperbarui', color: 'success' })
     } else {
-      await api.post('/iot/devices', payload)
-      toast.add({ title: 'Perangkat ditambahkan', color: 'success' })
+      await api.post('/iot/devices', {
+        outletId: form.outletId,
+        deviceCode: form.deviceCode,
+        deviceType: form.deviceType,
+        name: form.name,
+      })
+      toast.add({ title: 'Mesin ditambahkan', color: 'success' })
     }
     showModal.value = false
-    load(meta.value.page)
+    load()
   } catch (e: any) {
     toast.add({ title: 'Gagal menyimpan', description: e.message, color: 'error' })
   }
 }
 
-function confirmDelete(d: IotDevice) {
-  deleteTarget.value = d
-  showDeleteModal.value = true
-}
-
-async function doDelete() {
-  if (!deleteTarget.value) return
-  try {
-    await api.del(`/iot/devices/${deleteTarget.value.id}`)
-    toast.add({ title: 'Perangkat dihapus', color: 'success' })
-    showDeleteModal.value = false
-    load(meta.value.page)
-  } catch (e: any) {
-    toast.add({ title: 'Gagal menghapus', description: e.message, color: 'error' })
-  }
-}
-
-onMounted(() => load())
+onMounted(load)
 </script>
 
 <template>
   <div class="space-y-4">
-    <div class="flex items-center justify-between">
-      <p class="text-sm text-gray-500">{{ meta.total }} perangkat terdaftar</p>
-      <UButton icon="i-heroicons-plus" @click="openCreate">Tambah Perangkat</UButton>
+    <div class="dc-page-card p-4 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0f6ee9] flex items-center justify-center">
+          <UIcon name="i-heroicons-computer-desktop" class="text-xl" />
+        </div>
+        <div>
+          <h2 class="text-lg font-semibold">Kelola Mesin</h2>
+          <p class="text-sm text-[#6f809f]">Tambah dan monitoring kesehatan mesin dari cabang laundry milik Anda.</p>
+        </div>
+      </div>
+      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2" @click="openCreate">Tambah Mesin</UButton>
     </div>
 
-    <UCard>
-      <UTable :data="devices" :columns="columns" :loading="loading" />
-
-      <div v-if="meta.totalPages > 1" class="flex justify-center pt-4">
-        <UPagination v-model:page="meta.page" :total="meta.total" :items-per-page="meta.limit" @update:page="load" />
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <p class="text-lg">Total Mesin: <span class="text-[#0f6ee9] font-semibold">{{ filteredDevices.length }} Mesin</span></p>
+      <div class="flex gap-2">
+        <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari Mesin" class="w-[280px] dc-input-like" />
+        <USelect :items="[{ label: 'Semua Cabang', value: 'all' }]" model-value="all" class="w-[170px] dc-input-like" />
       </div>
-    </UCard>
+    </div>
 
-    <UModal v-model:open="showModal" :title="editTarget ? 'Edit Perangkat' : 'Tambah Perangkat'">
+    <div class="dc-page-card p-4 overflow-x-auto">
+      <table class="w-full min-w-[1000px] text-sm">
+        <thead>
+          <tr class="bg-[#0b3a77] text-white text-left">
+            <th class="px-3 py-3 font-semibold">ID MESIN/ MERK</th>
+            <th class="px-3 py-3 font-semibold">TIPE MESIN</th>
+            <th class="px-3 py-3 font-semibold">OUTLET/CABANG</th>
+            <th class="px-3 py-3 font-semibold">KONDISI</th>
+            <th class="px-3 py-3 font-semibold">STATUS</th>
+            <th class="px-3 py-3 font-semibold">TERAKHIR DIPERBAIKI</th>
+            <th class="px-3 py-3 font-semibold">AKSI</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="loading">
+            <td colspan="7" class="px-3 py-4 text-[#6f809f]">Memuat data mesin...</td>
+          </tr>
+          <tr
+            v-for="(device, idx) in filteredDevices"
+            :key="device.id"
+            :class="idx % 2 ? 'bg-[#f8fbff]' : 'bg-transparent'"
+          >
+            <td class="px-3 py-3">
+              <p class="font-semibold">{{ device.deviceCode }}</p>
+              <p class="text-[#6f809f]">{{ device.manufacturer || '-' }}</p>
+            </td>
+            <td class="px-3 py-3">{{ deviceTypeItems.find(i => i.value === device.deviceType)?.label || device.deviceType }}</td>
+            <td class="px-3 py-3">{{ device.outlet?.name || '-' }}</td>
+            <td class="px-3 py-3">
+              <span class="rounded-full px-3 py-1 text-xs font-semibold" :class="machineCondition(device.status).className">{{ machineCondition(device.status).label }}</span>
+            </td>
+            <td class="px-3 py-3">
+              <span class="dc-pill-success" :class="!machineActive(device.status) ? '!bg-[#f2f4f8] !text-[#6f809f]' : ''">{{ machineActive(device.status) ? 'Aktif' : 'Nonaktif' }}</span>
+            </td>
+            <td class="px-3 py-3">{{ device.lastHeartbeatAt ? new Date(device.lastHeartbeatAt).toLocaleDateString('id-ID') : '-' }}</td>
+            <td class="px-3 py-3">
+              <UButton icon="i-heroicons-pencil" variant="ghost" class="dc-btn-outline" size="xs" @click="openEdit(device)">Edit</UButton>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <UModal v-model:open="showModal" :title="editTarget ? 'Edit Mesin' : 'Tambah Mesin'">
       <template #body>
         <form class="space-y-4" @submit.prevent="save">
-          <UFormField label="Outlet">
-            <USelect v-model="form.outletId" :items="outletOptions" class="w-full" />
-          </UFormField>
-          <div class="grid grid-cols-2 gap-4">
-            <UFormField label="Kode Perangkat">
-              <UInput v-model="form.deviceCode" placeholder="DEV-001" class="w-full" required />
+          <div class="grid md:grid-cols-2 gap-4">
+            <UFormField label="Merk Mesin">
+              <UInput v-model="form.name" placeholder="Masukkan merk mesin" class="w-full" required />
             </UFormField>
-            <UFormField label="Tipe Perangkat">
-              <USelect v-model="form.deviceType" :items="deviceTypeItems" class="w-full" />
+            <UFormField label="Outlet/Cabang">
+              <USelect v-model="form.outletId" :items="outletOptions" class="w-full" :disabled="!!editTarget" />
             </UFormField>
           </div>
-          <UFormField label="Nama Perangkat">
-            <UInput v-model="form.name" placeholder="Mesin Cuci 1" class="w-full" required />
-          </UFormField>
-          <div class="grid grid-cols-2 gap-4">
-            <UFormField label="Produsen">
-              <UInput v-model="form.manufacturer" placeholder="Samsung" class="w-full" />
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <UFormField label="Tipe Mesin">
+              <USelect v-model="form.deviceType" :items="deviceTypeItems" class="w-full" :disabled="!!editTarget" />
             </UFormField>
-            <UFormField label="Model">
-              <UInput v-model="form.model" placeholder="WF-1234" class="w-full" />
+            <UFormField label="Kapasitas Mesin">
+              <UInput placeholder="Pilih Kapasitas" class="w-full" />
             </UFormField>
           </div>
-          <UFormField label="Versi Firmware">
-            <UInput v-model="form.firmwareVersion" placeholder="v1.0.0" class="w-full" />
+
+          <UFormField label="Kode Mesin" v-if="!editTarget">
+            <UInput v-model="form.deviceCode" placeholder="DEV-001" class="w-full" required />
           </UFormField>
-          <div class="flex justify-end gap-2 pt-2">
-            <UButton variant="ghost" @click="showModal = false">Batal</UButton>
-            <UButton type="submit">Simpan</UButton>
+
+          <div class="flex justify-end pt-2">
+            <UButton type="submit" class="dc-btn-primary px-4 py-2">Simpan</UButton>
           </div>
         </form>
-      </template>
-    </UModal>
-
-    <UModal v-model:open="showDeleteModal" title="Hapus Perangkat">
-      <template #body>
-        <p class="text-sm text-gray-600 dark:text-gray-400">
-          Yakin ingin menghapus perangkat <strong>{{ deleteTarget?.name }}</strong>?
-        </p>
-        <div class="flex justify-end gap-2 pt-4">
-          <UButton variant="ghost" @click="showDeleteModal = false">Batal</UButton>
-          <UButton color="error" @click="doDelete">Hapus</UButton>
-        </div>
       </template>
     </UModal>
   </div>

@@ -1,2 +1,66 @@
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 @import "@nuxt/ui";
+
+:root {
+  --dc-bg: #f2f5fa;
+  --dc-card: #ffffff;
+  --dc-border: #cfd9ea;
+  --dc-primary: #0f6ee9;
+  --dc-primary-dark: #0b3a77;
+  --dc-text: #1a2237;
+  --dc-muted: #6f809f;
+  --dc-success: #19984d;
+  --dc-danger: #da2d14;
+}
+
+body {
+  font-family: "Poppins", sans-serif;
+  background: var(--dc-bg);
+  color: var(--dc-text);
+}
+
+.dc-page-card {
+  border: 1px solid var(--dc-border);
+  background: var(--dc-card);
+  border-radius: 12px;
+}
+
+.dc-section-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f1d37;
+}
+
+.dc-muted {
+  color: var(--dc-muted);
+}
+
+.dc-btn-primary {
+  background: var(--dc-primary);
+  color: #fff;
+  border-radius: 14px;
+  border: 1px solid var(--dc-primary);
+}
+
+.dc-btn-outline {
+  border: 1px solid var(--dc-primary);
+  color: var(--dc-primary);
+  background: #fff;
+  border-radius: 10px;
+}
+
+.dc-pill-success {
+  color: var(--dc-success);
+  background: #dcf2e6;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dc-input-like {
+  background: #fff;
+  border: 1px solid #b7c7e2;
+  border-radius: 12px;
+}

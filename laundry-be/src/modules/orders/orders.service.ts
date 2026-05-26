@@ -1,11 +1,21 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateOrderDto, UpdateOrderStatusDto, CancelOrderDto } from './dto/order.dto';
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus, UserRole } from '@prisma/client';
 
 @Injectable()
 export class OrdersService {
   constructor(private prisma: PrismaService) {}
+  private readonly paidOrderStatuses: OrderStatus[] = [
+    OrderStatus.PAID,
+    OrderStatus.RECEIVED,
+    OrderStatus.WASHING,
+    OrderStatus.DRYING,
+    OrderStatus.IRONING,
+    OrderStatus.PACKING,
+    OrderStatus.READY_PICKUP,
+    OrderStatus.COMPLETED,
+  ];
 
   async create(createOrderDto: CreateOrderDto, createdBy?: string) {
     const { items, outletId, customerId, promoCode, deliveryFee = 0, ...orderData } = createOrderDto;
@@ -216,6 +226,173 @@ export class OrdersService {
     }
 
     return order;
+  }
+
+  async getDashboardSummary() {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    const start30Days = new Date(start);
+    start30Days.setDate(start30Days.getDate() - 29);
+
+    const [totalMachines, totalOutlets, totalStaff, todayAggregate, recentOrders, last30DaysOrders] =
+      await Promise.all([
+        this.prisma.iotDevice.count(),
+        this.prisma.outlet.count(),
+        this.prisma.user.count({
+          where: {
+            isActive: true,
+            role: {
+              in: [
+                UserRole.OWNER,
+                UserRole.ADMIN_OUTLET,
+                UserRole.CASHIER,
+                UserRole.OPERATOR,
+                UserRole.TECHNICIAN,
+              ],
+            },
+          },
+        }),
+        this.prisma.order.aggregate({
+          where: {
+            status: { in: this.paidOrderStatuses },
+            orderDate: { gte: start, lt: end },
+          },
+          _sum: { totalAmount: true },
+          _count: { _all: true },
+        }),
+        this.prisma.order.findMany({
+          where: {
+            status: { in: this.paidOrderStatuses },
+          },
+          include: {
+            outlet: true,
+            items: true,
+          },
+          orderBy: { orderDate: 'desc' },
+          take: 6,
+        }),
+        this.prisma.order.findMany({
+          where: {
+            status: { in: this.paidOrderStatuses },
+            orderDate: { gte: start30Days, lt: end },
+          },
+          select: {
+            orderDate: true,
+            totalAmount: true,
+          },
+        }),
+      ]);
+
+    const formatDateKey = (date: Date): string => {
+      const y = date.getFullYear();
+      const m = `${date.getMonth() + 1}`.padStart(2, '0');
+      const d = `${date.getDate()}`.padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    };
+
+    const dailyMap = new Map<string, number>();
+    for (const order of last30DaysOrders) {
+      const key = formatDateKey(new Date(order.orderDate));
+      dailyMap.set(key, (dailyMap.get(key) ?? 0) + order.totalAmount);
+    }
+
+    const dailySeries = [];
+    for (let i = 0; i < 30; i += 1) {
+      const day = new Date(start30Days);
+      day.setDate(start30Days.getDate() + i);
+      const key = formatDateKey(day);
+      const revenue = dailyMap.get(key) ?? 0;
+      dailySeries.push({
+        date: key,
+        revenue,
+        profit: Math.round(revenue * 0.8),
+      });
+    }
+
+    return {
+      totalMachines,
+      totalOutlets,
+      totalStaff,
+      totalRevenueToday: todayAggregate._sum.totalAmount ?? 0,
+      totalPaidOrdersToday: todayAggregate._count._all,
+      recentOrders,
+      dailySeries,
+    };
+  }
+
+  async getFinanceSummary(month?: string, outletId?: string) {
+    const now = new Date();
+    const monthRegex = /^\d{4}-\d{2}$/;
+    if (month && !monthRegex.test(month)) {
+      throw new BadRequestException('Invalid month format. Use YYYY-MM');
+    }
+
+    const base = month ? new Date(`${month}-01T00:00:00.000Z`) : new Date(now.getFullYear(), now.getMonth(), 1);
+    if (Number.isNaN(base.getTime())) {
+      throw new BadRequestException('Invalid month value');
+    }
+
+    const start = new Date(base);
+    const end = new Date(start);
+    end.setMonth(end.getMonth() + 1);
+
+    const where: any = {
+      status: { in: this.paidOrderStatuses },
+      orderDate: { gte: start, lt: end },
+    };
+    if (outletId) where.outletId = outletId;
+
+    const [orders, aggregate] = await Promise.all([
+      this.prisma.order.findMany({
+        where,
+        orderBy: { orderDate: 'asc' },
+        select: {
+          id: true,
+          orderDate: true,
+          totalAmount: true,
+          outletId: true,
+        },
+      }),
+      this.prisma.order.aggregate({
+        where,
+        _sum: { totalAmount: true },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const dailyMap = new Map<string, number>();
+    for (const order of orders) {
+      const date = new Date(order.orderDate);
+      const y = date.getFullYear();
+      const m = `${date.getMonth() + 1}`.padStart(2, '0');
+      const d = `${date.getDate()}`.padStart(2, '0');
+      const key = `${y}-${m}-${d}`;
+      dailyMap.set(key, (dailyMap.get(key) ?? 0) + order.totalAmount);
+    }
+
+    const dailySeries = Array.from(dailyMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, revenue]) => ({
+        date,
+        revenue,
+        profit: Math.round(revenue * 0.8),
+      }));
+
+    const totalRevenue = aggregate._sum.totalAmount ?? 0;
+    const operationalCost = Math.round(totalRevenue * 0.2);
+    const estimatedProfit = totalRevenue - operationalCost;
+
+    return {
+      month: `${start.getFullYear()}-${`${start.getMonth() + 1}`.padStart(2, '0')}`,
+      outletId: outletId ?? null,
+      totalRevenue,
+      operationalCost,
+      estimatedProfit,
+      totalPaidOrders: aggregate._count._all,
+      dailySeries,
+    };
   }
 
   async updateStatus(id: string, updateOrderStatusDto: UpdateOrderStatusDto, updatedBy?: string) {

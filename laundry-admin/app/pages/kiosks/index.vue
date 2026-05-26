@@ -91,10 +91,20 @@ function openEdit(k: Kiosk) {
 async function save() {
   try {
     if (editTarget.value) {
-      await api.patch(`/kiosks/${editTarget.value.id}`, form)
+      const payload = {
+        name: form.name,
+        location: form.location || undefined,
+      }
+      await api.patch(`/kiosks/${editTarget.value.id}`, payload)
       toast.add({ title: 'Kiosk diperbarui', color: 'success' })
     } else {
-      await api.post('/kiosks', form)
+      const payload = {
+        outletId: form.outletId,
+        kioskCode: form.kioskCode,
+        name: form.name,
+        location: form.location || undefined,
+      }
+      await api.post('/kiosks', payload)
       toast.add({ title: 'Kiosk dibuat', color: 'success' })
     }
     showModal.value = false
@@ -143,10 +153,10 @@ onMounted(() => load())
       <template #body>
         <form class="space-y-4" @submit.prevent="save">
           <UFormField label="Outlet">
-            <USelect v-model="form.outletId" :items="outletOptions" class="w-full" />
+            <USelect v-model="form.outletId" :items="outletOptions" class="w-full" :disabled="!!editTarget" />
           </UFormField>
           <UFormField label="Kode Kiosk">
-            <UInput v-model="form.kioskCode" placeholder="KIOSK-001" class="w-full" required />
+            <UInput v-model="form.kioskCode" placeholder="KIOSK-001" class="w-full" required :disabled="!!editTarget" />
           </UFormField>
           <UFormField label="Nama Kiosk">
             <UInput v-model="form.name" placeholder="Kiosk Utama" class="w-full" required />
@@ -164,7 +174,7 @@ onMounted(() => load())
 
     <UModal v-model:open="showDeleteModal" title="Hapus Kiosk">
       <template #body>
-        <p class="text-sm text-gray-600 dark:text-gray-400">
+        <p class="text-sm text-gray-600">
           Yakin ingin menghapus kiosk <strong>{{ deleteTarget?.name }}</strong>?
         </p>
         <div class="flex justify-end gap-2 pt-4">

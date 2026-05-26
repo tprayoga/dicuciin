@@ -3,12 +3,13 @@ export type UserRole = 'SUPER_ADMIN' | 'OWNER' | 'ADMIN_OUTLET' | 'CASHIER' | 'O
 export interface User {
   id: string
   name: string
-  email: string
-  phone: string
+  email: string | null
+  phone: string | null
   role: UserRole
   isActive: boolean
   createdAt: string
   updatedAt: string
+  outletUsers?: OutletUserAssignment[]
 }
 
 export interface AuthTokens {
@@ -26,6 +27,9 @@ export interface Outlet {
   code: string
   address: string
   phone: string
+  openTime: string | null
+  closeTime: string | null
+  imageUrl: string | null
   latitude: number | null
   longitude: number | null
   isActive: boolean
@@ -36,9 +40,12 @@ export interface Outlet {
 export interface Service {
   id: string
   name: string
-  code: string
+  serviceType: string
+  machineType: string | null
+  capacityKg: number | null
+  estimateMinutes: number | null
+  basePrice: number | null
   description: string | null
-  unit: string
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -106,7 +113,8 @@ export interface Promo {
   code: string
   name: string
   description: string | null
-  promoType: 'PERCENTAGE' | 'FIXED_AMOUNT' | 'FREE_DELIVERY'
+  bannerUrl: string | null
+  promoType: 'PERCENTAGE' | 'FIXED_AMOUNT' | 'CASHBACK' | 'FREE_DELIVERY'
   value: number
   startDate: string
   endDate: string
@@ -155,4 +163,36 @@ export interface PaginatedResponse<T> {
     limit: number
     totalPages: number
   }
+}
+
+export interface OutletUserAssignment {
+  outletId: string
+  shiftName: string | null
+  outlet?: Pick<Outlet, 'id' | 'name' | 'code'>
+}
+
+export interface DashboardSummaryResponse {
+  totalMachines: number
+  totalOutlets: number
+  totalStaff: number
+  totalRevenueToday: number
+  totalPaidOrdersToday: number
+  recentOrders: Order[]
+  dailySeries: FinanceSummaryPoint[]
+}
+
+export interface FinanceSummaryPoint {
+  date: string
+  revenue: number
+  profit: number
+}
+
+export interface FinanceSummaryResponse {
+  month: string
+  outletId: string | null
+  totalRevenue: number
+  operationalCost: number
+  estimatedProfit: number
+  totalPaidOrders: number
+  dailySeries: FinanceSummaryPoint[]
 }

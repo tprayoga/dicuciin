@@ -6,8 +6,9 @@ definePageMeta({ layout: 'auth' })
 const authStore = useAuthStore()
 const router = useRouter()
 const config = useRuntimeConfig()
-const toast = useToast()
 
+const activeTab = ref<'OWNER' | 'STAFF'>('OWNER')
+const showPassword = ref(false)
 const form = reactive({ identifier: '', password: '' })
 const loading = ref(false)
 const error = ref('')
@@ -31,45 +32,59 @@ async function login() {
     loading.value = false
   }
 }
-
-onMounted(() => {
-  if (authStore.isAuthenticated) router.push('/dashboard')
-})
 </script>
 
 <template>
-  <UCard class="w-full max-w-sm">
-    <template #header>
-      <div class="text-center">
-        <div class="flex justify-center mb-3">
-          <UIcon name="i-heroicons-sparkles" class="text-primary-500 text-4xl" />
-        </div>
-        <h1 class="text-xl font-bold text-gray-900 dark:text-white">Laundry Admin</h1>
-        <p class="text-sm text-gray-500 mt-1">Masuk ke dashboard pengelolaan</p>
+  <div class="w-full max-w-[380px] rounded-xl bg-white p-5 border border-[#d4dff0]">
+    <div class="flex border-b border-[#d4dff0] mb-6">
+      <button
+        class="flex-1 py-2 text-sm font-medium flex items-center justify-center gap-2"
+        :class="activeTab === 'OWNER' ? 'text-[#0f6ee9] border-b-2 border-[#0f6ee9]' : 'text-[#6f809f]'"
+        @click="activeTab = 'OWNER'"
+      >
+        <UIcon name="i-heroicons-building-office" /> Owner
+      </button>
+      <button
+        class="flex-1 py-2 text-sm font-medium flex items-center justify-center gap-2"
+        :class="activeTab === 'STAFF' ? 'text-[#0f6ee9] border-b-2 border-[#0f6ee9]' : 'text-[#6f809f]'"
+        @click="activeTab = 'STAFF'"
+      >
+        <UIcon name="i-heroicons-user" /> Staff
+      </button>
+    </div>
+
+    <div class="flex items-center gap-3 mb-6">
+      <div class="h-12 w-12 rounded-xl bg-[#dce9f8] flex items-center justify-center">
+        <UIcon name="i-heroicons-building-office" class="text-[#0f6ee9] text-xl" />
       </div>
-    </template>
+      <div>
+        <h1 class="text-[32px] font-bold text-[#111d35]">{{ activeTab === 'OWNER' ? 'Owner Login' : 'Staff Login' }}</h1>
+        <p class="text-sm text-[#6f809f]">Masuk untuk kelola Bisnis Laundry</p>
+      </div>
+    </div>
 
     <form class="space-y-4" @submit.prevent="login">
-      <UFormField label="Email / No. HP">
-        <UInput
-          v-model="form.identifier"
-          placeholder="admin@laundry.local"
-          icon="i-heroicons-user"
-          class="w-full"
-          required
-        />
+      <UFormField label="Email">
+        <UInput v-model="form.identifier" placeholder="Masukkan email terdaftar" class="w-full" required />
       </UFormField>
 
       <UFormField label="Password">
         <UInput
           v-model="form.password"
-          type="password"
-          placeholder="••••••••"
-          icon="i-heroicons-lock-closed"
+          :type="showPassword ? 'text' : 'password'"
+          placeholder="Masukkan password"
           class="w-full"
           required
-        />
+        >
+          <template #trailing>
+            <button type="button" class="text-[#6f809f]" @click="showPassword = !showPassword">
+              <UIcon :name="showPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" />
+            </button>
+          </template>
+        </UInput>
       </UFormField>
+
+      <p class="text-right text-sm text-[#0f6ee9]">Lupa Password?</p>
 
       <UAlert
         v-if="error"
@@ -81,12 +96,12 @@ onMounted(() => {
 
       <UButton
         type="submit"
-        class="w-full justify-center"
+        class="w-full justify-center rounded-xl !bg-[#0f6ee9] hover:!bg-[#0b56b7]"
         :loading="loading"
         :disabled="loading"
       >
         Masuk
       </UButton>
     </form>
-  </UCard>
+  </div>
 </template>

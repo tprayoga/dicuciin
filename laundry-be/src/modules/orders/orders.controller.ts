@@ -33,6 +33,23 @@ export class OrdersController {
     return this.ordersService.findAll(page, limit, status, outletId);
   }
 
+  @Get('summary/dashboard')
+  @ApiOperation({ summary: 'Get dashboard summary metrics' })
+  async getDashboardSummary() {
+    return this.ordersService.getDashboardSummary();
+  }
+
+  @Get('summary/finance')
+  @ApiOperation({ summary: 'Get finance summary metrics by month/outlet' })
+  @ApiQuery({ name: 'month', required: false, type: String, example: '2026-05' })
+  @ApiQuery({ name: 'outletId', required: false, type: String })
+  async getFinanceSummary(
+    @Query('month') month?: string,
+    @Query('outletId') outletId?: string,
+  ) {
+    return this.ordersService.getFinanceSummary(month, outletId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get order by ID' })
   async findOne(@Param('id') id: string) {

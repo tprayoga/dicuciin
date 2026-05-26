@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
 import { useApi } from '~/composables/useApi'
-import type { PaginatedResponse, Order, Outlet } from '~/types'
+import type { PaginatedResponse, Order } from '~/types'
 
 const api = useApi()
 const toast = useToast()
@@ -12,9 +12,10 @@ const loading = ref(false)
 const selectedOrder = ref<Order | null>(null)
 const showDetail = ref(false)
 
-const statusFilter = ref('')
+const ALL_STATUS = 'ALL'
+const statusFilter = ref(ALL_STATUS)
 const statusItems = [
-  { label: 'Semua', value: '' },
+  { label: 'Semua', value: ALL_STATUS },
   { label: 'Draft', value: 'DRAFT' },
   { label: 'Menunggu Pembayaran', value: 'WAITING_PAYMENT' },
   { label: 'Dibayar', value: 'PAID' },
@@ -63,10 +64,10 @@ const columns = [
   { id: 'orderDate', header: 'Tanggal', cell: ({ row }: any) => new Date(row.original.orderDate).toLocaleDateString('id-ID') },
   {
     id: 'actions',
-    header: '',
+    header: 'Aksi',
     cell: ({ row }: any) => {
       const UButton = resolveComponent('UButton')
-      return h(UButton, { icon: 'i-heroicons-eye', variant: 'ghost', size: 'xs', onClick: () => viewDetail(row.original) })
+      return h(UButton, { variant: 'ghost', class: 'dc-btn-outline', size: 'xs', onClick: () => viewDetail(row.original) }, () => 'Detail')
     },
   },
 ]
@@ -75,7 +76,7 @@ async function load(page = 1) {
   loading.value = true
   try {
     const params = new URLSearchParams({ page: String(page), limit: '10' })
-    if (statusFilter.value) params.set('status', statusFilter.value)
+    if (statusFilter.value !== ALL_STATUS) params.set('status', statusFilter.value)
     const res = await api.get<PaginatedResponse<Order>>(`/orders?${params}`)
     orders.value = res.data
     meta.value = res.meta
@@ -97,68 +98,49 @@ onMounted(() => load())
 
 <template>
   <div class="space-y-4">
-    <div class="flex items-center justify-between gap-4">
-      <p class="text-sm text-gray-500">{{ meta.total }} pesanan</p>
-      <USelect
-        v-model="statusFilter"
-        :items="statusItems"
-        placeholder="Filter status"
-        class="w-48"
-      />
+    <div class="dc-page-card p-4 flex items-center justify-between gap-3">
+      <div>
+        <h2 class="text-lg font-semibold">Transaksi/Order</h2>
+        <p class="text-sm text-[#6f809f]">Pantau transaksi pesanan laundry dari seluruh cabang.</p>
+      </div>
+      <USelect v-model="statusFilter" :items="statusItems" class="w-56 dc-input-like" />
     </div>
 
-    <UCard>
+    <div class="dc-page-card p-4">
+      <div class="mb-3 text-sm text-[#6f809f]">{{ meta.total }} pesanan</div>
       <UTable :data="orders" :columns="columns" :loading="loading" />
-
       <div v-if="meta.totalPages > 1" class="flex justify-center pt-4">
         <UPagination v-model:page="meta.page" :total="meta.total" :items-per-page="meta.limit" @update:page="load" />
       </div>
-    </UCard>
+    </div>
 
-    <!-- Order Detail Modal -->
     <UModal v-model:open="showDetail" title="Detail Pesanan" size="lg">
       <template #body>
         <div v-if="selectedOrder" class="space-y-4">
           <div class="grid grid-cols-2 gap-3 text-sm">
             <div>
-              <p class="text-gray-500">No. Pesanan</p>
+              <p class="text-[#6f809f]">No. Pesanan</p>
               <p class="font-medium">{{ selectedOrder.orderNumber }}</p>
             </div>
             <div>
-              <p class="text-gray-500">Status</p>
-              <UBadge :color="orderStatusColor[selectedOrder.status] as any" variant="soft" size="xs">
-                {{ selectedOrder.status }}
-              </UBadge>
+              <p class="text-[#6f809f]">Status</p>
+              <UBadge :color="orderStatusColor[selectedOrder.status] as any" variant="soft" size="xs">{{ selectedOrder.status }}</UBadge>
             </div>
             <div>
-              <p class="text-gray-500">Outlet</p>
+              <p class="text-[#6f809f]">Outlet</p>
               <p class="font-medium">{{ selectedOrder.outlet?.name || '-' }}</p>
             </div>
             <div>
-              <p class="text-gray-500">Platform</p>
+              <p class="text-[#6f809f]">Platform</p>
               <p class="font-medium">{{ selectedOrder.sourcePlatform }}</p>
             </div>
             <div>
-              <p class="text-gray-500">Tanggal</p>
+              <p class="text-[#6f809f]">Tanggal</p>
               <p class="font-medium">{{ new Date(selectedOrder.orderDate).toLocaleString('id-ID') }}</p>
             </div>
             <div>
-              <p class="text-gray-500">Total</p>
-              <p class="font-semibold text-primary-600">Rp {{ selectedOrder.totalAmount.toLocaleString('id-ID') }}</p>
-            </div>
-          </div>
-
-          <div v-if="selectedOrder.items?.length">
-            <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Item Pesanan</p>
-            <div class="space-y-2">
-              <div
-                v-for="item in selectedOrder.items"
-                :key="item.id"
-                class="flex justify-between text-sm bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2"
-              >
-                <span>{{ item.serviceName }} × {{ item.quantity }} {{ item.unit }}</span>
-                <span class="font-medium">Rp {{ item.subtotal.toLocaleString('id-ID') }}</span>
-              </div>
+              <p class="text-[#6f809f]">Total</p>
+              <p class="font-semibold text-[#19984d]">Rp {{ selectedOrder.totalAmount.toLocaleString('id-ID') }}</p>
             </div>
           </div>
         </div>

@@ -1,12 +1,22 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
+  sourcemap: {
+    client: false,
+    server: false,
+  },
 
   devServer: {
     port: 3001,
   },
 
   modules: ['@nuxt/ui', '@pinia/nuxt', '@vueuse/nuxt'],
+
+  colorMode: {
+    preference: 'light',
+    fallback: 'light',
+    classSuffix: '',
+  },
 
   css: ['~/assets/css/main.css'],
 
