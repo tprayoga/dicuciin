@@ -1,8 +1,11 @@
+const rootDir = process.env.ROOT_DIR || '/opt/dicuciin/dicuciin';
+const apiBase = process.env.NUXT_PUBLIC_API_BASE || 'https://api.dicuciin.com/api/v1';
+
 module.exports = {
   apps: [
     {
       name: 'laundry-be',
-      cwd: '/opt/dicuciin/laundry-be',
+      cwd: `${rootDir}/laundry-be`,
       script: 'dist/main.js',
       instances: 1,
       exec_mode: 'fork',
@@ -16,7 +19,7 @@ module.exports = {
     },
     {
       name: 'laundry-admin',
-      cwd: '/opt/dicuciin/laundry-admin',
+      cwd: `${rootDir}/laundry-admin`,
       script: '.output/server/index.mjs',
       interpreter: 'node',
       instances: 1,
@@ -27,7 +30,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3001,
-        NUXT_PUBLIC_API_BASE: 'https://api.example.com/api/v1',
+        NUXT_PUBLIC_API_BASE: apiBase,
       },
     },
   ],

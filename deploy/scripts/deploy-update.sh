@@ -41,6 +41,8 @@ npm run build
 
 echo "==> Reload processes via PM2"
 cd "$ROOT_DIR"
+export ROOT_DIR
+export NUXT_PUBLIC_API_BASE="${NUXT_PUBLIC_API_BASE:-https://api.dicuciin.com/api/v1}"
 pm2 startOrReload deploy/ecosystem.config.cjs --env production --update-env
 pm2 save
 
