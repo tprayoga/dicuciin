@@ -26,7 +26,7 @@ cd "$ROOT_DIR/laundry-be"
 docker compose up -d
 
 echo "==> Build backend"
-npm ci
+npm ci --legacy-peer-deps
 npx prisma generate
 npx prisma migrate deploy
 if [[ "$RUN_SEED" == "true" ]]; then
@@ -36,7 +36,7 @@ npm run build
 
 echo "==> Build frontend"
 cd "$ROOT_DIR/laundry-admin"
-npm ci
+npm ci --legacy-peer-deps
 npm run build
 
 echo "==> Reload processes via PM2"
