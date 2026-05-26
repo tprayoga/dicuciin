@@ -1,5 +1,6 @@
-import { IsString, IsEmail, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsBoolean, IsEnum, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 
 export class UpdateUserDto {
   @ApiProperty({ required: false })
@@ -21,4 +22,25 @@ export class UpdateUserDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiProperty({ enum: UserRole, required: false })
+  @IsEnum(UserRole)
+  @IsOptional()
+  role?: UserRole;
+
+  @ApiProperty({ required: false, description: 'Password baru user' })
+  @IsString()
+  @MinLength(8)
+  @IsOptional()
+  password?: string;
+
+  @ApiProperty({ required: false, description: 'Assign ulang outlet/cabang' })
+  @IsString()
+  @IsOptional()
+  outletId?: string;
+
+  @ApiProperty({ required: false, description: 'Shift kerja user' })
+  @IsString()
+  @IsOptional()
+  shiftName?: string;
 }

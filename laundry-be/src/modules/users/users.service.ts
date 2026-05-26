@@ -10,7 +10,7 @@ export class UsersService {
   constructor(private prisma: PrismaService) {}
 
   async create(createUserDto: CreateUserDto) {
-    const { name, email, phone, password, role = UserRole.CASHIER } = createUserDto;
+    const { name, email, phone, password, role = UserRole.CASHIER, outletId, shiftName } = createUserDto;
 
     if (!email && !phone) {
       throw new BadRequestException('Email or phone is required');
@@ -26,13 +26,49 @@ export class UsersService {
       if (existing) throw new ConflictException('Phone already exists');
     }
 
+    if (outletId) {
+      const outlet = await this.prisma.outlet.findUnique({ where: { id: outletId } });
+      if (!outlet) {
+        throw new NotFoundException('Outlet not found');
+      }
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
 
     const user = await this.prisma.user.create({
-      data: { name, email, phone, passwordHash, role },
+      data: {
+        name,
+        email,
+        phone,
+        passwordHash,
+        role,
+        ...(outletId
+          ? {
+              outletUsers: {
+                create: {
+                  outletId,
+                  shiftName,
+                },
+              },
+            }
+          : {}),
+      },
       select: {
         id: true, name: true, email: true, phone: true,
         role: true, isActive: true, createdAt: true, updatedAt: true,
+        outletUsers: {
+          select: {
+            outletId: true,
+            shiftName: true,
+            outlet: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -55,6 +91,19 @@ export class UsersService {
           isActive: true,
           createdAt: true,
           updatedAt: true,
+          outletUsers: {
+            select: {
+              outletId: true,
+              shiftName: true,
+              outlet: {
+                select: {
+                  id: true,
+                  name: true,
+                  code: true,
+                },
+              },
+            },
+          },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -84,6 +133,19 @@ export class UsersService {
         isActive: true,
         createdAt: true,
         updatedAt: true,
+        outletUsers: {
+          select: {
+            outletId: true,
+            shiftName: true,
+            outlet: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+              },
+            },
+          },
+        },
         customer: {
           include: {
             wallet: true,
@@ -123,9 +185,23 @@ export class UsersService {
       }
     }
 
+    const { outletId, shiftName, password, ...userPayload } = updateUserDto;
+
+    if (outletId) {
+      const outlet = await this.prisma.outlet.findUnique({ where: { id: outletId } });
+      if (!outlet) {
+        throw new NotFoundException('Outlet not found');
+      }
+    }
+
+    const data: any = { ...userPayload };
+    if (password) {
+      data.passwordHash = await bcrypt.hash(password, 10);
+    }
+
     const updatedUser = await this.prisma.user.update({
       where: { id },
-      data: updateUserDto,
+      data,
       select: {
         id: true,
         name: true,
@@ -135,10 +211,79 @@ export class UsersService {
         isActive: true,
         createdAt: true,
         updatedAt: true,
+        outletUsers: {
+          select: {
+            outletId: true,
+            shiftName: true,
+            outlet: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+              },
+            },
+          },
+        },
       },
     });
 
-    return updatedUser;
+    if (outletId) {
+      const currentLink = await this.prisma.outletUser.findFirst({
+        where: { userId: id },
+      });
+
+      if (!currentLink) {
+        await this.prisma.outletUser.create({
+          data: {
+            userId: id,
+            outletId,
+            shiftName,
+          },
+        });
+      } else {
+        await this.prisma.outletUser.update({
+          where: { id: currentLink.id },
+          data: {
+            outletId,
+            shiftName: shiftName ?? currentLink.shiftName,
+          },
+        });
+      }
+    } else if (shiftName) {
+      await this.prisma.outletUser.updateMany({
+        where: { userId: id },
+        data: { shiftName },
+      });
+    }
+
+    const userWithOutlet = await this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+        outletUsers: {
+          select: {
+            outletId: true,
+            shiftName: true,
+            outlet: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return userWithOutlet ?? updatedUser;
   }
 
   async remove(id: string) {

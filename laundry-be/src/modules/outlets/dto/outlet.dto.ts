@@ -18,6 +18,21 @@ export class CreateOutletDto {
   @IsString()
   phone: string;
 
+  @ApiProperty({ required: false, example: '07:00' })
+  @IsString()
+  @IsOptional()
+  openTime?: string;
+
+  @ApiProperty({ required: false, example: '22:00' })
+  @IsString()
+  @IsOptional()
+  closeTime?: string;
+
+  @ApiProperty({ required: false, example: 'https://cdn.example.com/outlet.jpg' })
+  @IsString()
+  @IsOptional()
+  imageUrl?: string;
+
   @ApiProperty({ required: false })
   @IsNumber()
   @IsOptional()
@@ -49,6 +64,21 @@ export class UpdateOutletDto {
   @IsString()
   @IsOptional()
   phone?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  openTime?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  closeTime?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  imageUrl?: string;
 
   @ApiProperty({ required: false })
   @IsNumber()

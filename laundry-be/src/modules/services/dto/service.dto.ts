@@ -15,6 +15,26 @@ export class UpdateServiceDto {
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
+  machineType?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  capacityKg?: number;
+
+  @ApiProperty({ required: false })
+  @IsInt()
+  @IsOptional()
+  estimateMinutes?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  basePrice?: number;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
   description?: string;
 
   @ApiProperty({ required: false })
@@ -31,6 +51,26 @@ export class CreateServiceDto {
   @ApiProperty()
   @IsString()
   serviceType: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  machineType?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  capacityKg?: number;
+
+  @ApiProperty({ required: false })
+  @IsInt()
+  @IsOptional()
+  estimateMinutes?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  basePrice?: number;
 
   @ApiProperty({ required: false })
   @IsString()

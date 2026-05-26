@@ -54,6 +54,11 @@ export class CreatePromoDto {
   @IsOptional()
   description?: string;
 
+  @ApiProperty({ required: false, example: 'https://cdn.example.com/banner-promo.jpg' })
+  @IsString()
+  @IsOptional()
+  bannerUrl?: string;
+
   @ApiProperty({ enum: PromoType, example: PromoType.PERCENTAGE })
   @IsEnum(PromoType)
   promoType: PromoType;
@@ -98,6 +103,11 @@ export class UpdatePromoDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  bannerUrl?: string;
 
   @ApiProperty({ required: false })
   @IsDateString()
