@@ -42,10 +42,21 @@ interface OrderItem {
 const customers = ref<CustomerItem[]>([])
 const loading = ref(false)
 const search = ref('')
+const showCreateModal = ref(false)
+const savingCreate = ref(false)
 const showDetail = ref(false)
 const detailLoading = ref(false)
 const selectedCustomer = ref<CustomerDetail | null>(null)
 const selectedOrders = ref<OrderItem[]>([])
+const createForm = reactive({
+  name: '',
+  email: '',
+  phone: '',
+  password: '',
+  gender: 'L',
+  birthDate: '',
+  initialBalance: '0',
+})
 
 const filteredCustomers = computed(() => {
   const keyword = search.value.trim().toLowerCase()
@@ -94,6 +105,41 @@ async function openDetail(item: CustomerItem) {
   }
 }
 
+function openCreate() {
+  Object.assign(createForm, {
+    name: '',
+    email: '',
+    phone: '',
+    password: '',
+    gender: 'L',
+    birthDate: '',
+    initialBalance: '0',
+  })
+  showCreateModal.value = true
+}
+
+async function saveCreate() {
+  savingCreate.value = true
+  try {
+    await api.post('/customers', {
+      name: createForm.name,
+      email: createForm.email || undefined,
+      phone: createForm.phone || undefined,
+      password: createForm.password,
+      gender: createForm.gender || undefined,
+      birthDate: createForm.birthDate || undefined,
+      initialBalance: createForm.initialBalance ? Number(createForm.initialBalance) : 0,
+    })
+    toast.add({ title: 'Member berhasil ditambahkan', color: 'success' })
+    showCreateModal.value = false
+    await load()
+  } catch (e: any) {
+    toast.add({ title: 'Gagal menambah member', description: e.message, color: 'error' })
+  } finally {
+    savingCreate.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -109,7 +155,7 @@ onMounted(load)
           <p class="text-sm text-[#6f809f]">Kelola data pelanggan dan aktivitas member laundry Anda.</p>
         </div>
       </div>
-      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2">Tambah Member</UButton>
+      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2" @click="openCreate">Tambah Member</UButton>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -179,6 +225,54 @@ onMounted(load)
         </tbody>
       </table>
     </div>
+
+    <UModal v-model:open="showCreateModal" title="Tambah Member">
+      <template #body>
+        <form class="space-y-4" @submit.prevent="saveCreate">
+          <div class="grid md:grid-cols-2 gap-4">
+            <UFormField label="Nama">
+              <UInput v-model="createForm.name" placeholder="Masukkan nama" class="w-full" required />
+            </UFormField>
+            <UFormField label="No. Telepon">
+              <UInput v-model="createForm.phone" placeholder="Masukkan nomor telepon" class="w-full" />
+            </UFormField>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <UFormField label="Email">
+              <UInput v-model="createForm.email" type="email" placeholder="Masukkan email" class="w-full" />
+            </UFormField>
+            <UFormField label="Password">
+              <UInput v-model="createForm.password" type="password" placeholder="Minimal 8 karakter" class="w-full" required />
+            </UFormField>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <UFormField label="Gender">
+              <USelect
+                v-model="createForm.gender"
+                :items="[
+                  { label: 'Laki-laki', value: 'L' },
+                  { label: 'Perempuan', value: 'P' },
+                ]"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField label="Tanggal Lahir">
+              <UInput v-model="createForm.birthDate" type="date" class="w-full" />
+            </UFormField>
+          </div>
+
+          <UFormField label="Saldo Awal">
+            <UInput v-model="createForm.initialBalance" type="number" min="0" placeholder="0" class="w-full" />
+          </UFormField>
+
+          <div class="flex justify-end pt-2">
+            <UButton type="submit" class="dc-btn-primary px-4 py-2" :loading="savingCreate">Simpan</UButton>
+          </div>
+        </form>
+      </template>
+    </UModal>
 
     <UModal v-model:open="showDetail" title="Detail Member" size="lg">
       <template #body>
