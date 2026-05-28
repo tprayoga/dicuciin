@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { LogoutDto } from './dto/logout.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
@@ -28,9 +29,17 @@ export class AuthController {
 
   @Public()
   @Post('refresh')
-  @ApiOperation({ summary: 'Refresh access token using refresh token' })
+  @ApiOperation({ summary: 'Refresh access token (token rotation — lama di-revoke)' })
   async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
     return this.authService.refreshToken(refreshTokenDto.refreshToken);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Logout — revoke refresh token' })
+  async logout(@Request() req: any, @Body() logoutDto: LogoutDto) {
+    return this.authService.logout(req.user.userId, logoutDto.refreshToken);
   }
 
   @UseGuards(JwtAuthGuard)

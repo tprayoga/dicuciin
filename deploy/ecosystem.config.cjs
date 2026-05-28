@@ -7,11 +7,15 @@ module.exports = {
       name: 'laundry-be',
       cwd: `${rootDir}/laundry-be`,
       script: 'dist/main.js',
-      instances: 1,
-      exec_mode: 'fork',
+      // Gunakan cluster mode dengan 2 instance untuk zero-downtime reload
+      instances: 2,
+      exec_mode: 'cluster',
       autorestart: true,
       watch: false,
       max_memory_restart: '512M',
+      // Graceful shutdown: tunggu request selesai sebelum mematikan proses
+      kill_timeout: 5000,
+      listen_timeout: 10000,
       env: {
         NODE_ENV: 'production',
         APP_PORT: 3000,
@@ -27,6 +31,8 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: '512M',
+      kill_timeout: 5000,
+      listen_timeout: 10000,
       env: {
         NODE_ENV: 'production',
         PORT: 3001,

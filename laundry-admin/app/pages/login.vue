@@ -22,8 +22,13 @@ async function login() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
     })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.message || 'Login gagal')
+    const body = await res.json()
+    if (!res.ok) {
+      const msg = body?.message
+      throw new Error(Array.isArray(msg) ? msg.join(', ') : (msg || 'Login gagal'))
+    }
+    // Handle wrapped response { success, data: { user, accessToken, refreshToken } }
+    const data = body?.data ?? body
     authStore.setAuth(data)
     router.push('/dashboard')
   } catch (e: any) {

@@ -112,7 +112,7 @@ watch([month, selectedOutlet], () => {
       <div class="dc-page-card p-4">
         <p class="text-xs font-semibold text-[#1a2237]">BEBAN OPERASIONAL</p>
         <p class="text-[38px] font-bold text-[#da2d14] mt-2">Rp {{ operationalCost.toLocaleString('id-ID') }}</p>
-        <p class="text-sm text-[#6f809f] mt-2">Estimasi 20% dari pendapatan berjalan</p>
+        <p class="text-sm text-[#6f809f] mt-2">Estimasi beban operasional dari pendapatan berjalan</p>
       </div>
       <div class="dc-page-card p-4">
         <p class="text-xs font-semibold text-[#1a2237]">LABA BERSIH (ESTIMASI)</p>

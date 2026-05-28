@@ -1,11 +1,18 @@
-import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { UserRole } from '@prisma/client';
+import { generateDailySequence } from '../../common/utils/sequence.util';
 
 @Injectable()
 export class AuthService {
@@ -40,7 +47,13 @@ export class AuthService {
     });
 
     if (role === UserRole.CUSTOMER) {
-      const memberCode = await this.generateMemberCode();
+      const memberCode = await generateDailySequence(
+        this.prisma,
+        'MBR',
+        'customer',
+        'memberCode',
+        6,
+      );
       await this.prisma.customer.create({
         data: {
           userId: user.id,
@@ -85,11 +98,54 @@ export class AuthService {
       const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
       if (!user || !user.isActive) throw new UnauthorizedException('Invalid refresh token');
 
+      // Verifikasi token ada di DB dan belum di-revoke
+      const tokenHash = this.hashToken(token);
+      const storedToken = await this.prisma.refreshToken.findUnique({
+        where: { tokenHash },
+      });
+
+      if (!storedToken) throw new UnauthorizedException('Refresh token not found');
+      if (storedToken.revokedAt) throw new UnauthorizedException('Refresh token has been revoked');
+      if (storedToken.expiresAt < new Date()) throw new UnauthorizedException('Refresh token expired');
+
+      // Revoke token lama (token rotation)
+      await this.prisma.refreshToken.update({
+        where: { tokenHash },
+        data: { revokedAt: new Date() },
+      });
+
+      // Bersihkan token lama yang sudah expired/revoked (housekeeping)
+      await this.cleanupExpiredTokens(user.id);
+
       const tokens = await this.generateTokens(user.id, user.email, user.role);
       return tokens;
-    } catch {
+    } catch (err) {
+      if (err instanceof UnauthorizedException) throw err;
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
+  }
+
+  async logout(userId: string, refreshToken?: string) {
+    if (refreshToken) {
+      // Revoke token spesifik
+      const tokenHash = this.hashToken(refreshToken);
+      await this.prisma.refreshToken
+        .update({
+          where: { tokenHash },
+          data: { revokedAt: new Date() },
+        })
+        .catch(() => {
+          // Token mungkin sudah tidak ada, abaikan
+        });
+    } else {
+      // Revoke semua refresh token user (logout dari semua device)
+      await this.prisma.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
+
+    return { message: 'Logged out successfully' };
   }
 
   async getMe(userId: string) {
@@ -97,6 +153,11 @@ export class AuthService {
       where: { id: userId },
       include: {
         customer: { include: { wallet: true } },
+        outletUsers: {
+          include: {
+            outlet: { select: { id: true, name: true, code: true } },
+          },
+        },
       },
     });
 
@@ -109,35 +170,68 @@ export class AuthService {
   private async generateTokens(userId: string, email: string | null, role: UserRole) {
     const payload = { sub: userId, email, role };
 
+    const accessExpiresIn = this.configService.get<string>('JWT_ACCESS_EXPIRES_IN', '15m');
+    const refreshExpiresIn = this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d');
+
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
-        expiresIn: this.configService.get<string>('JWT_ACCESS_EXPIRES_IN', '15m'),
+        expiresIn: accessExpiresIn,
       }),
       this.jwtService.signAsync(payload, {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-        expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d'),
+        expiresIn: refreshExpiresIn,
       }),
     ]);
+
+    // Simpan refresh token hash ke DB
+    const tokenHash = this.hashToken(refreshToken);
+    const expiresAt = this.parseExpiresIn(refreshExpiresIn);
+
+    await this.prisma.refreshToken.create({
+      data: {
+        userId,
+        tokenHash,
+        expiresAt,
+      },
+    });
 
     return { accessToken, refreshToken };
   }
 
-  private async generateMemberCode(): Promise<string> {
-    const today = new Date();
-    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+  /** Hash token dengan SHA-256 sebelum disimpan ke DB */
+  private hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
 
-    const lastCustomer = await this.prisma.customer.findFirst({
-      where: { memberCode: { startsWith: `MBR-${dateStr}` } },
-      orderBy: { createdAt: 'desc' },
+  /** Parse expires string seperti "7d", "15m" ke Date */
+  private parseExpiresIn(expiresIn: string): Date {
+    const now = new Date();
+    const match = expiresIn.match(/^(\d+)([smhd])$/);
+    if (!match) return new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const value = parseInt(match[1], 10);
+    const unit = match[2];
+    const multipliers: Record<string, number> = {
+      s: 1000,
+      m: 60 * 1000,
+      h: 60 * 60 * 1000,
+      d: 24 * 60 * 60 * 1000,
+    };
+
+    return new Date(now.getTime() + value * (multipliers[unit] ?? 0));
+  }
+
+  /** Hapus token expired/revoked lama untuk menjaga tabel tetap bersih */
+  private async cleanupExpiredTokens(userId: string): Promise<void> {
+    await this.prisma.refreshToken.deleteMany({
+      where: {
+        userId,
+        OR: [
+          { expiresAt: { lt: new Date() } },
+          { revokedAt: { not: null } },
+        ],
+      },
     });
-
-    let sequence = 1;
-    if (lastCustomer) {
-      const lastSequence = parseInt(lastCustomer.memberCode.split('-')[2]);
-      sequence = lastSequence + 1;
-    }
-
-    return `MBR-${dateStr}-${sequence.toString().padStart(6, '0')}`;
   }
 }

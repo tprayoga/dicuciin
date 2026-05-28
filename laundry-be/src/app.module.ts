@@ -19,6 +19,8 @@ import { IotModule } from './modules/iot/iot.module';
 import { HealthModule } from './modules/health/health.module';
 import { QueuesModule } from './modules/queues/queues.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -44,6 +46,8 @@ import { UploadsModule } from './modules/uploads/uploads.module';
     IotModule,
     HealthModule,
     UploadsModule,
+    ReportsModule,
+    NotificationsModule,
   ],
   providers: [
     {

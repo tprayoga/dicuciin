@@ -43,7 +43,15 @@ echo "==> Reload processes via PM2"
 cd "$ROOT_DIR"
 export ROOT_DIR
 export NUXT_PUBLIC_API_BASE="${NUXT_PUBLIC_API_BASE:-https://api.dicuciin.com/api/v1}"
-pm2 startOrReload deploy/ecosystem.config.cjs --env production --update-env
+
+# Gunakan reload (graceful) bukan restart untuk zero-downtime
+# startOrReload dipakai hanya jika proses belum pernah dijalankan
+if pm2 list | grep -q "laundry-be"; then
+  pm2 reload deploy/ecosystem.config.cjs --env production --update-env
+else
+  pm2 start deploy/ecosystem.config.cjs --env production
+fi
+
 pm2 save
 
 echo "==> Health checks"

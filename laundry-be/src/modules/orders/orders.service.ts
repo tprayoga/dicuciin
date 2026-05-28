@@ -2,10 +2,21 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateOrderDto, UpdateOrderStatusDto, CancelOrderDto } from './dto/order.dto';
 import { OrderStatus, UserRole } from '@prisma/client';
+import { generateDailySequence } from '../../common/utils/sequence.util';
 
 @Injectable()
 export class OrdersService {
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * Margin laba bersih default (80% dari revenue).
+   * Idealnya ini dikonfigurasi per outlet di masa depan.
+   * Untuk saat ini bisa di-override via env PROFIT_MARGIN_PERCENT.
+   */
+  private readonly PROFIT_MARGIN = parseFloat(
+    process.env.PROFIT_MARGIN_PERCENT ?? '80',
+  ) / 100;
+
   private readonly paidOrderStatuses: OrderStatus[] = [
     OrderStatus.PAID,
     OrderStatus.RECEIVED,
@@ -32,7 +43,13 @@ export class OrdersService {
       }
     }
 
-    const orderNumber = await this.generateOrderNumber();
+    const orderNumber = await generateDailySequence(
+      this.prisma,
+      'ORD',
+      'order',
+      'orderNumber',
+      6,
+    );
 
     let subtotal = 0;
     const orderItems = [];
@@ -307,7 +324,7 @@ export class OrdersService {
       dailySeries.push({
         date: key,
         revenue,
-        profit: Math.round(revenue * 0.8),
+        profit: Math.round(revenue * this.PROFIT_MARGIN),
       });
     }
 
@@ -377,11 +394,11 @@ export class OrdersService {
       .map(([date, revenue]) => ({
         date,
         revenue,
-        profit: Math.round(revenue * 0.8),
+        profit: Math.round(revenue * this.PROFIT_MARGIN),
       }));
 
     const totalRevenue = aggregate._sum.totalAmount ?? 0;
-    const operationalCost = Math.round(totalRevenue * 0.2);
+    const operationalCost = Math.round(totalRevenue * (1 - this.PROFIT_MARGIN));
     const estimatedProfit = totalRevenue - operationalCost;
 
     return {
@@ -459,26 +476,8 @@ export class OrdersService {
   }
 
   private async generateOrderNumber(): Promise<string> {
-    const today = new Date();
-    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-
-    const lastOrder = await this.prisma.order.findFirst({
-      where: {
-        orderNumber: {
-          startsWith: `ORD-${dateStr}`,
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-
-    let sequence = 1;
-    if (lastOrder) {
-      const lastSequence = parseInt(lastOrder.orderNumber.split('-')[2]);
-      sequence = lastSequence + 1;
-    }
-
-    return `ORD-${dateStr}-${sequence.toString().padStart(6, '0')}`;
+    // Deprecated: digantikan oleh generateDailySequence di sequence.util.ts
+    // Method ini dipertahankan sementara untuk backward compatibility
+    return generateDailySequence(this.prisma, 'ORD', 'order', 'orderNumber', 6);
   }
 }

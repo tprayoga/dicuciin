@@ -30,7 +30,8 @@ function initials(name: string | undefined) {
 }
 
 async function logout() {
-  authStore.clearAuth()
+  const config = useRuntimeConfig()
+  await authStore.logout(config.public.apiBase)
   router.push('/login')
 }
 </script>

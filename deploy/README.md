@@ -51,6 +51,8 @@ Wajib edit `.env`:
 - `REDIS_HOST=localhost`
 - `REDIS_PORT=6379`
 - `MQTT_URL=mqtt://localhost:1883`
+- `ALLOWED_ORIGINS=https://admin.dicuciin.com` ← domain frontend production
+- `PROFIT_MARGIN_PERCENT=80` ← margin laba estimasi (default 80%)
 
 ## 5) Konfigurasi PM2
 
