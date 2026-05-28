@@ -3,7 +3,12 @@ import { useAuthStore } from '~/stores/auth'
 const GUEST_ONLY_ROUTES = new Set(['/login'])
 
 export default defineNuxtRouteMiddleware(async (to) => {
-  if (import.meta.server) return
+  if (import.meta.server) {
+    if (!GUEST_ONLY_ROUTES.has(to.path)) {
+      return navigateTo('/login')
+    }
+    return
+  }
 
   const authStore = useAuthStore()
   await authStore.initAuth()

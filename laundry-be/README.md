@@ -327,6 +327,7 @@ npm run prisma:generate
 APP_NAME=Laundry Backend API
 APP_ENV=development
 APP_PORT=3000
+ALLOWED_ORIGINS=http://localhost:3001
 
 # Database
 DATABASE_URL=postgresql://laundry:laundry_password@localhost:5432/laundry_db
@@ -347,6 +348,10 @@ MQTT_URL=mqtt://localhost:1883
 # Security
 BCRYPT_SALT_ROUNDS=10
 ```
+
+`ALLOWED_ORIGINS` mendukung beberapa origin dipisah koma, contoh:
+`https://admin.dicuciin.com,https://ops.dicuciin.com`.
+Wildcard juga didukung, contoh: `https://*.dicuciin.com`.
 
 ## 🤝 Contributing
 

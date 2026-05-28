@@ -27,6 +27,6 @@ export default defineNuxtConfig({
   },
 
   routeRules: {
-    '/': { redirect: '/dashboard' },
+    '/': { redirect: '/login' },
   },
 })

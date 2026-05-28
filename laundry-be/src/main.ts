@@ -9,6 +9,15 @@ import { AppModule } from './app.module';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 
+function normalizeOrigin(value: string): string {
+  return value.trim().replace(/\/+$/, '');
+}
+
+function toWildcardRegex(pattern: string): RegExp {
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${escaped.replace(/\*/g, '.*')}$`);
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
@@ -19,17 +28,26 @@ async function bootstrap() {
   app.use(cookieParser());
 
   // CORS: hanya izinkan origin yang terdaftar di env
-  const allowedOrigins = configService
+  const allowedOriginPatterns = configService
     .get<string>('ALLOWED_ORIGINS', 'http://localhost:3001')
     .split(',')
-    .map((o) => o.trim())
+    .map((o) => normalizeOrigin(o))
     .filter(Boolean);
 
   app.enableCors({
     origin: (origin, callback) => {
       // Izinkan request tanpa origin (server-to-server, curl, Swagger)
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+
+      const normalizedOrigin = normalizeOrigin(origin);
+      const isAllowed = allowedOriginPatterns.some((pattern) => {
+        if (pattern === '*') return true;
+        if (!pattern.includes('*')) return pattern === normalizedOrigin;
+        return toWildcardRegex(pattern).test(normalizedOrigin);
+      });
+
+      if (isAllowed) return callback(null, true);
+
       callback(new Error(`CORS: origin '${origin}' not allowed`));
     },
     credentials: true,
