@@ -3,6 +3,10 @@ name: Deploy to VM
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - 'laundry-be/**'
+      - 'laundry-admin/**'
+      - 'deploy/**'
   workflow_dispatch:
 
 jobs:
