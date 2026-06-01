@@ -122,6 +122,7 @@ model Customer {
   memberCode    String    @unique
   birthDate     DateTime?
   gender        String?
+  occupation    String?
   walletPinHash String?
   pinSetAt      DateTime?
   createdAt     DateTime  @default(now())

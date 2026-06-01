@@ -41,9 +41,16 @@
 > Sisa (di luar Fase 0): bayar QRIS/VA masih halaman mock (hanya saldo yang nyata);
 > status ketersediaan per-mesin masih kosmetik (semua "tersedia") → jadi nyata di Fase 4.
 
-## 🟢 Fase 1 — Occupancy (item 3)
-- BE: `Customer.occupation` (PEKERJA/ANAK_KOS/IBU_RUMAH_TANGGA/LAUNDRY_KILOAN) + migration.
-- Mobile: pilihan di step Lengkapi Data register (pola gender/birthDate).
+## 🟢 Fase 1 — Occupancy (item 3)  ✅ SELESAI (2026-06-02)
+Keputusan owner: **keduanya** (field register + section persona di home).
+- BE: `Customer.occupation String?` + migration `add_customer_occupation`; `RegisterDto`
+  `@IsIn(['Pekerja','Anak Kos','Ibu Rumah Tangga','Laundry Kiloan'])`; disimpan di register;
+  `/auth/me` mengekspos `customer.occupation` (terverifikasi).
+- Mobile: dropdown "Kategori (opsional)" di step Lengkapi Data (`_OccupationDropdown`),
+  threading `RegistrationDraft.occupation` → `completeRegistration` → `register`;
+  `CustomerProfile.occupation` di-parse; **section persona di home** (`_PersonaTile`,
+  4 kategori, highlight sesuai `customer.occupation`, ketuk → tab Lokasi).
+- Catatan: occupation OPSIONAL (tidak memblok registrasi); label home & nilai BE harus sama persis.
 
 ## 🟡 Fase 2 — Konten dikelola admin
 4. **Pop-up ads & carousel** (item 6, 16): model `AppBanner` (placement HOME_POPUP/HOME_CAROUSEL, urutan, aktif, periode, link) + admin CRUD + interstitial & carousel mobile.

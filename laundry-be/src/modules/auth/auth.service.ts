@@ -34,6 +34,7 @@ export class AuthService {
       verificationToken,
       birthDate,
       gender,
+      occupation,
     } = registerDto;
 
     if (!email && !phone) {
@@ -89,6 +90,7 @@ export class AuthService {
           memberCode,
           birthDate: birthDate ? new Date(birthDate) : null,
           gender: gender ?? null,
+          occupation: occupation ?? null,
           wallet: { create: { balance: 0 } },
         },
       });

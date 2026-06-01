@@ -89,6 +89,7 @@ class _HomePageState extends State<_HomePage> {
     final screenWidth = MediaQuery.of(context).size.width;
     final user = context.watch<AuthController>().user;
     final firstName = (user?.name ?? 'Pengguna').split(' ').first;
+    final occupation = user?.customer?.occupation;
     final promos = context.watch<CustomerController>().promos;
 
     return SingleChildScrollView(
@@ -389,6 +390,40 @@ class _HomePageState extends State<_HomePage> {
 
           const SizedBox(height: 20),
 
+          // ── Persona / occupancy ──────────────────────────────────
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: Text(
+              'Pilih sesuai kebutuhanmu',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: _textDark,
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 96,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              physics: const BouncingScrollPhysics(),
+              itemCount: _personas.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (_, i) {
+                final p = _personas[i];
+                return _PersonaTile(
+                  label: p.label,
+                  icon: p.icon,
+                  selected: occupation == p.label,
+                  onTap: widget.onOpenLocation,
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
           // ── Promo carousel (dari API) ────────────────────────────
           if (promos.isNotEmpty) ...[
             const Padding(
@@ -546,6 +581,73 @@ class _HomePageState extends State<_HomePage> {
 
           const SizedBox(height: 24),
         ],
+      ),
+    );
+  }
+}
+
+/// Kategori occupancy yang ditampilkan di home. Label HARUS sama persis dengan
+/// nilai yang disimpan di `Customer.occupation` agar highlight cocok.
+class _Persona {
+  const _Persona(this.label, this.icon);
+  final String label;
+  final IconData icon;
+}
+
+const _personas = <_Persona>[
+  _Persona('Pekerja', Icons.work_outline),
+  _Persona('Anak Kos', Icons.bedroom_child_outlined),
+  _Persona('Ibu Rumah Tangga', Icons.home_outlined),
+  _Persona('Laundry Kiloan', Icons.local_laundry_service_outlined),
+];
+
+class _PersonaTile extends StatelessWidget {
+  const _PersonaTile({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: 88,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.tintBlue : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? _primary : _line,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 26, color: selected ? _primary : _textMuted),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              maxLines: 2,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.15,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected ? _primary : _textDark,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

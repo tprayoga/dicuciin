@@ -3,12 +3,16 @@ class CustomerProfile {
     required this.id,
     required this.memberCode,
     this.hasWalletPin = false,
+    this.occupation,
     this.wallet,
   });
 
   final String id;
   final String memberCode;
   final bool hasWalletPin;
+
+  /// Kategori occupancy (Pekerja / Anak Kos / Ibu Rumah Tangga / Laundry Kiloan).
+  final String? occupation;
   final WalletData? wallet;
 
   factory CustomerProfile.fromJson(Map<String, dynamic> json) {
@@ -16,6 +20,7 @@ class CustomerProfile {
       id: json['id'] as String,
       memberCode: (json['memberCode'] as String?) ?? '-',
       hasWalletPin: (json['hasWalletPin'] as bool?) ?? false,
+      occupation: json['occupation'] as String?,
       wallet: json['wallet'] is Map<String, dynamic>
           ? WalletData.fromJson(json['wallet'] as Map<String, dynamic>)
           : null,

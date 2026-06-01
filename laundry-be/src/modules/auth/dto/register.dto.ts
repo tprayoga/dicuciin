@@ -52,4 +52,13 @@ export class RegisterDto {
   @IsIn(['Laki-laki', 'Perempuan'])
   @IsOptional()
   gender?: string;
+
+  @ApiProperty({
+    enum: ['Pekerja', 'Anak Kos', 'Ibu Rumah Tangga', 'Laundry Kiloan'],
+    description: 'Kategori occupancy customer (segmentasi).',
+    required: false,
+  })
+  @IsIn(['Pekerja', 'Anak Kos', 'Ibu Rumah Tangga', 'Laundry Kiloan'])
+  @IsOptional()
+  occupation?: string;
 }

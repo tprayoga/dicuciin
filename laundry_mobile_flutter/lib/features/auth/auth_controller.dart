@@ -113,6 +113,7 @@ class AuthController extends ChangeNotifier {
     required String walletPin,
     String? birthDate,
     String? gender,
+    String? occupation,
     List<int>? photoBytes,
     String? photoName,
   }) async {
@@ -129,6 +130,7 @@ class AuthController extends ChangeNotifier {
         verificationToken: verificationToken,
         birthDate: birthDate,
         gender: gender,
+        occupation: occupation,
       );
       final accessToken = result.tokens.accessToken;
       _accessToken = accessToken;

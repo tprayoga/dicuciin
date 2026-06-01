@@ -59,6 +59,7 @@ class AuthService {
     required String verificationToken,
     String? birthDate,
     String? gender,
+    String? occupation,
   }) async {
     final payload = await _apiClient.post(
       '/auth/register',
@@ -70,6 +71,8 @@ class AuthService {
         'verificationToken': verificationToken,
         if (birthDate != null && birthDate.isNotEmpty) 'birthDate': birthDate,
         if (gender != null && gender.isNotEmpty) 'gender': gender,
+        if (occupation != null && occupation.isNotEmpty)
+          'occupation': occupation,
       }),
     );
 

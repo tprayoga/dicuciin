@@ -87,6 +87,10 @@ class RegistrationDraft {
   /// 'Laki-laki' / 'Perempuan'.
   String? gender;
 
+  /// Kategori occupancy: 'Pekerja' / 'Anak Kos' / 'Ibu Rumah Tangga' /
+  /// 'Laundry Kiloan'.
+  String? occupation;
+
   /// Foto profil dalam bytes (aman untuk Web). null = pakai avatar preset.
   List<int>? photoBytes;
   String? photoName;
@@ -946,6 +950,7 @@ class _CompleteDataScreenState extends State<CompleteDataScreen> {
   bool _obscurePassword = true;
 
   String? _gender;
+  String? _occupation;
   DateTime? _birthDate;
 
   // ── Validasi ─────────────────────────────────────────────────
@@ -1161,6 +1166,13 @@ class _CompleteDataScreenState extends State<CompleteDataScreen> {
             ),
             if (_showGenderError)
               _errorText('Jenis kelamin wajib dipilih'),
+            const SizedBox(height: 14),
+
+            // Kategori occupancy (opsional, untuk segmentasi)
+            _OccupationDropdown(
+              value: _occupation,
+              onChanged: (value) => setState(() => _occupation = value),
+            ),
 
             const SizedBox(height: 24),
           ],
@@ -1187,6 +1199,7 @@ class _CompleteDataScreenState extends State<CompleteDataScreen> {
               ..email = _emailController.text.trim()
               ..password = _passwordController.text
               ..gender = _gender
+              ..occupation = _occupation
               ..birthDate = _birthDate == null
                   ? null
                   : '${_birthDate!.year.toString().padLeft(4, '0')}-'
@@ -1633,6 +1646,7 @@ class _CreatePinScreenState extends State<CreatePinScreen> {
             walletPin: pin,
             birthDate: draft.birthDate,
             gender: draft.gender,
+            occupation: draft.occupation,
             photoBytes: draft.photoBytes,
             photoName: draft.photoName,
           );
@@ -1928,6 +1942,77 @@ class _GenderDropdown extends StatelessWidget {
           items: const [
             DropdownMenuItem(value: 'Laki-laki', child: Text('Laki-laki')),
             DropdownMenuItem(value: 'Perempuan', child: Text('Perempuan')),
+          ],
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+}
+
+/// Dropdown kategori occupancy (opsional) untuk segmentasi customer.
+class _OccupationDropdown extends StatelessWidget {
+  const _OccupationDropdown({required this.value, required this.onChanged});
+
+  static const options = <String>[
+    'Pekerja',
+    'Anak Kos',
+    'Ibu Rumah Tangga',
+    'Laundry Kiloan',
+  ];
+
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Kategori (opsional)',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            color: _textDark,
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+          ),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          initialValue: value,
+          decoration: InputDecoration(
+            hintText: 'Pilih kategori kamu',
+            filled: true,
+            fillColor: _bgColor,
+            hintStyle: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(color: _textMuted, fontSize: 15),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 14,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(_inputRadius),
+              borderSide: BorderSide(color: _borderColor, width: 1),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(_inputRadius),
+              borderSide: BorderSide(color: _primaryBlue, width: 1.5),
+            ),
+          ),
+          dropdownColor: Colors.white,
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(color: _textDark, fontSize: 16),
+          icon: Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: _textMuted,
+          ),
+          items: [
+            for (final o in options)
+              DropdownMenuItem(value: o, child: Text(o)),
           ],
           onChanged: onChanged,
         ),
