@@ -86,11 +86,35 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  Future<void> register({
+  /// Minta OTP via WhatsApp. Stateless terhadap status auth global
+  /// (loading dikelola lokal di layar OTP). Melempar [ApiException] bila gagal.
+  Future<int> requestOtp({required String phone, String purpose = 'REGISTER'}) {
+    return _authService.requestOtp(phone: phone, purpose: purpose);
+  }
+
+  /// Verifikasi OTP, kembalikan verificationToken. Melempar [ApiException] bila gagal.
+  Future<String> verifyOtp({
+    required String phone,
+    required String code,
+    String purpose = 'REGISTER',
+  }) {
+    return _authService.verifyOtp(phone: phone, code: code, purpose: purpose);
+  }
+
+  /// Langkah akhir register: buat akun (butuh verificationToken + password),
+  /// lalu set PIN wallet. Status auth menjadi authenticated bila sukses.
+  /// Melempar bila gagal agar UI bisa menampilkan error tanpa pindah layar.
+  Future<void> completeRegistration({
     required String name,
     String? email,
-    String? phone,
+    required String phone,
     required String password,
+    required String verificationToken,
+    required String walletPin,
+    String? birthDate,
+    String? gender,
+    List<int>? photoBytes,
+    String? photoName,
   }) async {
     _status = AuthStatus.loading;
     _errorMessage = null;
@@ -102,24 +126,58 @@ class AuthController extends ChangeNotifier {
         email: email,
         phone: phone,
         password: password,
+        verificationToken: verificationToken,
+        birthDate: birthDate,
+        gender: gender,
       );
-      _accessToken = result.tokens.accessToken;
+      final accessToken = result.tokens.accessToken;
+      _accessToken = accessToken;
       _refreshToken = result.tokens.refreshToken;
       _user = result.user;
       await _tokenStorage.writeTokens(
-        accessToken: result.tokens.accessToken,
+        accessToken: accessToken,
         refreshToken: result.tokens.refreshToken,
       );
+
+      final customerId = result.user.customer?.id;
+      if (customerId != null) {
+        await _authService.setWalletPin(
+          accessToken: accessToken,
+          customerId: customerId,
+          pin: walletPin,
+        );
+      }
+
+      // Upload foto profil bila user memilih foto (bukan avatar preset).
+      // Best-effort: kegagalan upload tidak membatalkan registrasi.
+      if (photoBytes != null && photoBytes.isNotEmpty) {
+        try {
+          await _authService.uploadAvatar(
+            accessToken: accessToken,
+            userId: result.user.id,
+            bytes: photoBytes,
+            filename: photoName ?? 'avatar.jpg',
+          );
+        } catch (_) {
+          // abaikan; foto bisa diunggah ulang dari profil nanti.
+        }
+      }
+
+      // Refresh profil agar hasWalletPin & avatarUrl tersinkron.
+      _user = await _authService.getMe(accessToken);
+
       _status = AuthStatus.authenticated;
       notifyListeners();
     } on ApiException catch (e) {
       _status = AuthStatus.unauthenticated;
       _errorMessage = e.message;
       notifyListeners();
+      rethrow;
     } catch (_) {
       _status = AuthStatus.unauthenticated;
       _errorMessage = 'Gagal membuat akun. Coba lagi.';
       notifyListeners();
+      rethrow;
     }
   }
 

@@ -91,6 +91,50 @@ class ApiClient {
     return _unwrap(payload);
   }
 
+  /// Upload multipart dari bytes (aman untuk Web & mobile).
+  Future<dynamic> postMultipartBytes(
+    String path, {
+    Map<String, String>? headers,
+    required String fileField,
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    final uri = Uri.parse('$_baseUrl${_normalizePath(path)}');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers.addAll({
+      'Accept': 'application/json',
+      ...?headers,
+    });
+    request.files.add(
+      http.MultipartFile.fromBytes(fileField, bytes, filename: filename),
+    );
+
+    http.Response response;
+    try {
+      final streamed = await request.send().timeout(_requestTimeout);
+      response = await http.Response.fromStream(streamed);
+    } on TimeoutException {
+      throw ApiException('Upload timeout. Coba lagi.');
+    } on SocketException {
+      throw ApiException('Tidak bisa terhubung ke server saat upload.');
+    }
+
+    dynamic payload;
+    if (response.body.isNotEmpty) {
+      try {
+        payload = jsonDecode(response.body);
+      } catch (_) {
+        payload = null;
+      }
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(_extractMessage(payload), statusCode: response.statusCode);
+    }
+
+    return _unwrap(payload);
+  }
+
   Future<dynamic> _request({
     required String method,
     required String path,
@@ -172,7 +216,13 @@ class ApiClient {
   }
 
   static String _normalizeBaseUrl(String url) {
-    return url.trim().replaceAll(RegExp(r'/+$'), '');
+    var normalized = url.trim().replaceAll(RegExp(r'/+$'), '');
+    // Pastikan ada skema; tanpa ini di Flutter Web URL dianggap path relatif
+    // (mis. jadi http://localhost:59370/localhost:3000/...).
+    if (!normalized.startsWith(RegExp(r'https?://'))) {
+      normalized = 'http://$normalized';
+    }
+    return normalized;
   }
 
   static String _normalizePath(String path) {

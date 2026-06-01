@@ -2,17 +2,20 @@ class CustomerProfile {
   CustomerProfile({
     required this.id,
     required this.memberCode,
+    this.hasWalletPin = false,
     this.wallet,
   });
 
   final String id;
   final String memberCode;
+  final bool hasWalletPin;
   final WalletData? wallet;
 
   factory CustomerProfile.fromJson(Map<String, dynamic> json) {
     return CustomerProfile(
       id: json['id'] as String,
       memberCode: (json['memberCode'] as String?) ?? '-',
+      hasWalletPin: (json['hasWalletPin'] as bool?) ?? false,
       wallet: json['wallet'] is Map<String, dynamic>
           ? WalletData.fromJson(json['wallet'] as Map<String, dynamic>)
           : null,
@@ -168,6 +171,9 @@ class ServicePriceOption {
     required this.serviceName,
     required this.price,
     required this.unit,
+    this.machineType,
+    this.capacityKg,
+    this.estimateMinutes,
   });
 
   final String id;
@@ -176,6 +182,11 @@ class ServicePriceOption {
   final String serviceName;
   final double price;
   final String unit;
+
+  /// Tipe mesin dari katalog Service (mis. WASHER, DRYER, WASHER_DRYER, IRON).
+  final String? machineType;
+  final double? capacityKg;
+  final int? estimateMinutes;
 
   factory ServicePriceOption.fromJson(Map<String, dynamic> json) {
     final service = json['service'] as Map<String, dynamic>? ?? const {};
@@ -186,6 +197,11 @@ class ServicePriceOption {
       serviceName: (service['name'] as String?) ?? '-',
       price: _toDouble(json['price']),
       unit: (json['unit'] as String?) ?? 'unit',
+      machineType: service['machineType'] as String?,
+      capacityKg: service['capacityKg'] == null
+          ? null
+          : _toDouble(service['capacityKg']),
+      estimateMinutes: (service['estimateMinutes'] as num?)?.toInt(),
     );
   }
 }
@@ -327,6 +343,21 @@ class PaymentProofUploadResult {
       orderId: (json['orderId'] as String?) ?? '',
       filename: (json['filename'] as String?) ?? '',
       url: (json['url'] as String?) ?? '',
+    );
+  }
+}
+
+/// Hasil validasi kode promo dari `POST /promos/validate`.
+class PromoValidation {
+  PromoValidation({required this.discount, required this.isValid});
+
+  final double discount;
+  final bool isValid;
+
+  factory PromoValidation.fromJson(Map<String, dynamic> json) {
+    return PromoValidation(
+      discount: _toDouble(json['discount']),
+      isValid: json['isValid'] == true,
     );
   }
 }

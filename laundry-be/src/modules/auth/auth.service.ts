@@ -11,8 +11,9 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { UserRole } from '@prisma/client';
+import { UserRole, OtpPurpose } from '@prisma/client';
 import { generateDailySequence } from '../../common/utils/sequence.util';
+import { OtpService } from './otp.service';
 
 @Injectable()
 export class AuthService {
@@ -20,13 +21,34 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private otpService: OtpService,
   ) {}
 
   async register(registerDto: RegisterDto) {
-    const { name, email, phone, password, role = UserRole.CUSTOMER } = registerDto;
+    const {
+      name,
+      email,
+      phone,
+      password,
+      role = UserRole.CUSTOMER,
+      verificationToken,
+      birthDate,
+      gender,
+    } = registerDto;
 
     if (!email && !phone) {
       throw new BadRequestException('Email or phone is required');
+    }
+
+    // Register CUSTOMER (self-service) wajib lewat verifikasi OTP nomor HP.
+    if (role === UserRole.CUSTOMER) {
+      if (!phone) {
+        throw new BadRequestException('Phone is required for customer registration');
+      }
+      if (!verificationToken) {
+        throw new BadRequestException('Verification token is required');
+      }
+      await this.otpService.assertVerifiedPhone(verificationToken, phone, OtpPurpose.REGISTER);
     }
 
     if (email) {
@@ -43,7 +65,14 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
     const user = await this.prisma.user.create({
-      data: { name, email, phone, passwordHash, role },
+      data: {
+        name,
+        email,
+        phone,
+        passwordHash,
+        role,
+        phoneVerifiedAt: role === UserRole.CUSTOMER ? new Date() : null,
+      },
     });
 
     if (role === UserRole.CUSTOMER) {
@@ -58,6 +87,8 @@ export class AuthService {
         data: {
           userId: user.id,
           memberCode,
+          birthDate: birthDate ? new Date(birthDate) : null,
+          gender: gender ?? null,
           wallet: { create: { balance: 0 } },
         },
       });
@@ -163,8 +194,15 @@ export class AuthService {
 
     if (!user) throw new UnauthorizedException('User not found');
 
-    const { passwordHash: _, ...userWithoutPassword } = user;
-    return userWithoutPassword;
+    const { passwordHash: _, customer, ...rest } = user;
+
+    // Jangan bocorkan hash PIN; cukup ekspos flag apakah PIN sudah diset.
+    if (customer) {
+      const { walletPinHash, ...customerRest } = customer;
+      return { ...rest, customer: { ...customerRest, hasWalletPin: !!walletPinHash } };
+    }
+
+    return { ...rest, customer: null };
   }
 
   private async generateTokens(userId: string, email: string | null, role: UserRole) {

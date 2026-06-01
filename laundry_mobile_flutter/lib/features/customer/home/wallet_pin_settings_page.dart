@@ -64,7 +64,15 @@ class _WalletPinSettingsPageState extends State<_WalletPinSettingsPage> {
 
     switch (_step) {
       case _PinStep.verifyOld:
-        if (wallet.verifyPin(_input)) {
+        final pin = _input;
+        bool ok;
+        try {
+          ok = await wallet.verifyPin(pin);
+        } catch (_) {
+          ok = false;
+        }
+        if (!mounted) return;
+        if (ok) {
           setState(() {
             _step = _PinStep.enterNew;
             _input = '';
@@ -83,11 +91,25 @@ class _WalletPinSettingsPageState extends State<_WalletPinSettingsPage> {
         });
       case _PinStep.confirmNew:
         if (_input == _newPin) {
-          wallet.setPin(_input);
-          ScaffoldMessenger.of(context).showSnackBar(
+          final messenger = ScaffoldMessenger.of(context);
+          final navigator = Navigator.of(context);
+          try {
+            await wallet.setPin(_input);
+          } catch (_) {
+            if (!mounted) return;
+            setState(() {
+              _error = 'Gagal menyimpan PIN. Coba lagi.';
+              _step = _PinStep.enterNew;
+              _newPin = null;
+              _input = '';
+            });
+            return;
+          }
+          if (!mounted) return;
+          messenger.showSnackBar(
             const SnackBar(content: Text('PIN wallet berhasil disimpan.')),
           );
-          Navigator.of(context).pop();
+          navigator.pop();
         } else {
           setState(() {
             _error = 'PIN tidak cocok. Ulangi.';

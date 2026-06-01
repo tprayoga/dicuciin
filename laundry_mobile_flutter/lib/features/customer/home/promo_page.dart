@@ -5,6 +5,7 @@ class _PromoPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final promos = context.watch<CustomerController>().promos;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -28,10 +29,21 @@ class _PromoPage extends StatelessWidget {
                 style: TextStyle(fontSize: 14, color: _textMuted, height: 1.4),
               ),
               const SizedBox(height: 20),
-              for (final promo in _promos) ...[
-                _PromoCard(promo: promo),
-                const SizedBox(height: 16),
-              ],
+              if (promos.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 40),
+                  child: Center(
+                    child: Text(
+                      'Belum ada promo aktif saat ini.',
+                      style: TextStyle(fontSize: 14, color: _textMuted),
+                    ),
+                  ),
+                )
+              else
+                for (final promo in promos) ...[
+                  _PromoCard(promo: promo),
+                  const SizedBox(height: 16),
+                ],
             ],
           ),
         ),
@@ -40,10 +52,14 @@ class _PromoPage extends StatelessWidget {
   }
 }
 
+/// Label periode promo (mis. "Berlaku s.d. 30 Juni 2026").
+String _promoPeriodLabel(PromoSummary promo) =>
+    'Berlaku s.d. ${_formatDateId(promo.endDate)}';
+
 class _PromoCard extends StatelessWidget {
   const _PromoCard({required this.promo});
 
-  final _PromoData promo;
+  final PromoSummary promo;
 
   Future<void> _copyCode(BuildContext context) async {
     await Clipboard.setData(ClipboardData(text: promo.code));
@@ -88,18 +104,20 @@ class _PromoCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            promo.title,
+            promo.name,
             style: const TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w700,
               color: _textDark,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            promo.description,
-            style: const TextStyle(fontSize: 14, color: _textMuted),
-          ),
+          if (promo.description != null && promo.description!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              promo.description!,
+              style: const TextStyle(fontSize: 14, color: _textMuted),
+            ),
+          ],
           const SizedBox(height: 10),
           Row(
             children: [
@@ -110,7 +128,7 @@ class _PromoCard extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                promo.period,
+                _promoPeriodLabel(promo),
                 style: const TextStyle(
                   fontSize: 13,
                   color: _primary,

@@ -59,12 +59,23 @@ export class UploadsController {
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
 
+    // Hanya boleh upload foto milik sendiri.
+    if (req.user?.userId !== userId) {
+      throw new BadRequestException('Tidak boleh mengubah foto profil user lain');
+    }
+
     this.uploadsService.validateImageFile(file);
 
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
     const url = this.uploadsService.getProfilePhotoUrl(file.filename);
+
+    // Simpan URL ke profil user agar bisa ditampilkan kembali.
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: url },
+    });
 
     return {
       message: 'Profile photo uploaded successfully',

@@ -1,21 +1,41 @@
 import { Controller, Post, Get, Body, Request, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { OtpService } from './otp.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { LogoutDto } from './dto/logout.dto';
+import { RequestOtpDto } from './dto/request-otp.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly otpService: OtpService,
+  ) {}
+
+  @Public()
+  @Post('otp/request')
+  @ApiOperation({ summary: 'Request OTP via WhatsApp (verifikasi nomor)' })
+  async requestOtp(@Body() dto: RequestOtpDto) {
+    return this.otpService.requestOtp(dto.phone, dto.purpose);
+  }
+
+  @Public()
+  @Post('otp/verify')
+  @ApiOperation({ summary: 'Verifikasi OTP — balikin verification token' })
+  async verifyOtp(@Body() dto: VerifyOtpDto) {
+    return this.otpService.verifyOtp(dto.phone, dto.code, dto.purpose);
+  }
 
   @Public()
   @Post('register')
-  @ApiOperation({ summary: 'Register new user' })
+  @ApiOperation({ summary: 'Register new user (wajib verificationToken dari OTP)' })
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
   }

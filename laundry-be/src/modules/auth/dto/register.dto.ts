@@ -1,4 +1,12 @@
-import { IsString, IsEmail, IsOptional, IsEnum, MinLength } from 'class-validator';
+import {
+  IsString,
+  IsEmail,
+  IsOptional,
+  IsEnum,
+  IsIn,
+  IsDateString,
+  MinLength,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 
@@ -26,4 +34,22 @@ export class RegisterDto {
   @IsEnum(UserRole)
   @IsOptional()
   role?: UserRole;
+
+  @ApiProperty({
+    description: 'Verification token dari POST /auth/otp/verify. Wajib untuk register CUSTOMER.',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  verificationToken?: string;
+
+  @ApiProperty({ example: '2000-01-31', description: 'Tanggal lahir (ISO yyyy-MM-dd)', required: false })
+  @IsDateString()
+  @IsOptional()
+  birthDate?: string;
+
+  @ApiProperty({ enum: ['Laki-laki', 'Perempuan'], required: false })
+  @IsIn(['Laki-laki', 'Perempuan'])
+  @IsOptional()
+  gender?: string;
 }

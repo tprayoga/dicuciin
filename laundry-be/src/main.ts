@@ -1,7 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import { join } from 'path';
 import helmet from 'helmet';
 import * as compression from 'compression';
 import * as cookieParser from 'cookie-parser';
@@ -18,14 +20,25 @@ function toWildcardRegex(pattern: string): RegExp {
   return new RegExp(`^${escaped.replace(/\*/g, '.*')}$`);
 }
 
+function isLocalDevOrigin(origin: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(origin);
+}
+
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   const configService = app.get(ConfigService);
+  const appEnv = configService.get<string>('APP_ENV', 'development');
+  const isProduction = appEnv === 'production';
 
-  app.use(helmet());
+  // crossOriginResourcePolicy 'cross-origin' agar file (mis. foto profil) bisa
+  // dimuat dari origin berbeda (Flutter Web/mobile).
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(compression());
   app.use(cookieParser());
+
+  // Serve file upload statis di /uploads (foto profil, bukti bayar).
+  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
 
   // CORS: hanya izinkan origin yang terdaftar di env
   const allowedOriginPatterns = configService
@@ -47,6 +60,7 @@ async function bootstrap() {
       });
 
       if (isAllowed) return callback(null, true);
+      if (!isProduction && isLocalDevOrigin(normalizedOrigin)) return callback(null, true);
 
       callback(new Error(`CORS: origin '${origin}' not allowed`));
     },

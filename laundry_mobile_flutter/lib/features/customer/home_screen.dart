@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/network/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/app_buttons.dart';
 import '../../shared/widgets/pin_pad.dart';
 import '../auth/auth_controller.dart';
+import 'customer_controller.dart';
+import 'models/customer_models.dart';
 import 'wallet_controller.dart';
 
 part 'home/home_models.dart';
@@ -47,6 +50,22 @@ class _HomeScreenState extends State<HomeScreen> {
   _MainTab _tab = _MainTab.home;
 
   @override
+  void initState() {
+    super.initState();
+    // Muat data dashboard (saldo, order, promo) sekali saat home dibuka.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = context.read<AuthController>();
+      final user = auth.user;
+      final token = auth.accessToken;
+      if (user != null && token != null) {
+        context
+            .read<CustomerController>()
+            .loadDashboard(user: user, accessToken: token);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
@@ -81,10 +100,10 @@ class _HomeScreenState extends State<HomeScreen> {
     ).push(MaterialPageRoute(builder: (_) => const _AccountPage()));
   }
 
-  void _openLocationDetail() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const _LocationDetailPage()));
+  void _openLocationDetail(OutletOption outlet) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => _LocationDetailPage(outlet: outlet)),
+    );
   }
 
   void _openScan() {

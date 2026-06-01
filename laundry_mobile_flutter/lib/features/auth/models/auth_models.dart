@@ -21,6 +21,7 @@ class AppUser {
     required this.role,
     this.email,
     this.phone,
+    this.avatarUrl,
     this.customer,
   });
 
@@ -29,6 +30,7 @@ class AppUser {
   final String role;
   final String? email;
   final String? phone;
+  final String? avatarUrl;
   final CustomerProfile? customer;
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
@@ -38,6 +40,7 @@ class AppUser {
       role: (json['role'] as String?) ?? 'CUSTOMER',
       email: json['email'] as String?,
       phone: json['phone'] as String?,
+      avatarUrl: json['avatarUrl'] as String?,
       customer: json['customer'] is Map<String, dynamic>
           ? CustomerProfile.fromJson(json['customer'] as Map<String, dynamic>)
           : null,

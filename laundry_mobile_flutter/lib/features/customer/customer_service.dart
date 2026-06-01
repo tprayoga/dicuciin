@@ -63,6 +63,24 @@ class CustomerService {
         .toList();
   }
 
+  Future<PromoValidation> validatePromo({
+    required String accessToken,
+    required String customerId,
+    required String code,
+    required int orderAmount,
+  }) async {
+    final payload = await _apiClient.post(
+      '/promos/validate',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({
+        'code': code,
+        'customerId': customerId,
+        'orderAmount': orderAmount,
+      }),
+    );
+    return PromoValidation.fromJson(payload as Map<String, dynamic>);
+  }
+
   Future<List<OutletOption>> getOutlets({required String accessToken}) async {
     final payload = await _apiClient.get(
       '/outlets',

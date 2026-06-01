@@ -1,7 +1,18 @@
-import { Controller, Get, Post, Param, Body, Query, UseGuards, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  Body,
+  Query,
+  Request,
+  UseGuards,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { WalletsService } from './wallets.service';
 import { TopupWalletDto, PayWithWalletDto, RefundWalletDto } from './dto/wallet.dto';
+import { WalletPinDto } from './dto/wallet-pin.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('Wallets')
@@ -45,5 +56,25 @@ export class WalletsController {
   @ApiOperation({ summary: 'Refund to wallet' })
   async refund(@Param('customerId') customerId: string, @Body() refundWalletDto: RefundWalletDto) {
     return this.walletsService.refund(customerId, refundWalletDto);
+  }
+
+  @Post('customer/:customerId/pin/set')
+  @ApiOperation({ summary: 'Set / ganti PIN wallet' })
+  async setPin(
+    @Param('customerId') customerId: string,
+    @Request() req: any,
+    @Body() dto: WalletPinDto,
+  ) {
+    return this.walletsService.setPin(customerId, req.user.userId, dto.pin);
+  }
+
+  @Post('customer/:customerId/pin/verify')
+  @ApiOperation({ summary: 'Verifikasi PIN wallet' })
+  async verifyPin(
+    @Param('customerId') customerId: string,
+    @Request() req: any,
+    @Body() dto: WalletPinDto,
+  ) {
+    return this.walletsService.verifyPin(customerId, req.user.userId, dto.pin);
   }
 }

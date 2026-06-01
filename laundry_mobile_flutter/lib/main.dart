@@ -19,13 +19,14 @@ void main() {
 
   final apiClient = ApiClient(baseUrl: AppConfig.apiBaseUrl);
   final tokenStorage = TokenStorage();
+  final authService = AuthService(apiClient);
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
           create: (_) => AuthController(
-            authService: AuthService(apiClient),
+            authService: authService,
             tokenStorage: tokenStorage,
           ),
         ),
@@ -33,7 +34,12 @@ void main() {
           create: (_) =>
               CustomerController(customerService: CustomerService(apiClient)),
         ),
-        ChangeNotifierProvider(create: (_) => WalletController()),
+        ChangeNotifierProxyProvider<AuthController, WalletController>(
+          create: (_) => WalletController(authService: authService),
+          update: (_, auth, wallet) => (wallet ??
+              WalletController(authService: authService))
+            ..syncFromAuth(auth),
+        ),
       ],
       child: const CustomerApp(),
     ),

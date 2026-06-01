@@ -219,17 +219,27 @@ class _TopUpPageState extends State<_TopUpPage> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: _primary),
-            onPressed: () {
+            onPressed: () async {
               final nominal = _selectedNominal!;
-              context.read<WalletController>().topUp(nominal);
+              final messenger = ScaffoldMessenger.of(context);
+              final navigator = Navigator.of(context);
               Navigator.pop(ctx); // tutup dialog
-              Navigator.pop(context); // kembali ke home
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Top up ${_rupiah(nominal)} berhasil diproses'),
-                  backgroundColor: AppColors.success,
-                ),
-              );
+              try {
+                await context.read<WalletController>().topUp(nominal);
+                navigator.pop(); // kembali ke home
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text('Top up ${_rupiah(nominal)} berhasil diproses'),
+                    backgroundColor: AppColors.success,
+                  ),
+                );
+              } catch (_) {
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('Top up gagal. Coba lagi sebentar.'),
+                  ),
+                );
+              }
             },
             child: const Text('Konfirmasi'),
           ),

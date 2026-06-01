@@ -95,6 +95,26 @@ class CustomerController extends ChangeNotifier {
     }
   }
 
+  /// Validasi kode promo ke backend. Melempar [ApiException] dengan pesan
+  /// alasan (mis. minimum transaksi) agar bisa ditampilkan ke user.
+  Future<PromoValidation> validatePromo({
+    required AppUser user,
+    required String accessToken,
+    required String code,
+    required int orderAmount,
+  }) {
+    final customerId = user.customer?.id;
+    if (customerId == null) {
+      throw StateError('Akun belum terhubung ke profil customer.');
+    }
+    return _customerService.validatePromo(
+      accessToken: accessToken,
+      customerId: customerId,
+      code: code,
+      orderAmount: orderAmount,
+    );
+  }
+
   Future<OrderDetail?> getOrderDetail({
     required String accessToken,
     required String orderId,

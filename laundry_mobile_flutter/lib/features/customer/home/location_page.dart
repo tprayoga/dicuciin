@@ -1,173 +1,132 @@
 part of '../home_screen.dart';
 
-class _LocationInfo {
-  const _LocationInfo({
-    required this.name,
-    required this.address,
-    required this.machineCount,
-    required this.closeTime,
-    required this.isOpen,
-  });
-
-  final String name;
-  final String address;
-  final int machineCount;
-  final String closeTime;
-  final bool isOpen;
-}
-
-class _LocationPage extends StatelessWidget {
+class _LocationPage extends StatefulWidget {
   const _LocationPage({required this.onOpenDetail});
 
-  final VoidCallback onOpenDetail;
+  /// Dipanggil saat sebuah outlet dipilih → buka halaman detail (daftar mesin).
+  final void Function(OutletOption outlet) onOpenDetail;
 
-  // Data mock — nanti diganti dari backend (outlet list)
-  static const _locations = [
-    _LocationInfo(
-      name: 'Laundry Smart Sudirman',
-      address: 'Jl. Jend. Sudirman No. 45, Jakarta Pusat',
-      machineCount: 5,
-      closeTime: '21:00',
-      isOpen: true,
-    ),
-    _LocationInfo(
-      name: 'Laundry Smart Kemang',
-      address: 'Jl. Kemang Raya No. 12, Jakarta Selatan',
-      machineCount: 3,
-      closeTime: '22:00',
-      isOpen: true,
-    ),
-    _LocationInfo(
-      name: 'Laundry Smart Menteng',
-      address: 'Jl. HOS Cokroaminoto No. 8, Jakarta Pusat',
-      machineCount: 0,
-      closeTime: '20:00',
-      isOpen: false,
-    ),
-    _LocationInfo(
-      name: 'Laundry Smart BSD',
-      address: 'Jl. Pahlawan Seribu, Tangerang Selatan',
-      machineCount: 7,
-      closeTime: '23:00',
-      isOpen: true,
-    ),
-  ];
+  @override
+  State<_LocationPage> createState() => _LocationPageState();
+}
+
+class _LocationPageState extends State<_LocationPage> {
+  bool _loading = true;
+  String? _error;
+  List<OutletOption> _outlets = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    final auth = context.read<AuthController>();
+    final token = auth.accessToken;
+    if (token == null) {
+      setState(() {
+        _loading = false;
+        _error = 'Silakan masuk untuk melihat lokasi.';
+      });
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    final outlets =
+        await context.read<CustomerController>().getOutlets(accessToken: token);
+    if (!mounted) return;
+    setState(() {
+      _outlets = outlets;
+      _loading = false;
+      _error = outlets.isEmpty ? 'Belum ada outlet tersedia.' : null;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final locations = [..._locations]
-      ..sort((a, b) {
-        if (a.isOpen == b.isOpen) {
-          return b.machineCount.compareTo(a.machineCount);
-        }
-        return a.isOpen ? -1 : 1;
-      });
-    final openCount = locations.where((location) => location.isOpen).length;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _BlueHeader(title: 'Lokasi Laundry'),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-          child: Row(
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Temukan lokasi laundry terdekat!',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: _textDark,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Cek mesin yang tersedia dan pilih sesuai kebutuhanmu.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: _textMuted,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
+              Text(
+                'Temukan lokasi laundry terdekat!',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: _textDark,
                 ),
               ),
-              const SizedBox(width: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.tintBlueAlt,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  '$openCount/${locations.length} Buka',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: _primary,
-                  ),
-                ),
+              SizedBox(height: 8),
+              Text(
+                'Cek mesin yang tersedia dan pilih sesuai kebutuhanmu.',
+                style: TextStyle(fontSize: 14, color: _textMuted, height: 1.4),
               ),
             ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _line),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.tune, size: 16, color: _textMuted),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Urutan: outlet yang masih buka ditampilkan lebih dulu',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: _textMuted.withValues(alpha: 0.95),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-            physics: const ClampingScrollPhysics(),
-            itemCount: locations.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 14),
-            itemBuilder: (_, index) {
-              final loc = locations[index];
-              return _LocationCard(
-                name: loc.name,
-                address: loc.address,
-                machineCount: loc.machineCount,
-                closeTime: loc.closeTime,
-                isOpen: loc.isOpen,
-                enabled: loc.isOpen,
-                onTap: loc.isOpen ? onOpenDetail : null,
-              );
-            },
-          ),
-        ),
+        Expanded(child: _body()),
       ],
+    );
+  }
+
+  Widget _body() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_error != null && _outlets.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.store_mall_directory_outlined,
+                  size: 44, color: AppColors.textMutedLight),
+              const SizedBox(height: 14),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14, color: _textMuted),
+              ),
+              const SizedBox(height: 16),
+              AppOutlineButton(label: 'Coba Lagi', onTap: _load),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: _outlets.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 14),
+        itemBuilder: (_, index) {
+          final outlet = _outlets[index];
+          return _LocationCard(
+            name: outlet.name,
+            address: outlet.address,
+            machineCount: -1, // jumlah mesin dilihat di halaman detail
+            closeTime: '',
+            isOpen: true,
+            enabled: true,
+            onTap: () => widget.onOpenDetail(outlet),
+          );
+        },
+      ),
     );
   }
 }

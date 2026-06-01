@@ -20,7 +20,6 @@ class _HomePage extends StatefulWidget {
 class _HomePageState extends State<_HomePage> {
   late final PageController _promoCtrl;
   int _currentPromo = 0;
-  int get _promoCount => _promos.length;
 
   @override
   void initState() {
@@ -90,6 +89,7 @@ class _HomePageState extends State<_HomePage> {
     final screenWidth = MediaQuery.of(context).size.width;
     final user = context.watch<AuthController>().user;
     final firstName = (user?.name ?? 'Pengguna').split(' ').first;
+    final promos = context.watch<CustomerController>().promos;
 
     return SingleChildScrollView(
       // Clamping → tidak ada efek bounce; terasa "fixed" saat konten muat,
@@ -389,125 +389,127 @@ class _HomePageState extends State<_HomePage> {
 
           const SizedBox(height: 20),
 
-          // ── Promo carousel ───────────────────────────────────────
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
-            child: Text(
-              'Promo yang wajib dicek',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: _textDark,
+          // ── Promo carousel (dari API) ────────────────────────────
+          if (promos.isNotEmpty) ...[
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Text(
+                'Promo yang wajib dicek',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: _textDark,
+                ),
               ),
             ),
-          ),
-          SizedBox(
-            height: 175,
-            child: PageView.builder(
-              controller: _promoCtrl,
-              itemCount: _promoCount,
-              padEnds: true,
-              itemBuilder: (_, i) {
-                final promo = _promos[i];
-                return Padding(
-                  padding: EdgeInsets.only(
-                    left: i == 0 ? 20 : 8,
-                    right: i == _promoCount - 1 ? 20 : 0,
-                  ),
-                  child: GestureDetector(
-                    onTap: widget.onOpenPromo,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
-                      child: SizedBox(
-                        width: screenWidth * 0.88,
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            Image.asset(
-                              'assets/mockups/promo_banner.png',
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) =>
-                                  Container(color: AppColors.tintBlueAlt),
-                            ),
-                            DecoratedBox(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.bottomLeft,
-                                  end: Alignment.topRight,
-                                  colors: [
-                                    Colors.black.withValues(alpha: 0.7),
-                                    Colors.black.withValues(alpha: 0.15),
-                                    Colors.transparent,
+            SizedBox(
+              height: 175,
+              child: PageView.builder(
+                controller: _promoCtrl,
+                itemCount: promos.length,
+                padEnds: true,
+                itemBuilder: (_, i) {
+                  final promo = promos[i];
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      left: i == 0 ? 20 : 8,
+                      right: i == promos.length - 1 ? 20 : 0,
+                    ),
+                    child: GestureDetector(
+                      onTap: widget.onOpenPromo,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: SizedBox(
+                          width: screenWidth * 0.88,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.asset(
+                                'assets/mockups/promo_banner.png',
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) =>
+                                    Container(color: AppColors.tintBlueAlt),
+                              ),
+                              DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.bottomLeft,
+                                    end: Alignment.topRight,
+                                    colors: [
+                                      Colors.black.withValues(alpha: 0.7),
+                                      Colors.black.withValues(alpha: 0.15),
+                                      Colors.transparent,
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      promo.name,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Kode: ${promo.code}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    promo.title,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Kode: ${promo.code}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
+                  );
+                },
+              ),
+            ),
+
+            // Dots indicator — terpusat + animasi
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(promos.length, (i) {
+                final isActive = i == _currentPromo;
+                return GestureDetector(
+                  onTap: () => _promoCtrl.animateToPage(
+                    i,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  ),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeInOut,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: isActive ? 22 : 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: isActive ? _primary : AppColors.borderLight,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
                   ),
                 );
-              },
+              }),
             ),
-          ),
 
-          // Dots indicator — terpusat + animasi
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(_promoCount, (i) {
-              final isActive = i == _currentPromo;
-              return GestureDetector(
-                onTap: () => _promoCtrl.animateToPage(
-                  i,
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                ),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeInOut,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: isActive ? 22 : 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: isActive ? _primary : AppColors.borderLight,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              );
-            }),
-          ),
-
-          const SizedBox(height: 24),
+            const SizedBox(height: 24),
+          ],
 
           // ── Service tiles ─────────────────────────────────────────
           const Padding(
