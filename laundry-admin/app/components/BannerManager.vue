@@ -50,11 +50,20 @@ const form = reactive({
   endDate: '',
 })
 
-// Saat promo dipilih, otomatis isi judul (bila masih kosong) agar cepat.
+// Saat promo dipilih: judul auto (bila kosong) + GAMBAR mengikuti gambar promo
+// (satu gambar yang sama, tidak upload dua kali).
 watch(() => form.promoId, (id) => {
   if (!id) return
   const p = promos.value.find(x => x.id === id)
-  if (p && !form.title.trim()) form.title = p.name
+  if (!p) return
+  if (!form.title.trim()) form.title = p.name
+  form.imageUrl = p.bannerUrl || ''
+})
+
+// Gambar promo yang terpilih (untuk preview/validasi di mode promo).
+const selectedPromoImage = computed(() => {
+  const p = promos.value.find(x => x.id === form.promoId)
+  return p?.bannerUrl || ''
 })
 
 // Saat mode aksi berganti, bersihkan field yang tak relevan agar tak ada data sisa.
@@ -159,12 +168,19 @@ function payload() {
 }
 
 async function save() {
-  if (!form.imageUrl) {
+  if (actionMode.value === 'promo') {
+    if (!form.promoId) {
+      toast.add({ title: 'Pilih promo dulu', color: 'error' })
+      return
+    }
+    // Gambar banner = gambar promo (satu sumber).
+    form.imageUrl = selectedPromoImage.value
+    if (!form.imageUrl) {
+      toast.add({ title: 'Promo belum punya gambar', description: 'Unggah gambar di tab Promo & Voucher dulu.', color: 'error' })
+      return
+    }
+  } else if (!form.imageUrl) {
     toast.add({ title: 'Gambar wajib diunggah', color: 'error' })
-    return
-  }
-  if (actionMode.value === 'promo' && !form.promoId) {
-    toast.add({ title: 'Pilih promo dulu', color: 'error' })
     return
   }
   try {
@@ -253,18 +269,6 @@ onMounted(load)
     <UModal v-model:open="showModal" :title="editTarget ? 'Edit Banner' : 'Tambah Banner'">
       <template #body>
         <form class="space-y-4" @submit.prevent="save">
-          <!-- Gambar: upload langsung -->
-          <UFormField label="Gambar Banner">
-            <div class="flex items-center gap-3">
-              <label class="dc-btn-outline px-4 py-2 rounded-lg cursor-pointer text-sm whitespace-nowrap">
-                <input type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="onFilePick">
-                {{ uploading ? 'Mengunggah...' : (form.imageUrl ? 'Ganti Gambar' : 'Pilih Gambar') }}
-              </label>
-              <span class="text-xs text-[#6f809f]">PNG/JPG/WebP, maks 5MB</span>
-            </div>
-            <div v-if="form.imageUrl" class="mt-2 h-32 rounded-lg border border-[#d7e0ee] bg-cover bg-center" :style="{ backgroundImage: `url(${form.imageUrl})` }" />
-          </UFormField>
-
           <UFormField label="Judul">
             <UInput v-model="form.title" placeholder="Mis. Diskon Akhir Pekan" class="w-full" required />
           </UFormField>
@@ -296,6 +300,25 @@ onMounted(load)
               <UInput v-model="form.ctaLabel" placeholder="Mis. Beri Ulasan" class="w-full" />
             </UFormField>
           </div>
+
+          <!-- Gambar: mode promo → ikut gambar promo (satu gambar). Selain itu → upload. -->
+          <UFormField label="Gambar Banner">
+            <template v-if="actionMode === 'promo'">
+              <div v-if="selectedPromoImage" class="h-32 rounded-lg border border-[#d7e0ee] bg-cover bg-center" :style="{ backgroundImage: `url(${selectedPromoImage})` }" />
+              <p v-else class="text-sm text-[#b5701a]">Promo ini belum punya gambar. Unggah gambar di tab <strong>Promo & Voucher</strong> dulu.</p>
+              <p class="text-xs text-[#6f809f] mt-1">Gambar mengikuti gambar promo agar konsisten.</p>
+            </template>
+            <template v-else>
+              <div class="flex items-center gap-3">
+                <label class="dc-btn-outline px-4 py-2 rounded-lg cursor-pointer text-sm whitespace-nowrap">
+                  <input type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="onFilePick">
+                  {{ uploading ? 'Mengunggah...' : (form.imageUrl ? 'Ganti Gambar' : 'Pilih Gambar') }}
+                </label>
+                <span class="text-xs text-[#6f809f]">PNG/JPG/WebP, maks 5MB</span>
+              </div>
+              <div v-if="form.imageUrl" class="mt-2 h-32 rounded-lg border border-[#d7e0ee] bg-cover bg-center" :style="{ backgroundImage: `url(${form.imageUrl})` }" />
+            </template>
+          </UFormField>
 
           <div class="grid md:grid-cols-3 gap-4">
             <UFormField label="Mulai (opsional)">

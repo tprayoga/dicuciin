@@ -7,7 +7,25 @@ const toast = useToast()
 
 const promos = ref<Promo[]>([])
 const loading = ref(false)
+const uploading = ref(false)
 const search = ref('')
+
+async function onFilePick(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  uploading.value = true
+  try {
+    const res = await api.upload<{ url: string }>('/uploads/image', file)
+    form.bannerUrl = res.url
+    toast.add({ title: 'Gambar terunggah', color: 'success' })
+  } catch (err: any) {
+    toast.add({ title: 'Gagal mengunggah gambar', description: err.message, color: 'error' })
+  } finally {
+    uploading.value = false
+    input.value = ''
+  }
+}
 const showModal = ref(false)
 const editTarget = ref<Promo | null>(null)
 const deleteTarget = ref<Promo | null>(null)
@@ -206,8 +224,14 @@ onMounted(load)
             <UTextarea v-model="form.description" placeholder="Masukkan deskripsi" class="w-full" :rows="2" />
           </UFormField>
 
-          <UFormField label="URL Banner Promo">
-            <UInput v-model="form.bannerUrl" placeholder="https://..." class="w-full" />
+          <UFormField label="Gambar Promo">
+            <div class="flex items-center gap-3">
+              <label class="dc-btn-outline px-4 py-2 rounded-lg cursor-pointer text-sm whitespace-nowrap">
+                <input type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="onFilePick">
+                {{ uploading ? 'Mengunggah...' : (form.bannerUrl ? 'Ganti Gambar' : 'Pilih Gambar') }}
+              </label>
+              <span class="text-xs text-[#6f809f]">Dipakai di halaman promo & banner yang menautkan promo ini</span>
+            </div>
             <div v-if="form.bannerUrl" class="mt-2 h-28 rounded-lg border border-[#d7e0ee] bg-cover bg-center" :style="{ backgroundImage: `url(${form.bannerUrl})` }" />
           </UFormField>
 

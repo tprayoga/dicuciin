@@ -526,7 +526,7 @@ async function main() {
         code: promo.code,
         name: promo.name,
         description: promo.description,
-        bannerUrl: `/uploads/promo-${promo.code.toLowerCase()}.jpg`,
+        bannerUrl: `https://picsum.photos/seed/${promo.code}/900/500`,
         promoType: promo.promoType,
         value: promo.value,
         quota: promo.quota,
@@ -955,24 +955,27 @@ async function main() {
 
   // ── App Banners (pop-up & carousel) ─────────────────────────────────────
   const promoByCode = new Map(promos.map((p) => [p.code, p]));
+  const welcomePromo = promoByCode.get('WELCOME20');
+  const hematPromo = promoByCode.get('HEMAT10K');
   const bannerSeeds = [
     {
       title: 'Diskon Member Baru 20%',
-      imageUrl: 'https://picsum.photos/seed/promo1/900/500',
+      // Banner promo memakai gambar yang sama dengan promonya.
+      imageUrl: welcomePromo?.bannerUrl ?? 'https://picsum.photos/seed/promo1/900/500',
       placement: BannerPlacement.HOME_CAROUSEL,
       sortOrder: 1,
       linkUrl: null as string | null,
       ctaLabel: null as string | null,
-      promoId: promoByCode.get('WELCOME20')?.id ?? null,
+      promoId: welcomePromo?.id ?? null,
     },
     {
       title: 'Potongan Langsung Rp10.000',
-      imageUrl: 'https://picsum.photos/seed/promo2/900/500',
+      imageUrl: hematPromo?.bannerUrl ?? 'https://picsum.photos/seed/promo2/900/500',
       placement: BannerPlacement.HOME_CAROUSEL,
       sortOrder: 2,
       linkUrl: null,
       ctaLabel: null,
-      promoId: promoByCode.get('HEMAT10K')?.id ?? null,
+      promoId: hematPromo?.id ?? null,
     },
     {
       title: 'Beri Ulasan Google, Dapat Voucher!',
