@@ -8,6 +8,17 @@ class CustomerService {
 
   final ApiClient _apiClient;
 
+  /// Ambil list dari payload, tahan dua bentuk respons paginated:
+  /// (a) sudah berupa List (interceptor menaikkan `data` ke atas), atau
+  /// (b) Map `{data: [...], meta}`.
+  List<dynamic> _asList(dynamic payload) {
+    if (payload is List) return payload;
+    if (payload is Map<String, dynamic> && payload['data'] is List) {
+      return payload['data'] as List<dynamic>;
+    }
+    return const [];
+  }
+
   Future<WalletData> getWallet({
     required String customerId,
     required String accessToken,
@@ -34,7 +45,7 @@ class CustomerService {
       },
     );
 
-    final list = (payload as Map<String, dynamic>)['data'] as List<dynamic>? ?? const [];
+    final list = _asList(payload);
     return list
         .whereType<Map<String, dynamic>>()
         .map(OrderSummary.fromJson)
@@ -55,7 +66,7 @@ class CustomerService {
       },
     );
 
-    final list = (payload as Map<String, dynamic>)['data'] as List<dynamic>? ?? const [];
+    final list = _asList(payload);
     return list
         .whereType<Map<String, dynamic>>()
         .map(PromoSummary.fromJson)
@@ -109,7 +120,7 @@ class CustomerService {
       headers: {'Authorization': 'Bearer $accessToken'},
       queryParameters: {'placement': placement},
     );
-    final list = payload as List<dynamic>? ?? const [];
+    final list = _asList(payload);
     return list
         .whereType<Map<String, dynamic>>()
         .map(AppBanner.fromJson)
@@ -159,7 +170,7 @@ class CustomerService {
       queryParameters: const {'page': '1', 'limit': '100'},
     );
 
-    final list = (payload as Map<String, dynamic>)['data'] as List<dynamic>? ?? const [];
+    final list = _asList(payload);
     return list
         .whereType<Map<String, dynamic>>()
         .map(OutletOption.fromJson)
@@ -176,7 +187,7 @@ class CustomerService {
       queryParameters: {'outletId': outletId},
     );
 
-    final list = payload as List<dynamic>? ?? const [];
+    final list = _asList(payload);
     return list
         .whereType<Map<String, dynamic>>()
         .map(ServicePriceOption.fromJson)
