@@ -352,6 +352,36 @@ class PaymentProofUploadResult {
   }
 }
 
+/// Statistik member dari `GET /customers/:id/stats`.
+class MemberStats {
+  MemberStats({
+    required this.totalOrders,
+    required this.completedOrders,
+    required this.totalSpending,
+    this.favoriteService,
+  });
+
+  final int totalOrders;
+  final int completedOrders;
+  final double totalSpending;
+  final String? favoriteService;
+
+  factory MemberStats.fromJson(Map<String, dynamic> json) {
+    return MemberStats(
+      totalOrders: (json['totalOrders'] as num?)?.toInt() ?? 0,
+      completedOrders: (json['completedOrders'] as num?)?.toInt() ?? 0,
+      totalSpending: _toDouble(json['totalSpending']),
+      favoriteService: json['favoriteService'] as String?,
+    );
+  }
+
+  static MemberStats empty() => MemberStats(
+        totalOrders: 0,
+        completedOrders: 0,
+        totalSpending: 0,
+      );
+}
+
 /// Banner/pop-up terkelola admin dari `GET /banners/active`.
 class AppBanner {
   AppBanner({

@@ -22,6 +22,7 @@ class CustomerController extends ChangeNotifier {
   List<AppBanner> _carouselBanners = const [];
   List<AppBanner> _popupBanners = const [];
   bool _popupConsumed = false;
+  MemberStats? _stats;
 
   bool get isLoading => _isLoading;
   bool get isSubmittingOrder => _isSubmittingOrder;
@@ -39,6 +40,8 @@ class CustomerController extends ChangeNotifier {
 
   /// Tandai pop-up sudah ditampilkan (tidak muncul lagi sesi ini).
   void markPopupShown() => _popupConsumed = true;
+
+  MemberStats get stats => _stats ?? MemberStats.empty();
 
   Future<void> loadDashboard({required AppUser user, required String accessToken}) async {
     final customerId = user.customer?.id;
@@ -61,6 +64,8 @@ class CustomerController extends ChangeNotifier {
             accessToken: accessToken, placement: 'HOME_CAROUSEL'),
         _customerService.getBanners(
             accessToken: accessToken, placement: 'HOME_POPUP'),
+        _customerService.getMemberStats(
+            customerId: customerId, accessToken: accessToken),
       ]);
 
       _wallet = results[0] as WalletData;
@@ -68,6 +73,7 @@ class CustomerController extends ChangeNotifier {
       _promos = results[2] as List<PromoSummary>;
       _carouselBanners = results[3] as List<AppBanner>;
       _popupBanners = results[4] as List<AppBanner>;
+      _stats = results[5] as MemberStats;
     } on ApiException catch (e) {
       _errorMessage = e.message;
     } catch (_) {
@@ -186,6 +192,7 @@ class CustomerController extends ChangeNotifier {
     _carouselBanners = const [];
     _popupBanners = const [];
     _popupConsumed = false;
+    _stats = null;
     notifyListeners();
   }
 

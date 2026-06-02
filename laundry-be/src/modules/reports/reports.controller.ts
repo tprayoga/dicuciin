@@ -18,6 +18,13 @@ export class ReportsController {
     return this.reportsService.getOutletSummary(outletId);
   }
 
+  @Get('staff')
+  @ApiOperation({ summary: 'Kinerja penjualan & ulasan per staff' })
+  @ApiQuery({ name: 'outletId', required: false, type: String })
+  async getStaffPerformance(@Query('outletId') outletId?: string) {
+    return this.reportsService.getStaffPerformance(outletId);
+  }
+
   @Get('top-services')
   @ApiOperation({ summary: 'Top 10 layanan berdasarkan revenue' })
   @ApiQuery({ name: 'month', required: false, type: String, example: '2026-05' })

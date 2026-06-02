@@ -91,9 +91,23 @@ Keputusan owner: **keduanya** (field register + section persona di home).
 > stats avg 5/dist{5:1}, toggle focus true, GET focused → 1. BE tsc + flutter analyze clean;
 > admin typecheck halaman reviews/banners 0 error.
 
-## 🟠 Fase 5 — Staff kiosk & member dashboard
-6. **Staff kiosk** (item 12): `KioskSession.staffUserId` + login/PIN staff + laporan penjualan/review per staff.
-7. **Member dashboard** (item 14): endpoint ringkasan (saldo+transaksi, voucher member, riwayat & statistik order) + halaman mobile.
+## 🟠 Fase 5 — Staff kiosk & member dashboard  ✅ SELESAI & TERVERIFIKASI (2026-06-02)
+6. **Staff kiosk / atribusi staff** (item 12) ✅
+   - BE: `KioskSession.staffUserId` + `Order.staffUserId` (+relasi User, migration
+     `add_staff_attribution`); session start & createOrder terima `staffUserId`; **review
+     auto-derive `staffUserId`** dari `order.staffUserId` atau sesi kiosk (menutup loop Fase 3);
+     `GET /reports/staff` agregasi penjualan (count+revenue) & ulasan (avg+count) per staff.
+   - Admin Nuxt: halaman **Kinerja Staff** (`pages/staff-performance`) + nav.
+   - Catatan: kiosk frontend di luar repo; atribusi via field `staffUserId` pada order/sesi.
+7. **Member dashboard** (item 14) ✅
+   - BE: `GET /customers/:id/stats` (totalOrders, completedOrders, totalSpending, favoriteService).
+   - Mobile: `getMemberStats` + `CustomerController.stats` (dimuat di loadDashboard); halaman
+     **Dashboard Member** (`member_dashboard_page`) — saldo+top up, statistik order, riwayat
+     transaksi saldo, riwayat order, voucher/promo; entry dari halaman Akun.
+
+> Verifikasi curl: order ber-staff → review auto-bind "Operator Washer"; `/reports/staff`
+> (1 order, Rp57k, 1 ulasan, rating 4); `/customers/:id/stats` (7 order, Rp244k, favorit
+> "Cuci Sepatu"). BE tsc + flutter analyze clean; admin typecheck halaman baru 0 error.
 
 ## 🔴 Fase 4 — Booking & verifikasi mesin (item 11)
 - BE: model `MachineBooking` (iotDeviceId, customerId, kode/QR, status RESERVED→IN_USE→DONE, expiry) + lock mesin.

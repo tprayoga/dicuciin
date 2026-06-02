@@ -14,6 +14,11 @@ class StartSessionDto {
   @IsString()
   @IsOptional()
   customerId?: string;
+
+  @ApiProperty({ required: false, description: 'Staff yang bertugas di kiosk' })
+  @IsString()
+  @IsOptional()
+  staffUserId?: string;
 }
 
 @ApiTags('Kiosks')
@@ -66,7 +71,11 @@ export class KiosksController {
   @Post(':id/session/start')
   @ApiOperation({ summary: 'Start kiosk session' })
   async startSession(@Param('id') id: string, @Body() startSessionDto: StartSessionDto) {
-    return this.kiosksService.startSession(id, startSessionDto.customerId);
+    return this.kiosksService.startSession(
+      id,
+      startSessionDto.customerId,
+      startSessionDto.staffUserId,
+    );
   }
 
   @Post('session/:sessionId/end')

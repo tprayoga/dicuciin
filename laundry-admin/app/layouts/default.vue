@@ -17,6 +17,7 @@ const navItems = [
   { label: 'Promo & Campaign', icon: 'i-heroicons-megaphone', to: '/promos' },
   { label: 'Banner & Pop-up Ads', icon: 'i-heroicons-photo', to: '/banners' },
   { label: 'Ulasan & Feedback', icon: 'i-heroicons-star', to: '/reviews' },
+  { label: 'Kinerja Staff', icon: 'i-heroicons-trophy', to: '/staff-performance' },
 ]
 
 function isActive(to: string) {

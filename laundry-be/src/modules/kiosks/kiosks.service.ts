@@ -72,7 +72,7 @@ export class KiosksService {
     return { message: 'Kiosk deleted successfully' };
   }
 
-  async startSession(kioskId: string, customerId?: string) {
+  async startSession(kioskId: string, customerId?: string, staffUserId?: string) {
     const kiosk = await this.prisma.kiosk.findUnique({ where: { id: kioskId } });
     if (!kiosk) throw new NotFoundException('Kiosk not found');
 
@@ -82,7 +82,7 @@ export class KiosksService {
     });
 
     return this.prisma.kioskSession.create({
-      data: { kioskId, customerId },
+      data: { kioskId, customerId, staffUserId },
     });
   }
 

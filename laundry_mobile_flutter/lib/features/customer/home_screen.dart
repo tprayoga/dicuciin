@@ -32,6 +32,7 @@ part 'home/order_success_page.dart';
 part 'home/scan_qr_page.dart';
 part 'home/notification_page.dart';
 part 'home/topup_page.dart';
+part 'home/member_dashboard_page.dart';
 
 const _blue = AppColors.primaryDark;
 const _primary = AppColors.primary;

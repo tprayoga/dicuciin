@@ -43,6 +43,56 @@ export class ReportsService {
     }));
   }
 
+  /** Kinerja per staff: jumlah & nilai penjualan + jumlah & rata-rata ulasan. */
+  async getStaffPerformance(outletId?: string) {
+    const orderAgg = await this.prisma.order.groupBy({
+      by: ['staffUserId'],
+      where: {
+        staffUserId: { not: null },
+        status: { in: PAID_STATUSES },
+        ...(outletId ? { outletId } : {}),
+      },
+      _count: true,
+      _sum: { totalAmount: true },
+    });
+
+    const reviewAgg = await this.prisma.review.groupBy({
+      by: ['staffUserId'],
+      where: { staffUserId: { not: null } },
+      _count: true,
+      _avg: { rating: true },
+    });
+
+    const ids = Array.from(
+      new Set<string>([
+        ...orderAgg.map((o) => o.staffUserId).filter((x): x is string => !!x),
+        ...reviewAgg.map((r) => r.staffUserId).filter((x): x is string => !!x),
+      ]),
+    );
+
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true, role: true },
+    });
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
+    return ids
+      .map((id) => {
+        const o = orderAgg.find((x) => x.staffUserId === id);
+        const r = reviewAgg.find((x) => x.staffUserId === id);
+        return {
+          staffId: id,
+          name: userMap.get(id)?.name ?? '-',
+          role: userMap.get(id)?.role ?? null,
+          totalOrders: o?._count ?? 0,
+          totalRevenue: o?._sum.totalAmount ?? 0,
+          reviewCount: r?._count ?? 0,
+          avgRating: r?._avg.rating ?? 0,
+        };
+      })
+      .sort((a, b) => b.totalRevenue - a.totalRevenue);
+  }
+
   async getTopServices(month?: string, outletId?: string) {
     const monthRegex = /^\d{4}-\d{2}$/;
     if (month && !monthRegex.test(month)) {

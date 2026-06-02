@@ -55,4 +55,10 @@ export class CustomersController {
   async getWallet(@Param('id') id: string) {
     return this.customersService.getWallet(id);
   }
+
+  @Get(':id/stats')
+  @ApiOperation({ summary: 'Statistik member (total order, belanja, dll)' })
+  async getStats(@Param('id') id: string) {
+    return this.customersService.getStats(id);
+  }
 }

@@ -38,6 +38,11 @@ export class CreateOrderDto {
   @IsOptional()
   kioskId?: string;
 
+  @ApiProperty({ required: false, description: 'Staff yang membuat order (kiosk/kasir)' })
+  @IsString()
+  @IsOptional()
+  staffUserId?: string;
+
   @ApiProperty()
   @IsString()
   sourcePlatform: string;

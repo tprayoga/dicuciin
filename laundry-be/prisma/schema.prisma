@@ -115,11 +115,13 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  customer      Customer?
-  outletUsers   OutletUser[]
-  auditLogs     AuditLog[]
-  refreshTokens RefreshToken[]
-  reviews       Review[]       @relation("StaffReviews")
+  customer       Customer?
+  outletUsers    OutletUser[]
+  auditLogs      AuditLog[]
+  refreshTokens  RefreshToken[]
+  reviews        Review[]       @relation("StaffReviews")
+  staffOrders    Order[]        @relation("StaffOrders")
+  kioskSessions  KioskSession[] @relation("StaffKioskSessions")
 
   @@index([email])
   @@index([phone])
@@ -262,6 +264,7 @@ model Order {
   customerAddressId String?
   outletId          String
   kioskId           String?
+  staffUserId       String?
   sourcePlatform    String
   orderDate         DateTime    @default(now())
   status            OrderStatus @default(DRAFT)
@@ -281,6 +284,7 @@ model Order {
   customerAddress    CustomerAddress?    @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
   outlet             Outlet              @relation(fields: [outletId], references: [id])
   kiosk              Kiosk?              @relation(fields: [kioskId], references: [id], onDelete: SetNull)
+  staff              User?               @relation("StaffOrders", fields: [staffUserId], references: [id], onDelete: SetNull)
   items              OrderItem[]
   statusLogs         OrderStatusLog[]
   payments           Payment[]
@@ -291,6 +295,7 @@ model Order {
   @@index([orderNumber])
   @@index([customerId])
   @@index([outletId])
+  @@index([staffUserId])
   @@index([status])
   @@index([orderDate])
   @@map("orders")
@@ -466,17 +471,20 @@ model Kiosk {
 }
 
 model KioskSession {
-  id         String    @id @default(uuid())
-  kioskId    String
-  customerId String?
-  startedAt  DateTime  @default(now())
-  endedAt    DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id          String    @id @default(uuid())
+  kioskId     String
+  customerId  String?
+  staffUserId String?
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   kiosk Kiosk @relation(fields: [kioskId], references: [id], onDelete: Cascade)
+  staff User? @relation("StaffKioskSessions", fields: [staffUserId], references: [id], onDelete: SetNull)
 
   @@index([kioskId])
+  @@index([staffUserId])
   @@map("kiosk_sessions")
 }
 

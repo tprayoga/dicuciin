@@ -36,6 +36,15 @@ export class ReviewsService {
       if (!order) throw new NotFoundException('Order not found');
       const existing = await this.prisma.review.findUnique({ where: { orderId } });
       if (existing) throw new ConflictException('Order ini sudah diulas');
+      // Tautkan ke staff yang membuat order (kiosk/kasir) bila belum diisi.
+      resolvedStaffId = resolvedStaffId ?? order.staffUserId ?? undefined;
+    }
+    // Fallback: turunkan staff dari sesi kiosk yang aktif saat ulasan dibuat.
+    if (!resolvedStaffId && kioskSessionId) {
+      const session = await this.prisma.kioskSession.findUnique({
+        where: { id: kioskSessionId },
+      });
+      resolvedStaffId = session?.staffUserId ?? undefined;
     }
 
     try {

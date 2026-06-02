@@ -63,6 +63,17 @@ class CustomerService {
         .toList();
   }
 
+  Future<MemberStats> getMemberStats({
+    required String customerId,
+    required String accessToken,
+  }) async {
+    final payload = await _apiClient.get(
+      '/customers/$customerId/stats',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return MemberStats.fromJson(payload as Map<String, dynamic>);
+  }
+
   Future<List<AppBanner>> getBanners({
     required String accessToken,
     required String placement,

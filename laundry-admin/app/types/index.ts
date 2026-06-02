@@ -144,6 +144,16 @@ export interface ReviewStats {
   distribution: Record<string, number>
 }
 
+export interface StaffPerformance {
+  staffId: string
+  name: string
+  role: string | null
+  totalOrders: number
+  totalRevenue: number
+  reviewCount: number
+  avgRating: number
+}
+
 export type BannerPlacement = 'HOME_POPUP' | 'HOME_CAROUSEL'
 
 export interface AppBanner {
