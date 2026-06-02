@@ -14,12 +14,6 @@ const promoItems = computed(() => [
   ...promos.value.map(p => ({ label: `${p.code} — ${p.name}`, value: p.id })),
 ])
 
-// Saat promo dipilih, otomatis isi judul (bila masih kosong) agar cepat.
-watch(() => form.promoId, (id) => {
-  if (!id) return
-  const p = promos.value.find(x => x.id === id)
-  if (p && !form.title.trim()) form.title = p.name
-})
 const showModal = ref(false)
 const editTarget = ref<AppBanner | null>(null)
 const deleteTarget = ref<AppBanner | null>(null)
@@ -45,6 +39,13 @@ const form = reactive({
   isActive: true,
   startDate: '',
   endDate: '',
+})
+
+// Saat promo dipilih, otomatis isi judul (bila masih kosong) agar cepat.
+watch(() => form.promoId, (id) => {
+  if (!id) return
+  const p = promos.value.find(x => x.id === id)
+  if (p && !form.title.trim()) form.title = p.name
 })
 
 function toInputDate(iso: string | null) {
