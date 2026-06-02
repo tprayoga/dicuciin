@@ -161,16 +161,8 @@ onMounted(load)
 
 <template>
   <div class="space-y-4">
-    <div class="dc-page-card p-4 flex items-center justify-between gap-3">
-      <div class="flex items-center gap-3">
-        <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0f6ee9] flex items-center justify-center">
-          <UIcon name="i-heroicons-photo" class="text-xl" />
-        </div>
-        <div>
-          <h2 class="text-lg font-semibold">Banner & Pop-up Ads</h2>
-          <p class="text-sm text-[#6f809f]">Pop-up saat masuk app & carousel di halaman utama pelanggan</p>
-        </div>
-      </div>
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <p class="text-sm text-[#6f809f]">Pop-up saat masuk app & carousel di halaman utama pelanggan</p>
       <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2" @click="openCreate">Tambah Banner</UButton>
     </div>
 

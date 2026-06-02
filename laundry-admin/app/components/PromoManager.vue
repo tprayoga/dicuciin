@@ -164,20 +164,10 @@ onMounted(load)
 
 <template>
   <div class="space-y-4">
-    <div class="dc-page-card p-4 flex items-center justify-between gap-3">
-      <div class="flex items-center gap-3">
-        <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0f6ee9] flex items-center justify-center">
-          <UIcon name="i-heroicons-megaphone" class="text-xl" />
-        </div>
-        <div>
-          <h2 class="text-lg font-semibold">Promo & Campaign</h2>
-          <p class="text-sm text-[#6f809f]">Spanduk (Banner) di Aplikasi Pelanggan</p>
-        </div>
-      </div>
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari promo" class="w-full max-w-xs dc-input-like" />
       <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2" @click="openCreate">Tambah Promo</UButton>
     </div>
-
-    <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari promo" class="w-full max-w-xs dc-input-like" />
 
     <div v-if="loading" class="text-sm text-[#6f809f]">Memuat data promo...</div>
 
