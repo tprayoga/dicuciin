@@ -93,5 +93,25 @@ export function useApi() {
     request<T>(path, { method: 'PUT', body: JSON.stringify(body) })
   const del = <T>(path: string) => request<T>(path, { method: 'DELETE' })
 
-  return { get, post, patch, put, del, request }
+  /** Upload satu file (multipart). Tidak set Content-Type agar boundary diatur browser. */
+  const upload = async <T>(path: string, file: File): Promise<T> => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const doFetch = () =>
+      fetch(`${config.public.apiBase}${path}`, {
+        method: 'POST',
+        headers: authStore.accessToken
+          ? { Authorization: `Bearer ${authStore.accessToken}` }
+          : {},
+        body: fd,
+      })
+    let res = await doFetch()
+    if (res.status === 401 && (await tryRefresh())) res = await doFetch()
+    const body = await res.json().catch(() => null)
+    if (!res.ok) throw new Error(body?.message || 'Upload gagal')
+    if (body && typeof body === 'object' && 'data' in body) return body.data as T
+    return body as T
+  }
+
+  return { get, post, patch, put, del, upload, request }
 }

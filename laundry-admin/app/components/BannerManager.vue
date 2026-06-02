@@ -9,10 +9,19 @@ const banners = ref<AppBanner[]>([])
 const promos = ref<Promo[]>([])
 const loading = ref(false)
 
-const promoItems = computed(() => [
-  { label: 'Tanpa promo', value: '' },
-  ...promos.value.map(p => ({ label: `${p.code} — ${p.name}`, value: p.id })),
-])
+const promoItems = computed(() =>
+  promos.value.map(p => ({ label: `${p.code} — ${p.name}`, value: p.id })),
+)
+
+// Aksi saat banner diketuk: tidak ada / buka promo / tautan eksternal.
+const actionMode = ref<'none' | 'promo' | 'link'>('none')
+const actionItems = [
+  { label: 'Tidak ada', value: 'none' },
+  { label: 'Buka promo (kode tersalin)', value: 'promo' },
+  { label: 'Tautan eksternal', value: 'link' },
+]
+
+const uploading = ref(false)
 
 const showModal = ref(false)
 const editTarget = ref<AppBanner | null>(null)
@@ -48,6 +57,29 @@ watch(() => form.promoId, (id) => {
   if (p && !form.title.trim()) form.title = p.name
 })
 
+// Saat mode aksi berganti, bersihkan field yang tak relevan agar tak ada data sisa.
+watch(actionMode, (m) => {
+  if (m !== 'promo') form.promoId = ''
+  if (m !== 'link') { form.linkUrl = ''; form.ctaLabel = '' }
+})
+
+async function onFilePick(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  uploading.value = true
+  try {
+    const res = await api.upload<{ url: string }>('/uploads/image', file)
+    form.imageUrl = res.url
+    toast.add({ title: 'Gambar terunggah', color: 'success' })
+  } catch (err: any) {
+    toast.add({ title: 'Gagal mengunggah gambar', description: err.message, color: 'error' })
+  } finally {
+    uploading.value = false
+    input.value = ''
+  }
+}
+
 function toInputDate(iso: string | null) {
   return iso ? iso.slice(0, 10) : ''
 }
@@ -77,6 +109,7 @@ async function load() {
 
 function openCreate() {
   editTarget.value = null
+  actionMode.value = 'none'
   Object.assign(form, {
     title: '',
     imageUrl: '',
@@ -94,6 +127,7 @@ function openCreate() {
 
 function openEdit(b: AppBanner) {
   editTarget.value = b
+  actionMode.value = b.promoId ? 'promo' : (b.linkUrl ? 'link' : 'none')
   Object.assign(form, {
     title: b.title,
     imageUrl: b.imageUrl,
@@ -113,9 +147,9 @@ function payload() {
   return {
     title: form.title,
     imageUrl: form.imageUrl,
-    linkUrl: form.linkUrl || undefined,
-    ctaLabel: form.ctaLabel || undefined,
-    promoId: form.promoId || undefined,
+    linkUrl: actionMode.value === 'link' ? (form.linkUrl || undefined) : undefined,
+    ctaLabel: actionMode.value === 'link' ? (form.ctaLabel || undefined) : undefined,
+    promoId: actionMode.value === 'promo' ? (form.promoId || undefined) : undefined,
     placement: form.placement,
     sortOrder: Number(form.sortOrder) || 0,
     isActive: form.isActive,
@@ -125,6 +159,14 @@ function payload() {
 }
 
 async function save() {
+  if (!form.imageUrl) {
+    toast.add({ title: 'Gambar wajib diunggah', color: 'error' })
+    return
+  }
+  if (actionMode.value === 'promo' && !form.promoId) {
+    toast.add({ title: 'Pilih promo dulu', color: 'error' })
+    return
+  }
   try {
     if (editTarget.value) {
       await api.patch(`/banners/${editTarget.value.id}`, payload())
@@ -211,13 +253,20 @@ onMounted(load)
     <UModal v-model:open="showModal" :title="editTarget ? 'Edit Banner' : 'Tambah Banner'">
       <template #body>
         <form class="space-y-4" @submit.prevent="save">
-          <UFormField label="Judul">
-            <UInput v-model="form.title" placeholder="Mis. Diskon Akhir Pekan" class="w-full" required />
+          <!-- Gambar: upload langsung -->
+          <UFormField label="Gambar Banner">
+            <div class="flex items-center gap-3">
+              <label class="dc-btn-outline px-4 py-2 rounded-lg cursor-pointer text-sm whitespace-nowrap">
+                <input type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="onFilePick">
+                {{ uploading ? 'Mengunggah...' : (form.imageUrl ? 'Ganti Gambar' : 'Pilih Gambar') }}
+              </label>
+              <span class="text-xs text-[#6f809f]">PNG/JPG/WebP, maks 5MB</span>
+            </div>
+            <div v-if="form.imageUrl" class="mt-2 h-32 rounded-lg border border-[#d7e0ee] bg-cover bg-center" :style="{ backgroundImage: `url(${form.imageUrl})` }" />
           </UFormField>
 
-          <UFormField label="URL Gambar">
-            <UInput v-model="form.imageUrl" placeholder="https://..." class="w-full" required />
-            <div v-if="form.imageUrl" class="mt-2 h-28 rounded-lg border border-[#d7e0ee] bg-cover bg-center" :style="{ backgroundImage: `url(${form.imageUrl})` }" />
+          <UFormField label="Judul">
+            <UInput v-model="form.title" placeholder="Mis. Diskon Akhir Pekan" class="w-full" required />
           </UFormField>
 
           <div class="grid md:grid-cols-2 gap-4">
@@ -229,37 +278,39 @@ onMounted(load)
             </UFormField>
           </div>
 
-          <UFormField label="Promo terkait (opsional)">
-            <USelect v-model="form.promoId" :items="promoItems" class="w-full" />
-            <p class="text-xs text-[#6f809f] mt-1">Jika dipilih, pelanggan yang mengetuk banner diarahkan ke promo & kodenya otomatis tersalin.</p>
+          <!-- Aksi saat diketuk: satu pilihan (promo / link / tidak ada) -->
+          <UFormField label="Aksi saat banner diketuk">
+            <USelect v-model="actionMode" :items="actionItems" class="w-full" />
           </UFormField>
 
-          <div class="grid md:grid-cols-2 gap-4">
-            <UFormField label="Tautan saat diketuk (opsional)">
+          <UFormField v-if="actionMode === 'promo'" label="Promo">
+            <USelect v-model="form.promoId" :items="promoItems" placeholder="Pilih promo" class="w-full" />
+            <p class="text-xs text-[#6f809f] mt-1">Pelanggan yang mengetuk banner diarahkan ke halaman promo & kodenya otomatis tersalin. Judul otomatis terisi dari promo.</p>
+          </UFormField>
+
+          <div v-else-if="actionMode === 'link'" class="grid md:grid-cols-2 gap-4">
+            <UFormField label="Tautan (URL)">
               <UInput v-model="form.linkUrl" placeholder="https://maps.app... (mis. ulasan Google)" class="w-full" />
             </UFormField>
-            <UFormField label="Label Tombol (opsional)">
+            <UFormField label="Label Tombol">
               <UInput v-model="form.ctaLabel" placeholder="Mis. Beri Ulasan" class="w-full" />
             </UFormField>
           </div>
 
-          <div class="grid md:grid-cols-2 gap-4">
-            <UFormField label="Periode Mulai (opsional)">
+          <div class="grid md:grid-cols-3 gap-4">
+            <UFormField label="Mulai (opsional)">
               <UInput v-model="form.startDate" type="date" class="w-full" />
             </UFormField>
-            <UFormField label="Periode Selesai (opsional)">
+            <UFormField label="Selesai (opsional)">
               <UInput v-model="form.endDate" type="date" class="w-full" />
+            </UFormField>
+            <UFormField label="Status">
+              <USelect v-model="form.isActive" :items="[{ label: 'Aktif', value: true }, { label: 'Nonaktif', value: false }]" class="w-full" />
             </UFormField>
           </div>
 
-          <UFormField label="Status">
-            <USelect v-model="form.isActive" :items="[{ label: 'Aktif', value: true }, { label: 'Nonaktif', value: false }]" class="w-full" />
-          </UFormField>
-
-          <p class="text-xs text-[#6f809f]">Pop-up tampil sekali per sesi saat pelanggan membuka app. Carousel tampil di atas halaman utama sesuai urutan.</p>
-
           <div class="flex justify-end pt-2">
-            <UButton type="submit" class="dc-btn-primary px-4 py-2">Simpan</UButton>
+            <UButton type="submit" :disabled="uploading" class="dc-btn-primary px-4 py-2">Simpan</UButton>
           </div>
         </form>
       </template>
