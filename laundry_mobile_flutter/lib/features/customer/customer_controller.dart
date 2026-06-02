@@ -55,32 +55,38 @@ class CustomerController extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
-    try {
-      final results = await Future.wait([
-        _customerService.getWallet(customerId: customerId, accessToken: accessToken),
-        _customerService.getOrders(customerId: customerId, accessToken: accessToken),
-        _customerService.getPromos(accessToken: accessToken),
-        _customerService.getBanners(
-            accessToken: accessToken, placement: 'HOME_CAROUSEL'),
-        _customerService.getBanners(
-            accessToken: accessToken, placement: 'HOME_POPUP'),
-        _customerService.getMemberStats(
-            customerId: customerId, accessToken: accessToken),
-      ]);
+    // Tiap bagian dimuat mandiri: kegagalan satu endpoint (mis. server belum
+    // ter-restart untuk fitur baru) tidak mengosongkan bagian lain.
+    final walletF = _guard(() => _customerService.getWallet(
+        customerId: customerId, accessToken: accessToken));
+    final ordersF = _guard(() => _customerService.getOrders(
+        customerId: customerId, accessToken: accessToken));
+    final promosF =
+        _guard(() => _customerService.getPromos(accessToken: accessToken));
+    final carouselF = _guard(() => _customerService.getBanners(
+        accessToken: accessToken, placement: 'HOME_CAROUSEL'));
+    final popupF = _guard(() => _customerService.getBanners(
+        accessToken: accessToken, placement: 'HOME_POPUP'));
+    final statsF = _guard(() => _customerService.getMemberStats(
+        customerId: customerId, accessToken: accessToken));
 
-      _wallet = results[0] as WalletData;
-      _orders = results[1] as List<OrderSummary>;
-      _promos = results[2] as List<PromoSummary>;
-      _carouselBanners = results[3] as List<AppBanner>;
-      _popupBanners = results[4] as List<AppBanner>;
-      _stats = results[5] as MemberStats;
-    } on ApiException catch (e) {
-      _errorMessage = e.message;
+    _wallet = await walletF ?? _wallet;
+    _orders = await ordersF ?? _orders;
+    _promos = await promosF ?? _promos;
+    _carouselBanners = await carouselF ?? _carouselBanners;
+    _popupBanners = await popupF ?? _popupBanners;
+    _stats = await statsF ?? _stats;
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  /// Jalankan [fn], kembalikan null bila gagal (tanpa mematikan fetch lain).
+  Future<T?> _guard<T>(Future<T> Function() fn) async {
+    try {
+      return await fn();
     } catch (_) {
-      _errorMessage = 'Gagal memuat data customer.';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      return null;
     }
   }
 
