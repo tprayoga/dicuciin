@@ -78,6 +78,22 @@ class _PromoPage extends StatelessWidget {
 String _promoPeriodLabel(PromoSummary promo) =>
     'Berlaku s.d. ${_formatDateId(promo.endDate)}';
 
+/// Gambar promo: pakai [url] (network) bila ada, fallback ke aset/placeholder.
+Widget _promoImage(String? url, {BoxFit fit = BoxFit.cover}) {
+  Widget placeholder() => Container(
+        color: AppColors.tintBlueAlt,
+        child: const Center(
+          child: Icon(Icons.image_outlined,
+              size: 48, color: AppColors.textMutedLight),
+        ),
+      );
+  if (url != null && url.trim().isNotEmpty) {
+    return Image.network(url, fit: fit, errorBuilder: (_, _, _) => placeholder());
+  }
+  return Image.asset('assets/mockups/promo_banner.png',
+      fit: fit, errorBuilder: (_, _, _) => placeholder());
+}
+
 class _PromoCard extends StatelessWidget {
   const _PromoCard({required this.promo});
 
@@ -108,20 +124,7 @@ class _PromoCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             child: AspectRatio(
               aspectRatio: 2,
-              child: Image.asset(
-                'assets/mockups/promo_banner.png',
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => Container(
-                  color: AppColors.tintBlueAlt,
-                  child: const Center(
-                    child: Icon(
-                      Icons.image_outlined,
-                      size: 48,
-                      color: AppColors.textMutedLight,
-                    ),
-                  ),
-                ),
-              ),
+              child: _promoImage(promo.bannerUrl),
             ),
           ),
           const SizedBox(height: 12),

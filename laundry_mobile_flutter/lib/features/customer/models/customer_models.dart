@@ -122,6 +122,7 @@ class PromoSummary {
     required this.endDate,
     required this.isActive,
     this.description,
+    this.bannerUrl,
   });
 
   final String id;
@@ -132,6 +133,7 @@ class PromoSummary {
   final DateTime endDate;
   final bool isActive;
   final String? description;
+  final String? bannerUrl;
 
   factory PromoSummary.fromJson(Map<String, dynamic> json) {
     return PromoSummary(
@@ -144,6 +146,7 @@ class PromoSummary {
           DateTime.fromMillisecondsSinceEpoch(0),
       isActive: (json['isActive'] as bool?) ?? false,
       description: json['description'] as String?,
+      bannerUrl: json['bannerUrl'] as String?,
     );
   }
 }

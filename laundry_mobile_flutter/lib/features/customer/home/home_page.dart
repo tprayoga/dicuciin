@@ -616,12 +616,7 @@ class _HomePageState extends State<_HomePage> {
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              Image.asset(
-                                'assets/mockups/promo_banner.png',
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) =>
-                                    Container(color: AppColors.tintBlueAlt),
-                              ),
+                              _promoImage(promo.bannerUrl),
                               DecoratedBox(
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
