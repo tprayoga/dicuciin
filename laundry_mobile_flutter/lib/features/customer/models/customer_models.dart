@@ -352,6 +352,60 @@ class PaymentProofUploadResult {
   }
 }
 
+/// Reservasi mesin dari endpoint `/bookings`.
+class MachineBooking {
+  MachineBooking({
+    required this.id,
+    required this.bookingCode,
+    required this.status,
+    this.deviceName,
+    this.deviceCode,
+  });
+
+  final String id;
+  final String bookingCode;
+  final String status;
+  final String? deviceName;
+  final String? deviceCode;
+
+  factory MachineBooking.fromJson(Map<String, dynamic> json) {
+    final device = json['device'] as Map<String, dynamic>?;
+    return MachineBooking(
+      id: (json['id'] as String?) ?? '',
+      bookingCode: (json['bookingCode'] as String?) ?? '-',
+      status: (json['status'] as String?) ?? '-',
+      deviceName: device?['name'] as String?,
+      deviceCode: device?['deviceCode'] as String?,
+    );
+  }
+}
+
+/// Hasil verifikasi scan QR mesin (`POST /bookings/verify`).
+class BookingVerifyResult {
+  BookingVerifyResult({
+    required this.verified,
+    required this.status,
+    required this.message,
+    this.booking,
+  });
+
+  final bool verified;
+  final String status;
+  final String message;
+  final MachineBooking? booking;
+
+  factory BookingVerifyResult.fromJson(Map<String, dynamic> json) {
+    return BookingVerifyResult(
+      verified: json['verified'] == true,
+      status: (json['status'] as String?) ?? '-',
+      message: (json['message'] as String?) ?? '',
+      booking: json['booking'] is Map<String, dynamic>
+          ? MachineBooking.fromJson(json['booking'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+}
+
 /// Statistik member dari `GET /customers/:id/stats`.
 class MemberStats {
   MemberStats({

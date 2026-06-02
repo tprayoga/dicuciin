@@ -118,6 +118,29 @@ class CustomerController extends ChangeNotifier {
     }
   }
 
+  /// Verifikasi pemesan via scan QR mesin. Melempar [ApiException] (mis. mesin
+  /// dibooking pelanggan lain / belum booking) agar bisa ditampilkan.
+  Future<BookingVerifyResult> verifyMachine({
+    required String accessToken,
+    required String deviceCode,
+  }) {
+    return _customerService.verifyBooking(
+      accessToken: accessToken,
+      deviceCode: deviceCode,
+    );
+  }
+
+  /// Reservasi mesin berdasarkan kode perangkat hasil scan.
+  Future<MachineBooking> reserveMachine({
+    required String accessToken,
+    required String deviceCode,
+  }) {
+    return _customerService.reserveBooking(
+      accessToken: accessToken,
+      deviceCode: deviceCode,
+    );
+  }
+
   /// Kirim ulasan untuk sebuah order. true bila berhasil; pesan error di
   /// [errorMessage] bila gagal (mis. order sudah diulas).
   Future<bool> submitReview({

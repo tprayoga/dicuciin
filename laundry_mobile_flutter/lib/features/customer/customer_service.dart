@@ -63,6 +63,32 @@ class CustomerService {
         .toList();
   }
 
+  /// Verifikasi pemesan via scan QR mesin (deviceCode).
+  Future<BookingVerifyResult> verifyBooking({
+    required String accessToken,
+    required String deviceCode,
+  }) async {
+    final payload = await _apiClient.post(
+      '/bookings/verify',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({'deviceCode': deviceCode}),
+    );
+    return BookingVerifyResult.fromJson(payload as Map<String, dynamic>);
+  }
+
+  /// Reservasi mesin berdasarkan kode perangkat (hasil scan).
+  Future<MachineBooking> reserveBooking({
+    required String accessToken,
+    required String deviceCode,
+  }) async {
+    final payload = await _apiClient.post(
+      '/bookings',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({'deviceCode': deviceCode}),
+    );
+    return MachineBooking.fromJson(payload as Map<String, dynamic>);
+  }
+
   Future<MemberStats> getMemberStats({
     required String customerId,
     required String accessToken,

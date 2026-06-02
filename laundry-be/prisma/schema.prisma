@@ -98,6 +98,14 @@ enum ReviewSource {
   KIOSK
 }
 
+enum BookingStatus {
+  RESERVED
+  IN_USE
+  DONE
+  CANCELLED
+  EXPIRED
+}
+
 // ============================================
 // MODELS
 // ============================================
@@ -147,6 +155,7 @@ model Customer {
   wallet      Wallet?
   promoUsages PromoUsage[]
   reviews     Review[]
+  bookings    MachineBooking[]
 
   @@index([memberCode])
   @@map("customers")
@@ -508,6 +517,7 @@ model IotDevice {
   kiosk    Kiosk?       @relation(fields: [kioskId], references: [id], onDelete: SetNull)
   commands IotCommand[]
   events   IotEvent[]
+  bookings MachineBooking[]
 
   @@index([deviceCode])
   @@index([outletId])
@@ -641,4 +651,30 @@ model Review {
   @@index([isFocused])
   @@index([staffUserId])
   @@map("reviews")
+}
+
+/// Reservasi mesin (cuci/kering). Mengunci mesin untuk satu customer; hanya
+/// pemesan yang bisa mengaktifkan (verifikasi scan QR mesin) → cegah dipakai
+/// orang lain. orderId opsional (bila booking ditautkan ke pembayaran).
+model MachineBooking {
+  id          String        @id @default(uuid())
+  deviceId    String
+  customerId  String
+  orderId     String?       @unique
+  bookingCode String        @unique
+  status      BookingStatus @default(RESERVED)
+  reservedAt  DateTime      @default(now())
+  expiresAt   DateTime
+  startedAt   DateTime?
+  endedAt     DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  device   IotDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  customer Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, status])
+  @@index([customerId])
+  @@index([bookingCode])
+  @@map("machine_bookings")
 }

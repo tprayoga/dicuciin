@@ -109,7 +109,26 @@ Keputusan owner: **keduanya** (field register + section persona di home).
 > (1 order, Rp57k, 1 ulasan, rating 4); `/customers/:id/stats` (7 order, Rp244k, favorit
 > "Cuci Sepatu"). BE tsc + flutter analyze clean; admin typecheck halaman baru 0 error.
 
-## 🔴 Fase 4 — Booking & verifikasi mesin (item 11)
-- BE: model `MachineBooking` (iotDeviceId, customerId, kode/QR, status RESERVED→IN_USE→DONE, expiry) + lock mesin.
-- IoT: command lock/unlock via MQTT.
-- Mobile: `scan_qr_page` jadi scanner nyata → cocokkan QR mesin dgn booking user.
+## 🔴 Fase 4 — Booking & verifikasi mesin (item 11)  ✅ SELESAI & TERVERIFIKASI (2026-06-02)
+- BE: model `MachineBooking` (deviceId, customerId, bookingCode unik, status RESERVED/IN_USE/
+  DONE/CANCELLED/EXPIRED, expiry 15 mnt, orderId?) + enum `BookingStatus` + migration
+  `add_machine_bookings`. Module `bookings`: `POST /bookings` reserve (kunci mesin, by
+  deviceId/deviceCode), **`POST /bookings/verify`** (scan QR → hanya pemesan boleh → IN_USE +
+  unlock; non-pemesan ditolak), `:id/complete` (lepas kunci), `:id/cancel`, `GET /bookings/active`.
+  Integrasi IoT `sendCommand` UNLOCK/LOCK (tercatat sbg IotCommand → MQTT).
+- Mobile: `scan_qr_page` jadi **scanner nyata** (`mobile_scanner`, izin CAMERA) → `verifyMachine`
+  ke BE; bila mesin bebas ditawarkan **booking langsung** lalu aktivasi. Model `MachineBooking`/
+  `BookingVerifyResult` + service/controller. (Mesin di location_detail tetap berbasis layanan;
+  booking via alur scan.)
+
+> Verifikasi curl (member.1 vs member.2 di WS-01): reserve→RESERVED; member.2 reserve→409;
+> member.2 verify→403 (bukan pemesan); member.1 verify→IN_USE "Mesin terbuka"; saat IN_USE
+> member.2 verify→403; complete→DONE; setelah bebas member.2 verify→400; IoT UNLOCK+LOCK tercatat.
+> BE tsc + flutter analyze clean.
+
+---
+
+## ✅ SEMUA FASE SELESAI (0–5 + 4) per 2026-06-02
+Branch `feat/fase0-wallet-order-integrasi`. Seluruh 17 item gap awal tertangani.
+Catatan sisa (non-blocking): bayar QRIS/VA masih mock (hanya saldo nyata); ketersediaan
+per-mesin di UI location_detail kosmetik (booking nyata via scan); kiosk frontend di luar repo.
