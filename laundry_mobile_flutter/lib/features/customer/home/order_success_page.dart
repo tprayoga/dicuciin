@@ -5,11 +5,15 @@ class _OrderSuccessPage extends StatelessWidget {
     required this.data,
     required this.methodLabel,
     required this.total,
+    this.orderId,
   });
 
   final _CheckoutData data;
   final String methodLabel;
   final int total;
+
+  /// ID order nyata (bila ada) → untuk form ulasan akhir pembayaran.
+  final String? orderId;
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +30,10 @@ class _OrderSuccessPage extends StatelessWidget {
                   _successSummaryCard(),
                   const SizedBox(height: 16),
                   _usageScheduleCard(),
+                  if (orderId != null) ...[
+                    const SizedBox(height: 16),
+                    _ReviewCard(orderId: orderId!),
+                  ],
                 ],
               ),
             ),
@@ -228,6 +236,168 @@ class _OrderSuccessPage extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Form ulasan/feedback di akhir pembayaran. Rating bintang + komentar opsional
+/// → POST /reviews. Setelah terkirim menampilkan state "terima kasih".
+class _ReviewCard extends StatefulWidget {
+  const _ReviewCard({required this.orderId});
+
+  final String orderId;
+
+  @override
+  State<_ReviewCard> createState() => _ReviewCardState();
+}
+
+class _ReviewCardState extends State<_ReviewCard> {
+  final _commentController = TextEditingController();
+  int _rating = 0;
+  bool _submitting = false;
+  bool _done = false;
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_rating == 0 || _submitting) return;
+    final auth = context.read<AuthController>();
+    final token = auth.accessToken;
+    final messenger = ScaffoldMessenger.of(context);
+    if (token == null) return;
+
+    setState(() => _submitting = true);
+    final controller = context.read<CustomerController>();
+    final ok = await controller.submitReview(
+      accessToken: token,
+      orderId: widget.orderId,
+      rating: _rating,
+      comment: _commentController.text,
+    );
+    if (!mounted) return;
+    setState(() {
+      _submitting = false;
+      _done = ok;
+    });
+    if (!ok) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(controller.errorMessage ?? 'Gagal mengirim ulasan.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _line),
+      ),
+      child: _done ? _thanks() : _form(),
+    );
+  }
+
+  Widget _thanks() {
+    return const Row(
+      children: [
+        Icon(Icons.favorite, color: AppColors.success),
+        SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            'Terima kasih atas ulasanmu!',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: _textDark,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _form() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Bagaimana pengalamanmu?',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: _textDark,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Beri rating & masukan untuk layanan ini.',
+          style: TextStyle(fontSize: 13, color: _textMuted, height: 1.35),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: List.generate(5, (i) {
+            final filled = i < _rating;
+            return IconButton(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              constraints: const BoxConstraints(),
+              onPressed: _submitting
+                  ? null
+                  : () => setState(() => _rating = i + 1),
+              icon: Icon(
+                filled ? Icons.star_rounded : Icons.star_outline_rounded,
+                color: filled ? const Color(0xFFFFB400) : _textMuted,
+                size: 34,
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _commentController,
+          enabled: !_submitting,
+          maxLines: 3,
+          decoration: InputDecoration(
+            hintText: 'Tulis masukanmu (opsional)',
+            filled: true,
+            fillColor: AppColors.background,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: _line),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: _line),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: _primary,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+            ),
+            onPressed: (_rating == 0 || _submitting) ? null : _submit,
+            child: _submitting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('Kirim Ulasan'),
+          ),
+        ),
+      ],
     );
   }
 }

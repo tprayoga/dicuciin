@@ -16,6 +16,7 @@ const navItems = [
   { label: 'Laporan Keuangan', icon: 'i-heroicons-chart-bar-square', to: '/reports/finance' },
   { label: 'Promo & Campaign', icon: 'i-heroicons-megaphone', to: '/promos' },
   { label: 'Banner & Pop-up Ads', icon: 'i-heroicons-photo', to: '/banners' },
+  { label: 'Ulasan & Feedback', icon: 'i-heroicons-star', to: '/reviews' },
 ]
 
 function isActive(to: string) {

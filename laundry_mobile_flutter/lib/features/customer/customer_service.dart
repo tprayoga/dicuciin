@@ -79,6 +79,24 @@ class CustomerService {
         .toList();
   }
 
+  Future<void> submitReview({
+    required String accessToken,
+    required String orderId,
+    required int rating,
+    String? comment,
+  }) async {
+    await _apiClient.post(
+      '/reviews',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({
+        'orderId': orderId,
+        'rating': rating,
+        'source': 'APP',
+        if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
+      }),
+    );
+  }
+
   Future<PromoValidation> validatePromo({
     required String accessToken,
     required String customerId,

@@ -93,6 +93,11 @@ enum BannerPlacement {
   HOME_CAROUSEL
 }
 
+enum ReviewSource {
+  APP
+  KIOSK
+}
+
 // ============================================
 // MODELS
 // ============================================
@@ -114,6 +119,7 @@ model User {
   outletUsers   OutletUser[]
   auditLogs     AuditLog[]
   refreshTokens RefreshToken[]
+  reviews       Review[]       @relation("StaffReviews")
 
   @@index([email])
   @@index([phone])
@@ -138,6 +144,7 @@ model Customer {
   orders      Order[]
   wallet      Wallet?
   promoUsages PromoUsage[]
+  reviews     Review[]
 
   @@index([memberCode])
   @@map("customers")
@@ -279,6 +286,7 @@ model Order {
   payments           Payment[]
   walletTransactions WalletTransaction[]
   promoUsages        PromoUsage[]
+  review             Review?
 
   @@index([orderNumber])
   @@index([customerId])
@@ -600,4 +608,29 @@ model AppBanner {
 
   @@index([placement, isActive])
   @@map("app_banners")
+}
+
+/// Ulasan/feedback pelanggan di akhir pembayaran (app & kiosk).
+/// staffUserId menautkan ulasan ke staff yang bertugas (diisi penuh di Fase 5).
+model Review {
+  id             String       @id @default(uuid())
+  orderId        String?      @unique
+  customerId     String?
+  staffUserId    String?
+  kioskSessionId String?
+  rating         Int
+  comment        String?
+  source         ReviewSource @default(APP)
+  isFocused      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  order    Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  staff    User?     @relation("StaffReviews", fields: [staffUserId], references: [id], onDelete: SetNull)
+
+  @@index([rating])
+  @@index([isFocused])
+  @@index([staffUserId])
+  @@map("reviews")
 }

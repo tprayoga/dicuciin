@@ -73,10 +73,23 @@ Keputusan owner: **keduanya** (field register + section persona di home).
 > BE tsc clean; mobile flutter analyze clean; admin nuxi typecheck: halaman banner 0 error
 > (error lain pre-existing). Catatan: banner uji tertinggal di DB dev (sengaja, untuk demo).
 
-## 🟠 Fase 3 — Review/Feedback (item 13, 17)
-- BE: model `Review` (orderId, customerId, staffUserId?, kioskSessionId?, rating, comment, isFocused, source APP/KIOSK) + endpoints.
-- Mobile & Kiosk: form review di akhir bayar.
-- Admin: kurasi review + toggle "fokuskan".
+## 🟠 Fase 3 — Review/Feedback (item 13, 17)  ✅ SELESAI & TERVERIFIKASI (2026-06-02)
+- BE: model `Review` (orderId @unique, customerId, staffUserId?, kioskSessionId?, rating 1-5,
+  comment, source APP/KIOSK, isFocused) + enum `ReviewSource` + migration `add_reviews`;
+  relasi balik di User(`StaffReviews`)/Customer/Order. Module `reviews`: `POST /reviews`
+  (auth, customerId dari user login, 1 ulasan/order), `GET /reviews` (admin, filter
+  rating/isFocused/source), `GET /reviews/focused` (publik), `GET /reviews/stats` (admin),
+  `GET /reviews/order/:id`, `PATCH /reviews/:id/focus` (admin, kurasi = item 17).
+- Mobile: form ulasan di akhir bayar (`_ReviewCard` di order_success_page — bintang 1-5 +
+  komentar → `POST /reviews`; state "terima kasih"); orderId diteruskan dari jalur bayar saldo.
+- Admin Nuxt: halaman **Ulasan & Feedback** (`pages/reviews`) — stats (avg/total/distribusi),
+  filter rating + "hanya difokuskan", toggle Fokuskan/Lepas + nav.
+- Catatan: `staffUserId` masih null (binding staff shift menyusul di Fase 5). source KIOSK
+  didukung endpoint tapi UI kiosk di luar repo mobile ini.
+
+> Verifikasi curl: submit review (rating 5 → order), double-review 409, customer akses admin 403,
+> stats avg 5/dist{5:1}, toggle focus true, GET focused → 1. BE tsc + flutter analyze clean;
+> admin typecheck halaman reviews/banners 0 error.
 
 ## 🟠 Fase 5 — Staff kiosk & member dashboard
 6. **Staff kiosk** (item 12): `KioskSession.staffUserId` + login/PIN staff + laporan penjualan/review per staff.

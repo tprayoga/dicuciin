@@ -125,6 +125,25 @@ export interface Promo {
   updatedAt: string
 }
 
+export interface Review {
+  id: string
+  orderId: string | null
+  rating: number
+  comment: string | null
+  source: 'APP' | 'KIOSK'
+  isFocused: boolean
+  createdAt: string
+  customer?: { user?: { name: string } | null } | null
+  staff?: { id: string; name: string } | null
+  order?: { id: string; orderNumber: string } | null
+}
+
+export interface ReviewStats {
+  average: number
+  total: number
+  distribution: Record<string, number>
+}
+
 export type BannerPlacement = 'HOME_POPUP' | 'HOME_CAROUSEL'
 
 export interface AppBanner {

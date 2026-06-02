@@ -112,6 +112,31 @@ class CustomerController extends ChangeNotifier {
     }
   }
 
+  /// Kirim ulasan untuk sebuah order. true bila berhasil; pesan error di
+  /// [errorMessage] bila gagal (mis. order sudah diulas).
+  Future<bool> submitReview({
+    required String accessToken,
+    required String orderId,
+    required int rating,
+    String? comment,
+  }) async {
+    try {
+      await _customerService.submitReview(
+        accessToken: accessToken,
+        orderId: orderId,
+        rating: rating,
+        comment: comment,
+      );
+      return true;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      return false;
+    } catch (_) {
+      _errorMessage = 'Gagal mengirim ulasan.';
+      return false;
+    }
+  }
+
   /// Validasi kode promo ke backend. Melempar [ApiException] dengan pesan
   /// alasan (mis. minimum transaksi) agar bisa ditampilkan ke user.
   Future<PromoValidation> validatePromo({
