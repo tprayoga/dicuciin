@@ -20,7 +20,11 @@ class AuthService {
       }),
     );
 
-    return LoginResult.fromJson(payload as Map<String, dynamic>);
+    // Respons /auth/login tidak menyertakan profil customer; hydrate via
+    // /auth/me agar user.customer (id, hasWalletPin, occupation, dll) terisi.
+    final loginResult = LoginResult.fromJson(payload as Map<String, dynamic>);
+    final hydratedUser = await getMe(loginResult.tokens.accessToken);
+    return LoginResult(user: hydratedUser, tokens: loginResult.tokens);
   }
 
   /// Minta OTP dikirim via WhatsApp. Mengembalikan masa berlaku (detik).
