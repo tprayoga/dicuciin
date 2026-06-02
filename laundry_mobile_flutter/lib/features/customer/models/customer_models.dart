@@ -445,6 +445,8 @@ class AppBanner {
     required this.placement,
     this.linkUrl,
     this.ctaLabel,
+    this.promoCode,
+    this.promoName,
   });
 
   final String id;
@@ -456,7 +458,14 @@ class AppBanner {
   final String? linkUrl;
   final String? ctaLabel;
 
+  /// Bila banner ditautkan ke sebuah promo, kode & nama promonya.
+  final String? promoCode;
+  final String? promoName;
+
+  bool get hasPromo => (promoCode ?? '').isNotEmpty;
+
   factory AppBanner.fromJson(Map<String, dynamic> json) {
+    final promo = json['promo'] as Map<String, dynamic>?;
     return AppBanner(
       id: json['id'] as String,
       title: (json['title'] as String?) ?? '',
@@ -464,6 +473,8 @@ class AppBanner {
       placement: (json['placement'] as String?) ?? 'HOME_CAROUSEL',
       linkUrl: json['linkUrl'] as String?,
       ctaLabel: json['ctaLabel'] as String?,
+      promoCode: promo?['code'] as String?,
+      promoName: promo?['name'] as String?,
     );
   }
 }

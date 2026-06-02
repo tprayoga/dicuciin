@@ -162,6 +162,8 @@ export interface AppBanner {
   imageUrl: string
   linkUrl: string | null
   ctaLabel: string | null
+  promoId: string | null
+  promo?: { code: string; name: string; bannerUrl: string | null } | null
   placement: BannerPlacement
   sortOrder: number
   isActive: boolean

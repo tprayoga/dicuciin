@@ -954,22 +954,25 @@ async function main() {
   console.log(`✅ Reviews ready: ${reviewIdx}`);
 
   // ── App Banners (pop-up & carousel) ─────────────────────────────────────
+  const promoByCode = new Map(promos.map((p) => [p.code, p]));
   const bannerSeeds = [
     {
-      title: 'Diskon Akhir Pekan 25%',
+      title: 'Diskon Member Baru 20%',
       imageUrl: 'https://picsum.photos/seed/promo1/900/500',
       placement: BannerPlacement.HOME_CAROUSEL,
       sortOrder: 1,
       linkUrl: null as string | null,
       ctaLabel: null as string | null,
+      promoId: promoByCode.get('WELCOME20')?.id ?? null,
     },
     {
-      title: 'Gratis Antar-Jemput Min. Rp50rb',
+      title: 'Potongan Langsung Rp10.000',
       imageUrl: 'https://picsum.photos/seed/promo2/900/500',
       placement: BannerPlacement.HOME_CAROUSEL,
       sortOrder: 2,
       linkUrl: null,
       ctaLabel: null,
+      promoId: promoByCode.get('HEMAT10K')?.id ?? null,
     },
     {
       title: 'Beri Ulasan Google, Dapat Voucher!',
@@ -978,6 +981,7 @@ async function main() {
       sortOrder: 1,
       linkUrl: 'https://maps.google.com/?cid=123456789',
       ctaLabel: 'Beri Ulasan',
+      promoId: null,
     },
   ];
   for (const banner of bannerSeeds) {

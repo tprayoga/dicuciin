@@ -28,6 +28,11 @@ export class CreateBannerDto {
   @IsOptional()
   ctaLabel?: string;
 
+  @ApiProperty({ required: false, description: 'Tautkan banner ke promo (kode otomatis dipakai)' })
+  @IsString()
+  @IsOptional()
+  promoId?: string;
+
   @ApiProperty({ enum: BannerPlacement })
   @IsEnum(BannerPlacement)
   placement: BannerPlacement;
@@ -73,6 +78,11 @@ export class UpdateBannerDto {
   @IsString()
   @IsOptional()
   ctaLabel?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  promoId?: string;
 
   @ApiProperty({ enum: BannerPlacement, required: false })
   @IsEnum(BannerPlacement)

@@ -152,6 +152,7 @@ class _BannerPopupDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasLink = (banner.linkUrl ?? '').trim().isNotEmpty;
+    final hasPromo = banner.hasPromo;
     return Dialog(
       backgroundColor: Colors.white,
       insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
@@ -207,7 +208,33 @@ class _BannerPopupDialog extends StatelessWidget {
                     color: _textDark,
                   ),
                 ),
-                if (hasLink) ...[
+                if (hasPromo) ...[
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _primary,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: () {
+                        Clipboard.setData(
+                            ClipboardData(text: banner.promoCode!));
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Kode ${banner.promoCode} disalin. Pakai di pembayaran!',
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.confirmation_number_outlined,
+                          size: 18),
+                      label: Text('Salin Kode ${banner.promoCode}'),
+                    ),
+                  ),
+                ] else if (hasLink) ...[
                   const SizedBox(height: 14),
                   SizedBox(
                     width: double.infinity,

@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { useApi } from '~/composables/useApi'
-import type { AppBanner, BannerPlacement } from '~/types'
+import type { AppBanner, BannerPlacement, PaginatedResponse, Promo } from '~/types'
 
 const api = useApi()
 const toast = useToast()
 
 const banners = ref<AppBanner[]>([])
+const promos = ref<Promo[]>([])
 const loading = ref(false)
+
+const promoItems = computed(() => [
+  { label: 'Tanpa promo', value: '' },
+  ...promos.value.map(p => ({ label: `${p.code} — ${p.name}`, value: p.id })),
+])
 const showModal = ref(false)
 const editTarget = ref<AppBanner | null>(null)
 const deleteTarget = ref<AppBanner | null>(null)
@@ -26,6 +32,7 @@ const form = reactive({
   imageUrl: '',
   linkUrl: '',
   ctaLabel: '',
+  promoId: '',
   placement: 'HOME_CAROUSEL' as BannerPlacement,
   sortOrder: 0,
   isActive: true,
@@ -47,7 +54,12 @@ function periodLabel(b: AppBanner) {
 async function load() {
   loading.value = true
   try {
-    banners.value = await api.get<AppBanner[]>('/banners')
+    const [bannerRes, promoRes] = await Promise.all([
+      api.get<AppBanner[]>('/banners'),
+      api.get<PaginatedResponse<Promo>>('/promos?page=1&limit=100'),
+    ])
+    banners.value = bannerRes
+    promos.value = promoRes.data
   } catch (e: any) {
     toast.add({ title: 'Gagal memuat banner', description: e.message, color: 'error' })
   } finally {
@@ -62,6 +74,7 @@ function openCreate() {
     imageUrl: '',
     linkUrl: '',
     ctaLabel: '',
+    promoId: '',
     placement: 'HOME_CAROUSEL',
     sortOrder: 0,
     isActive: true,
@@ -78,6 +91,7 @@ function openEdit(b: AppBanner) {
     imageUrl: b.imageUrl,
     linkUrl: b.linkUrl || '',
     ctaLabel: b.ctaLabel || '',
+    promoId: b.promoId || '',
     placement: b.placement,
     sortOrder: b.sortOrder,
     isActive: b.isActive,
@@ -93,6 +107,7 @@ function payload() {
     imageUrl: form.imageUrl,
     linkUrl: form.linkUrl || undefined,
     ctaLabel: form.ctaLabel || undefined,
+    promoId: form.promoId || undefined,
     placement: form.placement,
     sortOrder: Number(form.sortOrder) || 0,
     isActive: form.isActive,
@@ -174,7 +189,12 @@ onMounted(load)
             <span class="text-xs text-[#6f809f]">Urutan {{ banner.sortOrder }}</span>
           </div>
           <h3 class="text-lg font-semibold text-[#111d35] mt-2">{{ banner.title }}</h3>
-          <p v-if="banner.linkUrl" class="text-xs text-[#0f6ee9] mt-1 truncate">{{ banner.linkUrl }}</p>
+          <p v-if="banner.promo" class="text-xs mt-1">
+            <span class="inline-flex items-center gap-1 text-[#0f6ee9] font-semibold">
+              <UIcon name="i-heroicons-ticket" /> Promo {{ banner.promo.code }}
+            </span>
+          </p>
+          <p v-else-if="banner.linkUrl" class="text-xs text-[#0f6ee9] mt-1 truncate">{{ banner.linkUrl }}</p>
           <p class="text-sm text-[#6f809f] mt-1">{{ periodLabel(banner) }}</p>
 
           <div class="mt-4 flex items-center justify-between">
@@ -207,6 +227,11 @@ onMounted(load)
               <UInput v-model.number="form.sortOrder" type="number" min="0" class="w-full" />
             </UFormField>
           </div>
+
+          <UFormField label="Promo terkait (opsional)">
+            <USelect v-model="form.promoId" :items="promoItems" class="w-full" />
+            <p class="text-xs text-[#6f809f] mt-1">Jika dipilih, pelanggan yang mengetuk banner diarahkan ke promo & kodenya otomatis tersalin.</p>
+          </UFormField>
 
           <div class="grid md:grid-cols-2 gap-4">
             <UFormField label="Tautan saat diketuk (opsional)">

@@ -37,6 +37,27 @@ class _HomePageState extends State<_HomePage> {
     super.dispose();
   }
 
+  /// Ketuk banner: bila tertaut promo → salin kode + buka halaman Promo.
+  /// Bila punya link → buka link. Selain itu → buka halaman Promo.
+  void _onBannerTap(AppBanner banner) {
+    if (banner.hasPromo) {
+      Clipboard.setData(ClipboardData(text: banner.promoCode!));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Kode ${banner.promoCode} disalin. Pakai di pembayaran!'),
+        ),
+      );
+      widget.onOpenPromo();
+      return;
+    }
+    final link = (banner.linkUrl ?? '').trim();
+    if (link.isNotEmpty) {
+      _openBannerLink(context, link);
+    } else {
+      widget.onOpenPromo();
+    }
+  }
+
   void _showContactSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -453,14 +474,7 @@ class _HomePageState extends State<_HomePage> {
                       right: i == banners.length - 1 ? 20 : 0,
                     ),
                     child: GestureDetector(
-                      onTap: () {
-                        final link = (banner.linkUrl ?? '').trim();
-                        if (link.isEmpty) {
-                          widget.onOpenPromo();
-                        } else {
-                          _openBannerLink(context, link);
-                        }
-                      },
+                      onTap: () => _onBannerTap(banner),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(14),
                         child: SizedBox(
@@ -488,18 +502,54 @@ class _HomePageState extends State<_HomePage> {
                               ),
                               Padding(
                                 padding: const EdgeInsets.all(16),
-                                child: Align(
-                                  alignment: Alignment.bottomLeft,
-                                  child: Text(
-                                    banner.title,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      banner.title,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
-                                  ),
+                                    if (banner.hasPromo) ...[
+                                      const SizedBox(height: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                              Icons.confirmation_number_outlined,
+                                              size: 14,
+                                              color: _primary,
+                                            ),
+                                            const SizedBox(width: 5),
+                                            Text(
+                                              'Pakai kode ${banner.promoCode}',
+                                              style: const TextStyle(
+                                                color: _primary,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ),
                             ],

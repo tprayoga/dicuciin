@@ -415,8 +415,9 @@ model Promo {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  rules  PromoRule[]
-  usages PromoUsage[]
+  rules   PromoRule[]
+  usages  PromoUsage[]
+  banners AppBanner[]
 
   @@index([code])
   @@index([startDate, endDate])
@@ -616,6 +617,7 @@ model AppBanner {
   imageUrl  String
   linkUrl   String?
   ctaLabel  String?
+  promoId   String?
   placement BannerPlacement
   sortOrder Int             @default(0)
   isActive  Boolean         @default(true)
@@ -623,6 +625,8 @@ model AppBanner {
   endDate   DateTime?
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
+
+  promo Promo? @relation(fields: [promoId], references: [id], onDelete: SetNull)
 
   @@index([placement, isActive])
   @@map("app_banners")

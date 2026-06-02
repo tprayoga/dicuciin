@@ -11,6 +11,7 @@ export class BannersService {
     return this.prisma.appBanner.create({
       data: {
         ...dto,
+        promoId: dto.promoId || null,
         startDate: dto.startDate ? new Date(dto.startDate) : null,
         endDate: dto.endDate ? new Date(dto.endDate) : null,
       },
@@ -22,6 +23,7 @@ export class BannersService {
     return this.prisma.appBanner.findMany({
       where: placement ? { placement } : {},
       orderBy: [{ placement: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }],
+      include: { promo: { select: { code: true, name: true, bannerUrl: true } } },
     });
   }
 
@@ -38,6 +40,7 @@ export class BannersService {
         ],
       },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+      include: { promo: { select: { code: true, name: true, bannerUrl: true } } },
     });
   }
 
@@ -49,7 +52,9 @@ export class BannersService {
 
   async update(id: string, dto: UpdateBannerDto) {
     await this.findOne(id);
-    const data: Prisma.AppBannerUpdateInput = { ...dto };
+    const { promoId, ...rest } = dto;
+    const data: Prisma.AppBannerUncheckedUpdateInput = { ...rest };
+    if (promoId !== undefined) data.promoId = promoId || null;
     if (dto.startDate !== undefined) {
       data.startDate = dto.startDate ? new Date(dto.startDate) : null;
     }
