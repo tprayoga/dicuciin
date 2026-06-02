@@ -132,3 +132,33 @@ Keputusan owner: **keduanya** (field register + section persona di home).
 Branch `feat/fase0-wallet-order-integrasi`. Seluruh 17 item gap awal tertangani.
 Catatan sisa (non-blocking): bayar QRIS/VA masih mock (hanya saldo nyata); ketersediaan
 per-mesin di UI location_detail kosmetik (booking nyata via scan); kiosk frontend di luar repo.
+
+---
+
+## 🔧 Perbaikan & Integrasi Lanjutan (2026-06-02, setelah semua fase)
+
+- **Seed dummy lengkap** (`f84db93`): occupation 5 member, atribusi staff di 12 order +
+  3 kiosk session, 3 review (terikat staff, 2 difokuskan), 3 banner, 2 booking
+  (WS-01 dibiarkan bebas untuk uji). `cleanTransactionalData` hapus review/banner/booking.
+- **Integrasi Promo ↔ Banner** (`fbc62b7`): `AppBanner.promoId` (relasi Promo) + migration
+  `link_banner_to_promo`; `/banners*` sertakan `promo {code,name,bannerUrl}`. Admin: form banner
+  punya select "Promo terkait" + chip di kartu. Mobile: carousel tampil chip "Pakai kode X",
+  ketuk banner ber-promo → salin kode + buka tab Promo; pop-up ber-promo → tombol "Salin Kode X".
+  Loop ke checkout Fase 0 (kode dipakai di voucher).
+- **Fix data dashboard kosong setelah login** (akar masalah "promo/banner/saldo tidak muncul"):
+  - `65678e0`: `loadDashboard` resilient — tiap fetch mandiri (`_guard`), gagal satu tak
+    mengosongkan lainnya.
+  - `854d912`: `AuthService.login` hydrate via `/auth/me` (respons `/auth/login` tak punya
+    `customer` → sebelumnya `user.customer` null → loadDashboard berhenti di awal).
+  - `9d1ad01`: `CustomerController` jadi `ChangeNotifierProxyProvider<AuthController,_>` —
+    `syncFromAuth` auto-muat dashboard begitu profil customer siap (tak tergantung timing
+    initState); pop-up tampil reaktif; halaman Promo punya tombol "Muat ulang".
+- **Form admin promo/banner lebih efektif** (`9d1ad01`): promo — tipe Cashback, petunjuk nilai
+  dinamis + suffix %/Rp, nilai non-aktif untuk Gratis Ongkir, preview banner; banner — preview
+  gambar + auto-isi judul dari promo tertaut.
+
+> Catatan uji UI: perubahan provider di `main.dart` butuh **rebuild penuh** (`flutter run`
+> ulang, bukan hot reload). Pastikan BE terkini + `prisma db seed`, lalu **login ulang**.
+
+Commit lengkap di branch: `263a0e0 F0 · ebe2831 F1 · a8445ab F2 · 5378e73 F3 · 73bd942 F5 ·
+ebd1ab3 F4 · f84db93 seed · 65678e0 · fbc62b7 · 854d912 · 9d1ad01`.
