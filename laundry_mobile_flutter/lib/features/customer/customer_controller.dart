@@ -19,6 +19,9 @@ class CustomerController extends ChangeNotifier {
   WalletData? _wallet;
   List<OrderSummary> _orders = const [];
   List<PromoSummary> _promos = const [];
+  List<AppBanner> _carouselBanners = const [];
+  List<AppBanner> _popupBanners = const [];
+  bool _popupConsumed = false;
 
   bool get isLoading => _isLoading;
   bool get isSubmittingOrder => _isSubmittingOrder;
@@ -28,6 +31,14 @@ class CustomerController extends ChangeNotifier {
   WalletData? get wallet => _wallet;
   List<OrderSummary> get orders => _orders;
   List<PromoSummary> get promos => _promos;
+  List<AppBanner> get carouselBanners => _carouselBanners;
+
+  /// Banner pop-up yang belum ditampilkan di sesi ini. Setelah diambil sekali,
+  /// kosong agar pop-up tidak muncul berulang.
+  List<AppBanner> get popupBanners => _popupConsumed ? const [] : _popupBanners;
+
+  /// Tandai pop-up sudah ditampilkan (tidak muncul lagi sesi ini).
+  void markPopupShown() => _popupConsumed = true;
 
   Future<void> loadDashboard({required AppUser user, required String accessToken}) async {
     final customerId = user.customer?.id;
@@ -46,11 +57,17 @@ class CustomerController extends ChangeNotifier {
         _customerService.getWallet(customerId: customerId, accessToken: accessToken),
         _customerService.getOrders(customerId: customerId, accessToken: accessToken),
         _customerService.getPromos(accessToken: accessToken),
+        _customerService.getBanners(
+            accessToken: accessToken, placement: 'HOME_CAROUSEL'),
+        _customerService.getBanners(
+            accessToken: accessToken, placement: 'HOME_POPUP'),
       ]);
 
       _wallet = results[0] as WalletData;
       _orders = results[1] as List<OrderSummary>;
       _promos = results[2] as List<PromoSummary>;
+      _carouselBanners = results[3] as List<AppBanner>;
+      _popupBanners = results[4] as List<AppBanner>;
     } on ApiException catch (e) {
       _errorMessage = e.message;
     } catch (_) {
@@ -141,6 +158,9 @@ class CustomerController extends ChangeNotifier {
     _wallet = null;
     _orders = const [];
     _promos = const [];
+    _carouselBanners = const [];
+    _popupBanners = const [];
+    _popupConsumed = false;
     notifyListeners();
   }
 

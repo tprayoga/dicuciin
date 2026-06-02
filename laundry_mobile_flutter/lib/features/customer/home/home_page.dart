@@ -90,7 +90,9 @@ class _HomePageState extends State<_HomePage> {
     final user = context.watch<AuthController>().user;
     final firstName = (user?.name ?? 'Pengguna').split(' ').first;
     final occupation = user?.customer?.occupation;
-    final promos = context.watch<CustomerController>().promos;
+    final customer = context.watch<CustomerController>();
+    final promos = customer.promos;
+    final banners = customer.carouselBanners;
 
     return SingleChildScrollView(
       // Clamping → tidak ada efek bounce; terasa "fixed" saat konten muat,
@@ -424,8 +426,113 @@ class _HomePageState extends State<_HomePage> {
 
           const SizedBox(height: 24),
 
-          // ── Promo carousel (dari API) ────────────────────────────
-          if (promos.isNotEmpty) ...[
+          // ── Carousel banner admin (HOME_CAROUSEL) ────────────────
+          if (banners.isNotEmpty) ...[
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Text(
+                'Promosi',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: _textDark,
+                ),
+              ),
+            ),
+            SizedBox(
+              height: 175,
+              child: PageView.builder(
+                controller: _promoCtrl,
+                itemCount: banners.length,
+                padEnds: true,
+                itemBuilder: (_, i) {
+                  final banner = banners[i];
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      left: i == 0 ? 20 : 8,
+                      right: i == banners.length - 1 ? 20 : 0,
+                    ),
+                    child: GestureDetector(
+                      onTap: () {
+                        final link = (banner.linkUrl ?? '').trim();
+                        if (link.isEmpty) {
+                          widget.onOpenPromo();
+                        } else {
+                          _openBannerLink(context, link);
+                        }
+                      },
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: SizedBox(
+                          width: screenWidth * 0.88,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.network(
+                                banner.imageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) =>
+                                    Container(color: AppColors.tintBlueAlt),
+                              ),
+                              DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.bottomLeft,
+                                    end: Alignment.topRight,
+                                    colors: [
+                                      Colors.black.withValues(alpha: 0.55),
+                                      Colors.transparent,
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Align(
+                                  alignment: Alignment.bottomLeft,
+                                  child: Text(
+                                    banner.title,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(banners.length, (i) {
+                final isActive = i == _currentPromo;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOut,
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: isActive ? 22 : 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: isActive ? _primary : AppColors.borderLight,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 24),
+          ]
+          // ── Promo carousel (dari API, fallback bila tak ada banner) ─
+          else if (promos.isNotEmpty) ...[
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: Text(

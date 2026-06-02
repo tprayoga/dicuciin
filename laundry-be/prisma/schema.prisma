@@ -88,6 +88,11 @@ enum OtpPurpose {
   RESET_PASSWORD
 }
 
+enum BannerPlacement {
+  HOME_POPUP
+  HOME_CAROUSEL
+}
+
 // ============================================
 // MODELS
 // ============================================
@@ -576,4 +581,23 @@ model OtpCode {
   @@index([phone, purpose])
   @@index([expiresAt])
   @@map("otp_codes")
+}
+
+/// Konten promosi terkelola admin: pop-up saat masuk app & carousel home.
+model AppBanner {
+  id        String          @id @default(uuid())
+  title     String
+  imageUrl  String
+  linkUrl   String?
+  ctaLabel  String?
+  placement BannerPlacement
+  sortOrder Int             @default(0)
+  isActive  Boolean         @default(true)
+  startDate DateTime?
+  endDate   DateTime?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([placement, isActive])
+  @@map("app_banners")
 }

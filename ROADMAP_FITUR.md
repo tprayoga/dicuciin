@@ -52,9 +52,26 @@ Keputusan owner: **keduanya** (field register + section persona di home).
   4 kategori, highlight sesuai `customer.occupation`, ketuk → tab Lokasi).
 - Catatan: occupation OPSIONAL (tidak memblok registrasi); label home & nilai BE harus sama persis.
 
-## 🟡 Fase 2 — Konten dikelola admin
-4. **Pop-up ads & carousel** (item 6, 16): model `AppBanner` (placement HOME_POPUP/HOME_CAROUSEL, urutan, aktif, periode, link) + admin CRUD + interstitial & carousel mobile.
-5. **Promo review Google** (item 4): reuse pop-up → ajakan review Google + opsi reward voucher.
+## 🟡 Fase 2 — Konten dikelola admin  ✅ SELESAI & TERVERIFIKASI (2026-06-02)
+4. **Pop-up ads & carousel** (item 6, 16) ✅
+   - BE: model `AppBanner` (enum `BannerPlacement` HOME_POPUP/HOME_CAROUSEL, imageUrl, linkUrl,
+     ctaLabel, sortOrder, isActive, startDate/endDate) + migration `add_app_banner`; module
+     `banners` — `GET /banners/active?placement=` (publik, filter aktif+periode), CRUD admin
+     (Roles SUPER_ADMIN/OWNER).
+   - Admin Nuxt: halaman **Banner & Pop-up Ads** (`app/pages/banners/index.vue`) + nav; tipe
+     `AppBanner`/`BannerPlacement`; class `.dc-pill`.
+   - Mobile: `CustomerService.getBanners`; `CustomerController` muat carousel+popup di
+     `loadDashboard`; **pop-up sekali/sesi** saat masuk (`_BannerPopupDialog`, `markPopupShown`);
+     **carousel home** dari HOME_CAROUSEL (fallback ke promo bila kosong); `url_launcher` untuk
+     buka link/CTA.
+5. **Promo review Google** (item 4) ✅: direalisasikan via **HOME_POPUP berlink** — admin buat
+   pop-up dengan `linkUrl` ke ulasan Google + `ctaLabel` (mis. "Beri Ulasan"); tombol CTA di
+   pop-up membuka link. Tidak butuh mekanisme terpisah.
+
+> Verifikasi curl (owner+member.1): create carousel/popup/inactive; `active?placement=HOME_CAROUSEL`
+> →1 (inactive tersaring), `HOME_POPUP`→popup Google review (link+cta); customer create banner 403.
+> BE tsc clean; mobile flutter analyze clean; admin nuxi typecheck: halaman banner 0 error
+> (error lain pre-existing). Catatan: banner uji tertinggal di DB dev (sengaja, untuk demo).
 
 ## 🟠 Fase 3 — Review/Feedback (item 13, 17)
 - BE: model `Review` (orderId, customerId, staffUserId?, kioskSessionId?, rating, comment, isFocused, source APP/KIOSK) + endpoints.

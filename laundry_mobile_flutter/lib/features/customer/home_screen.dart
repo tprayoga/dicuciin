@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/network/api_exception.dart';
 import '../../core/theme/app_colors.dart';
@@ -52,17 +53,30 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Muat data dashboard (saldo, order, promo) sekali saat home dibuka.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Muat data dashboard (saldo, order, promo, banner) sekali saat home dibuka,
+    // lalu tampilkan pop-up promosi (HOME_POPUP) bila ada.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final auth = context.read<AuthController>();
       final user = auth.user;
       final token = auth.accessToken;
-      if (user != null && token != null) {
-        context
-            .read<CustomerController>()
-            .loadDashboard(user: user, accessToken: token);
-      }
+      if (user == null || token == null) return;
+      final controller = context.read<CustomerController>();
+      await controller.loadDashboard(user: user, accessToken: token);
+      if (!mounted) return;
+      _maybeShowPopup(controller);
     });
+  }
+
+  void _maybeShowPopup(CustomerController controller) {
+    final popups = controller.popupBanners;
+    if (popups.isEmpty) return;
+    controller.markPopupShown();
+    final banner = popups.first;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => _BannerPopupDialog(banner: banner),
+    );
   }
 
   @override
@@ -110,5 +124,111 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const _ScanQrPage()));
+  }
+}
+
+/// Buka [url] di browser/app eksternal. Diam bila kosong/gagal (UI tetap aman).
+Future<void> _openBannerLink(BuildContext context, String? url) async {
+  if (url == null || url.trim().isEmpty) return;
+  final uri = Uri.tryParse(url.trim());
+  if (uri == null) return;
+  final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+  if (!ok && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Tidak bisa membuka tautan.')),
+    );
+  }
+}
+
+/// Pop-up promosi/iklan (HOME_POPUP) yang muncul sekali per sesi saat masuk app.
+/// Mendukung CTA berlink (mis. ajakan ulasan Google).
+class _BannerPopupDialog extends StatelessWidget {
+  const _BannerPopupDialog({required this.banner});
+
+  final AppBanner banner;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasLink = (banner.linkUrl ?? '').trim().isNotEmpty;
+    return Dialog(
+      backgroundColor: Colors.white,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            children: [
+              AspectRatio(
+                aspectRatio: 1,
+                child: Image.network(
+                  banner.imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => Container(
+                    color: AppColors.tintBlueAlt,
+                    child: const Center(
+                      child: Icon(Icons.image_outlined,
+                          size: 48, color: AppColors.textMutedLight),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Material(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () => Navigator.of(context).pop(),
+                    child: const Padding(
+                      padding: EdgeInsets.all(6),
+                      child: Icon(Icons.close, color: Colors.white, size: 20),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+            child: Column(
+              children: [
+                Text(
+                  banner.title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: _textDark,
+                  ),
+                ),
+                if (hasLink) ...[
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _primary,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _openBannerLink(context, banner.linkUrl);
+                      },
+                      child: Text(banner.ctaLabel?.trim().isNotEmpty == true
+                          ? banner.ctaLabel!
+                          : 'Lihat'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

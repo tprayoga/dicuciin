@@ -125,6 +125,23 @@ export interface Promo {
   updatedAt: string
 }
 
+export type BannerPlacement = 'HOME_POPUP' | 'HOME_CAROUSEL'
+
+export interface AppBanner {
+  id: string
+  title: string
+  imageUrl: string
+  linkUrl: string | null
+  ctaLabel: string | null
+  placement: BannerPlacement
+  sortOrder: number
+  isActive: boolean
+  startDate: string | null
+  endDate: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Kiosk {
   id: string
   outletId: string

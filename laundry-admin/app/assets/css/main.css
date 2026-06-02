@@ -59,6 +59,13 @@ body {
   font-weight: 600;
 }
 
+.dc-pill {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .dc-input-like {
   background: #fff;
   border: 1px solid #b7c7e2;

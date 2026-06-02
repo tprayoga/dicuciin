@@ -63,6 +63,22 @@ class CustomerService {
         .toList();
   }
 
+  Future<List<AppBanner>> getBanners({
+    required String accessToken,
+    required String placement,
+  }) async {
+    final payload = await _apiClient.get(
+      '/banners/active',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      queryParameters: {'placement': placement},
+    );
+    final list = payload as List<dynamic>? ?? const [];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(AppBanner.fromJson)
+        .toList();
+  }
+
   Future<PromoValidation> validatePromo({
     required String accessToken,
     required String customerId,

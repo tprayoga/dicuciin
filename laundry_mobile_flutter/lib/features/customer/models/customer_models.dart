@@ -352,6 +352,38 @@ class PaymentProofUploadResult {
   }
 }
 
+/// Banner/pop-up terkelola admin dari `GET /banners/active`.
+class AppBanner {
+  AppBanner({
+    required this.id,
+    required this.title,
+    required this.imageUrl,
+    required this.placement,
+    this.linkUrl,
+    this.ctaLabel,
+  });
+
+  final String id;
+  final String title;
+  final String imageUrl;
+
+  /// 'HOME_POPUP' atau 'HOME_CAROUSEL'.
+  final String placement;
+  final String? linkUrl;
+  final String? ctaLabel;
+
+  factory AppBanner.fromJson(Map<String, dynamic> json) {
+    return AppBanner(
+      id: json['id'] as String,
+      title: (json['title'] as String?) ?? '',
+      imageUrl: (json['imageUrl'] as String?) ?? '',
+      placement: (json['placement'] as String?) ?? 'HOME_CAROUSEL',
+      linkUrl: json['linkUrl'] as String?,
+      ctaLabel: json['ctaLabel'] as String?,
+    );
+  }
+}
+
 /// Hasil validasi kode promo dari `POST /promos/validate`.
 class PromoValidation {
   PromoValidation({required this.discount, required this.isValid});
