@@ -59,6 +59,11 @@ export class UploadsController {
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
 
+    // Hanya boleh upload foto milik sendiri.
+    if (req.user?.userId !== userId) {
+      throw new BadRequestException('Tidak boleh mengubah foto profil user lain');
+    }
+
     this.uploadsService.validateImageFile(file);
 
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -66,8 +71,41 @@ export class UploadsController {
 
     const url = this.uploadsService.getProfilePhotoUrl(file.filename);
 
+    // Simpan URL ke profil user agar bisa ditampilkan kembali.
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: url },
+    });
+
     return {
       message: 'Profile photo uploaded successfully',
+      filename: file.filename,
+      url,
+      size: file.size,
+      mimetype: file.mimetype,
+    };
+  }
+
+  @Post('image')
+  @ApiOperation({ summary: 'Upload gambar umum (banner/pop-up) — kembalikan URL' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('file', { storage: fileStorageFactory('uploads/images') }),
+  )
+  async uploadImage(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('No file uploaded');
+    this.uploadsService.validateImageFile(file);
+    const url = this.uploadsService.getImageUrl(file.filename);
+    return {
+      message: 'Image uploaded successfully',
       filename: file.filename,
       url,
       size: file.size,

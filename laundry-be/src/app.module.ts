@@ -14,6 +14,9 @@ import { ServicesModule } from './modules/services/services.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { WalletsModule } from './modules/wallets/wallets.module';
 import { PromosModule } from './modules/promos/promos.module';
+import { BannersModule } from './modules/banners/banners.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
+import { BookingsModule } from './modules/bookings/bookings.module';
 import { KiosksModule } from './modules/kiosks/kiosks.module';
 import { IotModule } from './modules/iot/iot.module';
 import { HealthModule } from './modules/health/health.module';
@@ -42,6 +45,9 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     OrdersModule,
     WalletsModule,
     PromosModule,
+    BannersModule,
+    ReviewsModule,
+    BookingsModule,
     KiosksModule,
     IotModule,
     HealthModule,

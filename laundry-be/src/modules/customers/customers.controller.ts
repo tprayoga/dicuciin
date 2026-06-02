@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CustomersService } from './customers.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -26,8 +27,8 @@ export class CustomersController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async findAll(
-    @Query('page', new ParseIntPipe({ optional: true })) page?: number,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
+    @Query('page', new ParseOptionalIntPipe(1)) page?: number,
+    @Query('limit', new ParseOptionalIntPipe(10)) limit?: number,
   ) {
     return this.customersService.findAll(page, limit);
   }
@@ -44,8 +45,8 @@ export class CustomersController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getOrders(
     @Param('id') id: string,
-    @Query('page', new ParseIntPipe({ optional: true })) page?: number,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
+    @Query('page', new ParseOptionalIntPipe(1)) page?: number,
+    @Query('limit', new ParseOptionalIntPipe(10)) limit?: number,
   ) {
     return this.customersService.getOrders(id, page, limit);
   }
@@ -54,5 +55,11 @@ export class CustomersController {
   @ApiOperation({ summary: 'Get customer wallet' })
   async getWallet(@Param('id') id: string) {
     return this.customersService.getWallet(id);
+  }
+
+  @Get(':id/stats')
+  @ApiOperation({ summary: 'Statistik member (total order, belanja, dll)' })
+  async getStats(@Param('id') id: string) {
+    return this.customersService.getStats(id);
   }
 }

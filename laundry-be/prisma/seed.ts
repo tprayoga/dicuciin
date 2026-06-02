@@ -1,10 +1,13 @@
 import {
+  BannerPlacement,
+  BookingStatus,
   DeviceType,
   OrderStatus,
   PaymentMethod,
   PaymentStatus,
   PrismaClient,
   PromoType,
+  ReviewSource,
   UserRole,
   WalletTransactionType,
 } from '@prisma/client';
@@ -25,6 +28,9 @@ function addHours(base: Date, hours: number): Date {
 }
 
 async function cleanTransactionalData() {
+  await prisma.review.deleteMany();
+  await prisma.machineBooking.deleteMany();
+  await prisma.appBanner.deleteMany();
   await prisma.auditLog.deleteMany();
   await prisma.iotEvent.deleteMany();
   await prisma.iotCommand.deleteMany();
@@ -371,11 +377,11 @@ async function main() {
   console.log('✅ Service prices ready');
 
   const customerSeeds = [
-    { email: 'member.1@dicuciin.id', memberCode: 'MBR001', gender: 'L', balance: 350000 },
-    { email: 'member.2@dicuciin.id', memberCode: 'MBR002', gender: 'P', balance: 175000 },
-    { email: 'member.3@dicuciin.id', memberCode: 'MBR003', gender: 'L', balance: 225000 },
-    { email: 'member.4@dicuciin.id', memberCode: 'MBR004', gender: 'P', balance: 90000 },
-    { email: 'member.5@dicuciin.id', memberCode: 'MBR005', gender: 'P', balance: 420000 },
+    { email: 'member.1@dicuciin.id', memberCode: 'MBR001', gender: 'L', balance: 350000, occupation: 'Pekerja' },
+    { email: 'member.2@dicuciin.id', memberCode: 'MBR002', gender: 'P', balance: 175000, occupation: 'Anak Kos' },
+    { email: 'member.3@dicuciin.id', memberCode: 'MBR003', gender: 'L', balance: 225000, occupation: 'Anak Kos' },
+    { email: 'member.4@dicuciin.id', memberCode: 'MBR004', gender: 'P', balance: 90000, occupation: 'Ibu Rumah Tangga' },
+    { email: 'member.5@dicuciin.id', memberCode: 'MBR005', gender: 'P', balance: 420000, occupation: 'Laundry Kiloan' },
   ];
 
   for (let i = 0; i < customerSeeds.length; i += 1) {
@@ -388,12 +394,14 @@ async function main() {
       update: {
         userId: user.id,
         gender: seed.gender,
+        occupation: seed.occupation,
         birthDate: new Date(`${birthYear}-05-10T00:00:00.000Z`),
       },
       create: {
         userId: user.id,
         memberCode: seed.memberCode,
         gender: seed.gender,
+        occupation: seed.occupation,
         birthDate: new Date(`${birthYear}-05-10T00:00:00.000Z`),
       },
     });
@@ -518,7 +526,7 @@ async function main() {
         code: promo.code,
         name: promo.name,
         description: promo.description,
-        bannerUrl: `/uploads/promo-${promo.code.toLowerCase()}.jpg`,
+        bannerUrl: `https://picsum.photos/seed/${promo.code}/900/500`,
         promoType: promo.promoType,
         value: promo.value,
         quota: promo.quota,
@@ -576,12 +584,19 @@ async function main() {
   const kioskByCode = new Map(kiosks.map((k) => [k.kioskCode, k]));
   console.log(`✅ Kiosks ready: ${kiosks.length}`);
 
-  for (const customer of customers.slice(0, 3)) {
-    const kiosk = kiosks[Math.floor(Math.random() * kiosks.length)];
+  const sessionStaff = [
+    userByEmail.get('operator.1@dicuciin.id'),
+    userByEmail.get('operator.2@dicuciin.id'),
+    userByEmail.get('cashier.1@dicuciin.id'),
+  ];
+  for (let i = 0; i < Math.min(3, customers.length); i += 1) {
+    const customer = customers[i];
+    const kiosk = kiosks[i % kiosks.length];
     await prisma.kioskSession.create({
       data: {
         kioskId: kiosk.id,
         customerId: customer.id,
+        staffUserId: sessionStaff[i]?.id,
         startedAt: addHours(new Date(), -2),
         endedAt: addHours(new Date(), -1),
       },
@@ -716,7 +731,20 @@ async function main() {
     { number: 'ORD-20260526-0012', memberCode: 'MBR002', outletCode: 'OUT-002', status: OrderStatus.WAITING_PAYMENT, serviceName: 'Cuci Sepatu', qty: 2, payment: PaymentMethod.PAYMENT_GATEWAY, withPromo: false },
   ];
 
-  const orderResults: { id: string; number: string; status: OrderStatus; customerId?: string | null }[] = [];
+  // Staff yang "membuat" order per outlet (untuk laporan kinerja staff).
+  const staffByOutlet: Record<string, string | undefined> = {
+    'OUT-001': userByEmail.get('operator.1@dicuciin.id')?.id,
+    'OUT-002': userByEmail.get('operator.2@dicuciin.id')?.id,
+    'OUT-003': userByEmail.get('cashier.1@dicuciin.id')?.id,
+  };
+
+  const orderResults: {
+    id: string;
+    number: string;
+    status: OrderStatus;
+    customerId?: string | null;
+    staffUserId?: string | null;
+  }[] = [];
 
   for (let i = 0; i < orderTemplates.length; i += 1) {
     const template = orderTemplates[i];
@@ -749,7 +777,8 @@ async function main() {
         customerAddressId: addressMap.get(customer.memberCode)?.id,
         outletId: outlet.id,
         kioskId: kiosk.id,
-        sourcePlatform: 'WEB_ADMIN',
+        staffUserId: staffByOutlet[template.outletCode],
+        sourcePlatform: 'KIOSK',
         orderDate,
         status,
         subtotal,
@@ -891,9 +920,112 @@ async function main() {
       number: order.orderNumber,
       status: order.status,
       customerId: order.customerId,
+      staffUserId: order.staffUserId,
     });
   }
   console.log(`✅ Orders ready: ${orderResults.length}`);
+
+  // ── Reviews / Feedback (terikat order selesai + staff) ──────────────────
+  const reviewComments = [
+    'Mesinnya bersih dan cepat, hasil cucian wangi!',
+    'Pelayanan staff ramah, hasil rapi. Recommended.',
+    'Cukup baik, antrian tidak lama. Akan kembali lagi.',
+    'Aplikasinya memudahkan, tinggal scan langsung jalan.',
+  ];
+  const completedOrders = orderResults.filter(
+    (o) => o.status === OrderStatus.COMPLETED,
+  );
+  let reviewIdx = 0;
+  for (const o of completedOrders) {
+    await prisma.review.create({
+      data: {
+        orderId: o.id,
+        customerId: o.customerId ?? undefined,
+        staffUserId: o.staffUserId ?? undefined,
+        rating: 5 - (reviewIdx % 3),
+        comment: reviewComments[reviewIdx % reviewComments.length],
+        source: reviewIdx % 2 === 0 ? ReviewSource.APP : ReviewSource.KIOSK,
+        isFocused: reviewIdx < 2,
+        createdAt: addHours(new Date(), -20 + reviewIdx * 4),
+      },
+    });
+    reviewIdx += 1;
+  }
+  console.log(`✅ Reviews ready: ${reviewIdx}`);
+
+  // ── App Banners (pop-up & carousel) ─────────────────────────────────────
+  const promoByCode = new Map(promos.map((p) => [p.code, p]));
+  const welcomePromo = promoByCode.get('WELCOME20');
+  const hematPromo = promoByCode.get('HEMAT10K');
+  const bannerSeeds = [
+    {
+      title: 'Diskon Member Baru 20%',
+      // Banner promo memakai gambar yang sama dengan promonya.
+      imageUrl: welcomePromo?.bannerUrl ?? 'https://picsum.photos/seed/promo1/900/500',
+      placement: BannerPlacement.HOME_CAROUSEL,
+      sortOrder: 1,
+      linkUrl: null as string | null,
+      ctaLabel: null as string | null,
+      promoId: welcomePromo?.id ?? null,
+    },
+    {
+      title: 'Potongan Langsung Rp10.000',
+      imageUrl: hematPromo?.bannerUrl ?? 'https://picsum.photos/seed/promo2/900/500',
+      placement: BannerPlacement.HOME_CAROUSEL,
+      sortOrder: 2,
+      linkUrl: null,
+      ctaLabel: null,
+      promoId: hematPromo?.id ?? null,
+    },
+    {
+      title: 'Beri Ulasan Google, Dapat Voucher!',
+      imageUrl: 'https://picsum.photos/seed/review/800/800',
+      placement: BannerPlacement.HOME_POPUP,
+      sortOrder: 1,
+      linkUrl: 'https://maps.google.com/?cid=123456789',
+      ctaLabel: 'Beri Ulasan',
+      promoId: null,
+    },
+  ];
+  for (const banner of bannerSeeds) {
+    await prisma.appBanner.create({ data: banner });
+  }
+  console.log(`✅ Banners ready: ${bannerSeeds.length}`);
+
+  // ── Machine Bookings (riwayat; WS-01 sengaja dibiarkan bebas untuk uji) ──
+  const now = new Date();
+  const dr01 = devices.find((d) => d.deviceCode === 'DR-01');
+  const ws02 = devices.find((d) => d.deviceCode === 'WS-02');
+  let bookingCount = 0;
+  if (dr01 && customers[0]) {
+    await prisma.machineBooking.create({
+      data: {
+        deviceId: dr01.id,
+        customerId: customers[0].id,
+        bookingCode: 'BK-SEED001',
+        status: BookingStatus.DONE,
+        reservedAt: addHours(now, -3),
+        expiresAt: addHours(now, -2.75),
+        startedAt: addHours(now, -2.9),
+        endedAt: addHours(now, -2.4),
+      },
+    });
+    bookingCount += 1;
+  }
+  if (ws02 && customers[1]) {
+    await prisma.machineBooking.create({
+      data: {
+        deviceId: ws02.id,
+        customerId: customers[1].id,
+        bookingCode: 'BK-SEED002',
+        status: BookingStatus.CANCELLED,
+        reservedAt: addHours(now, -5),
+        expiresAt: addHours(now, -4.75),
+      },
+    });
+    bookingCount += 1;
+  }
+  console.log(`✅ Machine bookings ready: ${bookingCount}`);
 
   const adminUser = userByEmail.get('admin@laundry.local');
   if (adminUser) {
@@ -944,6 +1076,9 @@ async function main() {
     orderItems: await prisma.orderItem.count(),
     orderStatusLogs: await prisma.orderStatusLog.count(),
     payments: await prisma.payment.count(),
+    reviews: await prisma.review.count(),
+    banners: await prisma.appBanner.count(),
+    machineBookings: await prisma.machineBooking.count(),
     auditLogs: await prisma.auditLog.count(),
   };
 

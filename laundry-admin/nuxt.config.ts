@@ -1,5 +1,9 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
+  // Admin adalah SPA dengan auth client-side (token di localStorage). SSR tidak
+  // memberi manfaat dan memicu hydration mismatch (server selalu render /login
+  // karena tak punya state auth, client render halaman asli). Matikan SSR.
+  ssr: false,
   devtools: { enabled: true },
   sourcemap: {
     client: false,

@@ -1,7 +1,19 @@
-import { Controller, Get, Post, Param, Body, Query, UseGuards, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  Body,
+  Query,
+  Request,
+  UseGuards,
+  ParseIntPipe,
+} from '@nestjs/common';
+import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { WalletsService } from './wallets.service';
 import { TopupWalletDto, PayWithWalletDto, RefundWalletDto } from './dto/wallet.dto';
+import { WalletPinDto } from './dto/wallet-pin.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('Wallets')
@@ -23,8 +35,8 @@ export class WalletsController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getTransactions(
     @Param('customerId') customerId: string,
-    @Query('page', new ParseIntPipe({ optional: true })) page?: number,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
+    @Query('page', new ParseOptionalIntPipe(1)) page?: number,
+    @Query('limit', new ParseOptionalIntPipe(10)) limit?: number,
   ) {
     return this.walletsService.getTransactions(customerId, page, limit);
   }
@@ -45,5 +57,25 @@ export class WalletsController {
   @ApiOperation({ summary: 'Refund to wallet' })
   async refund(@Param('customerId') customerId: string, @Body() refundWalletDto: RefundWalletDto) {
     return this.walletsService.refund(customerId, refundWalletDto);
+  }
+
+  @Post('customer/:customerId/pin/set')
+  @ApiOperation({ summary: 'Set / ganti PIN wallet' })
+  async setPin(
+    @Param('customerId') customerId: string,
+    @Request() req: any,
+    @Body() dto: WalletPinDto,
+  ) {
+    return this.walletsService.setPin(customerId, req.user.userId, dto.pin);
+  }
+
+  @Post('customer/:customerId/pin/verify')
+  @ApiOperation({ summary: 'Verifikasi PIN wallet' })
+  async verifyPin(
+    @Param('customerId') customerId: string,
+    @Request() req: any,
+    @Body() dto: WalletPinDto,
+  ) {
+    return this.walletsService.verifyPin(customerId, req.user.userId, dto.pin);
   }
 }

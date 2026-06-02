@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { IsString, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
@@ -14,6 +15,11 @@ class StartSessionDto {
   @IsString()
   @IsOptional()
   customerId?: string;
+
+  @ApiProperty({ required: false, description: 'Staff yang bertugas di kiosk' })
+  @IsString()
+  @IsOptional()
+  staffUserId?: string;
 }
 
 @ApiTags('Kiosks')
@@ -36,8 +42,8 @@ export class KiosksController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'outletId', required: false, type: String })
   async findAll(
-    @Query('page', new ParseIntPipe({ optional: true })) page?: number,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
+    @Query('page', new ParseOptionalIntPipe(1)) page?: number,
+    @Query('limit', new ParseOptionalIntPipe(10)) limit?: number,
     @Query('outletId') outletId?: string,
   ) {
     return this.kiosksService.findAll(page, limit, outletId);
@@ -66,7 +72,11 @@ export class KiosksController {
   @Post(':id/session/start')
   @ApiOperation({ summary: 'Start kiosk session' })
   async startSession(@Param('id') id: string, @Body() startSessionDto: StartSessionDto) {
-    return this.kiosksService.startSession(id, startSessionDto.customerId);
+    return this.kiosksService.startSession(
+      id,
+      startSessionDto.customerId,
+      startSessionDto.staffUserId,
+    );
   }
 
   @Post('session/:sessionId/end')

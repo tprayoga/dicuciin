@@ -7,7 +7,25 @@ const toast = useToast()
 
 const promos = ref<Promo[]>([])
 const loading = ref(false)
+const uploading = ref(false)
 const search = ref('')
+
+async function onFilePick(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  uploading.value = true
+  try {
+    const res = await api.upload<{ url: string }>('/uploads/image', file)
+    form.bannerUrl = res.url
+    toast.add({ title: 'Gambar terunggah', color: 'success' })
+  } catch (err: any) {
+    toast.add({ title: 'Gagal mengunggah gambar', description: err.message, color: 'error' })
+  } finally {
+    uploading.value = false
+    input.value = ''
+  }
+}
 const showModal = ref(false)
 const editTarget = ref<Promo | null>(null)
 const deleteTarget = ref<Promo | null>(null)
@@ -16,8 +34,22 @@ const showDeleteModal = ref(false)
 const promoTypeItems = [
   { label: 'Persentase (%)', value: 'PERCENTAGE' },
   { label: 'Nominal (Rp)', value: 'FIXED_AMOUNT' },
+  { label: 'Cashback Wallet (%)', value: 'CASHBACK' },
   { label: 'Gratis Ongkir', value: 'FREE_DELIVERY' },
 ]
+
+const valueHint = computed(() => {
+  switch (form.promoType) {
+    case 'PERCENTAGE': return 'Dalam persen. Contoh: 20 = diskon 20%.'
+    case 'FIXED_AMOUNT': return 'Dalam Rupiah. Contoh: 10000 = potongan Rp 10.000.'
+    case 'CASHBACK': return 'Persen cashback ke wallet. Contoh: 5 = cashback 5%.'
+    case 'FREE_DELIVERY': return 'Gratis ongkir — nilai tidak dipakai (isi 0).'
+    default: return ''
+  }
+})
+const valueSuffix = computed(() =>
+  form.promoType === 'FIXED_AMOUNT' ? 'Rp' : (form.promoType === 'FREE_DELIVERY' ? '' : '%'),
+)
 
 const form = reactive({
   code: '',
@@ -150,20 +182,10 @@ onMounted(load)
 
 <template>
   <div class="space-y-4">
-    <div class="dc-page-card p-4 flex items-center justify-between gap-3">
-      <div class="flex items-center gap-3">
-        <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0f6ee9] flex items-center justify-center">
-          <UIcon name="i-heroicons-megaphone" class="text-xl" />
-        </div>
-        <div>
-          <h2 class="text-lg font-semibold">Promo & Campaign</h2>
-          <p class="text-sm text-[#6f809f]">Spanduk (Banner) di Aplikasi Pelanggan</p>
-        </div>
-      </div>
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari promo" class="w-full max-w-xs dc-input-like" />
       <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2" @click="openCreate">Tambah Promo</UButton>
     </div>
-
-    <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari promo" class="w-full max-w-xs dc-input-like" />
 
     <div v-if="loading" class="text-sm text-[#6f809f]">Memuat data promo...</div>
 
@@ -202,8 +224,15 @@ onMounted(load)
             <UTextarea v-model="form.description" placeholder="Masukkan deskripsi" class="w-full" :rows="2" />
           </UFormField>
 
-          <UFormField label="URL Banner Promo">
-            <UInput v-model="form.bannerUrl" placeholder="https://..." class="w-full" />
+          <UFormField label="Gambar Promo">
+            <div class="flex items-center gap-3">
+              <label class="dc-btn-outline px-4 py-2 rounded-lg cursor-pointer text-sm whitespace-nowrap">
+                <input type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="onFilePick">
+                {{ uploading ? 'Mengunggah...' : (form.bannerUrl ? 'Ganti Gambar' : 'Pilih Gambar') }}
+              </label>
+              <span class="text-xs text-[#6f809f]">Dipakai di halaman promo & banner yang menautkan promo ini</span>
+            </div>
+            <div v-if="form.bannerUrl" class="mt-2 h-28 rounded-lg border border-[#d7e0ee] bg-cover bg-center" :style="{ backgroundImage: `url(${form.bannerUrl})` }" />
           </UFormField>
 
           <div class="grid md:grid-cols-2 gap-4">
@@ -217,7 +246,12 @@ onMounted(load)
 
           <div class="grid md:grid-cols-2 gap-4">
             <UFormField label="Nilai Promo">
-              <UInput v-model.number="form.value" type="number" min="0" placeholder="Masukkan nominal" class="w-full" :disabled="!!editTarget" />
+              <UInput v-model.number="form.value" type="number" min="0" placeholder="Masukkan nominal" class="w-full" :disabled="!!editTarget || form.promoType === 'FREE_DELIVERY'">
+                <template v-if="valueSuffix" #trailing>
+                  <span class="text-xs text-[#6f809f]">{{ valueSuffix }}</span>
+                </template>
+              </UInput>
+              <p class="text-xs text-[#6f809f] mt-1">{{ valueHint }}</p>
             </UFormField>
             <UFormField label="Status Promo">
               <USelect v-model="form.isActive" :items="[{ label: 'Aktif', value: true }, { label: 'Nonaktif', value: false }]" class="w-full" />

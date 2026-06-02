@@ -17,6 +17,12 @@ export class UploadsService {
     return `http://localhost:${port}/uploads/payments/${filename}`;
   }
 
+  /** URL gambar umum (mis. banner/pop-up) yang diunggah admin. */
+  getImageUrl(filename: string): string {
+    const port = this.configService.get<number>('APP_PORT', 3000);
+    return `http://localhost:${port}/uploads/images/${filename}`;
+  }
+
   deleteFile(filePath: string): void {
     const absolutePath = path.join(process.cwd(), filePath);
     if (fs.existsSync(absolutePath)) {

@@ -125,6 +125,54 @@ export interface Promo {
   updatedAt: string
 }
 
+export interface Review {
+  id: string
+  orderId: string | null
+  rating: number
+  comment: string | null
+  source: 'APP' | 'KIOSK'
+  isFocused: boolean
+  createdAt: string
+  customer?: { user?: { name: string } | null } | null
+  staff?: { id: string; name: string } | null
+  order?: { id: string; orderNumber: string } | null
+}
+
+export interface ReviewStats {
+  average: number
+  total: number
+  distribution: Record<string, number>
+}
+
+export interface StaffPerformance {
+  staffId: string
+  name: string
+  role: string | null
+  totalOrders: number
+  totalRevenue: number
+  reviewCount: number
+  avgRating: number
+}
+
+export type BannerPlacement = 'HOME_POPUP' | 'HOME_CAROUSEL'
+
+export interface AppBanner {
+  id: string
+  title: string
+  imageUrl: string
+  linkUrl: string | null
+  ctaLabel: string | null
+  promoId: string | null
+  promo?: { code: string; name: string; bannerUrl: string | null } | null
+  placement: BannerPlacement
+  sortOrder: number
+  isActive: boolean
+  startDate: string | null
+  endDate: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Kiosk {
   id: string
   outletId: string

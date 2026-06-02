@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { UserRole } from '@prisma/client';
+import { UserRole, OrderStatus } from '@prisma/client';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 
 @Injectable()
@@ -160,6 +160,51 @@ export class CustomersService {
         limit,
         totalPages: Math.ceil(total / limit),
       },
+    };
+  }
+
+  /** Statistik ringkas member untuk dashboard mobile. */
+  async getStats(id: string) {
+    const customer = await this.prisma.customer.findUnique({ where: { id } });
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    const paidStatuses: OrderStatus[] = [
+      OrderStatus.PAID,
+      OrderStatus.RECEIVED,
+      OrderStatus.WASHING,
+      OrderStatus.DRYING,
+      OrderStatus.IRONING,
+      OrderStatus.PACKING,
+      OrderStatus.READY_PICKUP,
+      OrderStatus.OUT_FOR_DELIVERY,
+      OrderStatus.COMPLETED,
+    ];
+
+    const [totalOrders, completedOrders, spend, favItems] = await Promise.all([
+      this.prisma.order.count({ where: { customerId: id } }),
+      this.prisma.order.count({
+        where: { customerId: id, status: OrderStatus.COMPLETED },
+      }),
+      this.prisma.order.aggregate({
+        where: { customerId: id, status: { in: paidStatuses } },
+        _sum: { totalAmount: true },
+      }),
+      this.prisma.orderItem.groupBy({
+        by: ['serviceName'],
+        where: { order: { customerId: id } },
+        _sum: { quantity: true },
+        orderBy: { _sum: { quantity: 'desc' } },
+        take: 1,
+      }),
+    ]);
+
+    return {
+      totalOrders,
+      completedOrders,
+      totalSpending: spend._sum.totalAmount ?? 0,
+      favoriteService: favItems[0]?.serviceName ?? null,
     };
   }
 

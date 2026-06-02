@@ -82,25 +82,54 @@ enum DeviceType {
   QR_SCANNER
 }
 
+enum OtpPurpose {
+  REGISTER
+  LOGIN
+  RESET_PASSWORD
+}
+
+enum BannerPlacement {
+  HOME_POPUP
+  HOME_CAROUSEL
+}
+
+enum ReviewSource {
+  APP
+  KIOSK
+}
+
+enum BookingStatus {
+  RESERVED
+  IN_USE
+  DONE
+  CANCELLED
+  EXPIRED
+}
+
 // ============================================
 // MODELS
 // ============================================
 
 model User {
-  id           String   @id @default(uuid())
-  name         String
-  email        String?  @unique
-  phone        String?  @unique
-  passwordHash String
-  role         UserRole @default(CUSTOMER)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String    @id @default(uuid())
+  name            String
+  email           String?   @unique
+  phone           String?   @unique
+  passwordHash    String
+  role            UserRole  @default(CUSTOMER)
+  isActive        Boolean   @default(true)
+  avatarUrl       String?
+  phoneVerifiedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  customer    Customer?
-  outletUsers OutletUser[]
-  auditLogs   AuditLog[]
-  refreshTokens RefreshToken[]
+  customer       Customer?
+  outletUsers    OutletUser[]
+  auditLogs      AuditLog[]
+  refreshTokens  RefreshToken[]
+  reviews        Review[]       @relation("StaffReviews")
+  staffOrders    Order[]        @relation("StaffOrders")
+  kioskSessions  KioskSession[] @relation("StaffKioskSessions")
 
   @@index([email])
   @@index([phone])
@@ -109,39 +138,44 @@ model User {
 }
 
 model Customer {
-  id         String   @id @default(uuid())
-  userId     String   @unique
-  memberCode String   @unique
-  birthDate  DateTime?
-  gender     String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  memberCode    String    @unique
+  birthDate     DateTime?
+  gender        String?
+  occupation    String?
+  walletPinHash String?
+  pinSetAt      DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  addresses CustomerAddress[]
-  orders    Order[]
-  wallet    Wallet?
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addresses   CustomerAddress[]
+  orders      Order[]
+  wallet      Wallet?
   promoUsages PromoUsage[]
+  reviews     Review[]
+  bookings    MachineBooking[]
 
   @@index([memberCode])
   @@map("customers")
 }
 
 model CustomerAddress {
-  id           String   @id @default(uuid())
-  customerId   String
-  label        String
+  id            String   @id @default(uuid())
+  customerId    String
+  label         String
   recipientName String
-  phone        String
-  address      String
-  city         String
-  province     String
-  postalCode   String?
-  latitude     Float?
-  longitude    Float?
-  isDefault    Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  phone         String
+  address       String
+  city          String
+  province      String
+  postalCode    String?
+  latitude      Float?
+  longitude     Float?
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   orders   Order[]
@@ -193,17 +227,17 @@ model OutletUser {
 }
 
 model Service {
-  id          String   @id @default(uuid())
-  name        String
-  serviceType String
-  machineType String?
-  capacityKg  Float?
+  id              String   @id @default(uuid())
+  name            String
+  serviceType     String
+  machineType     String?
+  capacityKg      Float?
   estimateMinutes Int?
-  basePrice   Float?
-  description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  basePrice       Float?
+  description     String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   servicePrices ServicePrice[]
   orderItems    OrderItem[]
@@ -233,57 +267,61 @@ model ServicePrice {
 }
 
 model Order {
-  id               String      @id @default(uuid())
-  orderNumber      String      @unique
-  customerId       String?
+  id                String      @id @default(uuid())
+  orderNumber       String      @unique
+  customerId        String?
   customerAddressId String?
-  outletId         String
-  kioskId          String?
-  sourcePlatform   String
-  orderDate        DateTime    @default(now())
-  status           OrderStatus @default(DRAFT)
-  subtotal         Float       @default(0)
-  discountAmount   Float       @default(0)
-  deliveryFee      Float       @default(0)
-  totalAmount      Float       @default(0)
-  notes            String?
+  outletId          String
+  kioskId           String?
+  staffUserId       String?
+  sourcePlatform    String
+  orderDate         DateTime    @default(now())
+  status            OrderStatus @default(DRAFT)
+  subtotal          Float       @default(0)
+  discountAmount    Float       @default(0)
+  deliveryFee       Float       @default(0)
+  totalAmount       Float       @default(0)
+  notes             String?
   estimatedFinishAt DateTime?
-  completedAt      DateTime?
-  cancelledAt      DateTime?
-  cancelReason     String?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+  cancelReason      String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
-  customer        Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  customerAddress CustomerAddress?    @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
-  outlet          Outlet              @relation(fields: [outletId], references: [id])
-  kiosk           Kiosk?              @relation(fields: [kioskId], references: [id], onDelete: SetNull)
-  items           OrderItem[]
-  statusLogs      OrderStatusLog[]
-  payments        Payment[]
+  customer           Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerAddress    CustomerAddress?    @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
+  outlet             Outlet              @relation(fields: [outletId], references: [id])
+  kiosk              Kiosk?              @relation(fields: [kioskId], references: [id], onDelete: SetNull)
+  staff              User?               @relation("StaffOrders", fields: [staffUserId], references: [id], onDelete: SetNull)
+  items              OrderItem[]
+  statusLogs         OrderStatusLog[]
+  payments           Payment[]
   walletTransactions WalletTransaction[]
-  promoUsages     PromoUsage[]
+  promoUsages        PromoUsage[]
+  review             Review?
 
   @@index([orderNumber])
   @@index([customerId])
   @@index([outletId])
+  @@index([staffUserId])
   @@index([status])
   @@index([orderDate])
   @@map("orders")
 }
 
 model OrderItem {
-  id          String   @id @default(uuid())
-  orderId     String
-  serviceId   String
-  serviceName String
-  quantity    Float
-  unit        String
+  id           String   @id @default(uuid())
+  orderId      String
+  serviceId    String
+  serviceName  String
+  quantity     Float
+  unit         String
   pricePerUnit Float
-  subtotal    Float
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  subtotal     Float
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   service Service @relation(fields: [serviceId], references: [id])
@@ -307,18 +345,18 @@ model OrderStatusLog {
 }
 
 model Payment {
-  id              String        @id @default(uuid())
-  orderId         String
-  paymentNumber   String        @unique
-  paymentMethod   PaymentMethod
-  amount          Float
-  status          PaymentStatus @default(PENDING)
-  paidAt          DateTime?
-  externalId      String?
+  id               String        @id @default(uuid())
+  orderId          String
+  paymentNumber    String        @unique
+  paymentMethod    PaymentMethod
+  amount           Float
+  status           PaymentStatus @default(PENDING)
+  paidAt           DateTime?
+  externalId       String?
   externalResponse Json?
-  notes           String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  notes            String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
@@ -353,7 +391,7 @@ model WalletTransaction {
   createdAt       DateTime              @default(now())
 
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  order  Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  order  Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   @@index([walletId])
   @@index([orderId])
@@ -377,8 +415,9 @@ model Promo {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  rules  PromoRule[]
-  usages PromoUsage[]
+  rules   PromoRule[]
+  usages  PromoUsage[]
+  banners AppBanner[]
 
   @@index([code])
   @@index([startDate, endDate])
@@ -386,15 +425,15 @@ model Promo {
 }
 
 model PromoRule {
-  id                String   @id @default(uuid())
-  promoId           String
-  minTransaction    Float?
-  maxDiscount       Float?
+  id                  String   @id @default(uuid())
+  promoId             String
+  minTransaction      Float?
+  maxDiscount         Float?
   maxUsagePerCustomer Int?
-  applicableServices String?
-  applicableOutlets  String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  applicableServices  String?
+  applicableOutlets   String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   promo Promo @relation(fields: [promoId], references: [id], onDelete: Cascade)
 
@@ -421,15 +460,15 @@ model PromoUsage {
 }
 
 model Kiosk {
-  id           String   @id @default(uuid())
-  outletId     String
-  kioskCode    String   @unique
-  name         String
-  location     String?
-  status       String   @default("ACTIVE")
+  id            String    @id @default(uuid())
+  outletId      String
+  kioskCode     String    @unique
+  name          String
+  location      String?
+  status        String    @default("ACTIVE")
   lastHeartbeat DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   outlet   Outlet         @relation(fields: [outletId], references: [id], onDelete: Cascade)
   sessions KioskSession[]
@@ -442,17 +481,20 @@ model Kiosk {
 }
 
 model KioskSession {
-  id         String    @id @default(uuid())
-  kioskId    String
-  customerId String?
-  startedAt  DateTime  @default(now())
-  endedAt    DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id          String    @id @default(uuid())
+  kioskId     String
+  customerId  String?
+  staffUserId String?
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   kiosk Kiosk @relation(fields: [kioskId], references: [id], onDelete: Cascade)
+  staff User? @relation("StaffKioskSessions", fields: [staffUserId], references: [id], onDelete: SetNull)
 
   @@index([kioskId])
+  @@index([staffUserId])
   @@map("kiosk_sessions")
 }
 
@@ -476,6 +518,7 @@ model IotDevice {
   kiosk    Kiosk?       @relation(fields: [kioskId], references: [id], onDelete: SetNull)
   commands IotCommand[]
   events   IotEvent[]
+  bookings MachineBooking[]
 
   @@index([deviceCode])
   @@index([outletId])
@@ -484,16 +527,16 @@ model IotDevice {
 }
 
 model IotCommand {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   deviceId   String
   command    String
   payload    Json?
-  status     String   @default("PENDING")
+  status     String    @default("PENDING")
   sentAt     DateTime?
   executedAt DateTime?
   response   Json?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   device IotDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 
@@ -537,12 +580,12 @@ model AuditLog {
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
-  tokenHash String   @unique
+  tokenHash String    @unique
   expiresAt DateTime
   revokedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -550,4 +593,92 @@ model RefreshToken {
   @@index([tokenHash])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+model OtpCode {
+  id         String     @id @default(uuid())
+  phone      String
+  codeHash   String
+  purpose    OtpPurpose
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int        @default(0)
+  createdAt  DateTime   @default(now())
+
+  @@index([phone, purpose])
+  @@index([expiresAt])
+  @@map("otp_codes")
+}
+
+/// Konten promosi terkelola admin: pop-up saat masuk app & carousel home.
+model AppBanner {
+  id        String          @id @default(uuid())
+  title     String
+  imageUrl  String
+  linkUrl   String?
+  ctaLabel  String?
+  promoId   String?
+  placement BannerPlacement
+  sortOrder Int             @default(0)
+  isActive  Boolean         @default(true)
+  startDate DateTime?
+  endDate   DateTime?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  promo Promo? @relation(fields: [promoId], references: [id], onDelete: SetNull)
+
+  @@index([placement, isActive])
+  @@map("app_banners")
+}
+
+/// Ulasan/feedback pelanggan di akhir pembayaran (app & kiosk).
+/// staffUserId menautkan ulasan ke staff yang bertugas (diisi penuh di Fase 5).
+model Review {
+  id             String       @id @default(uuid())
+  orderId        String?      @unique
+  customerId     String?
+  staffUserId    String?
+  kioskSessionId String?
+  rating         Int
+  comment        String?
+  source         ReviewSource @default(APP)
+  isFocused      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  order    Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  staff    User?     @relation("StaffReviews", fields: [staffUserId], references: [id], onDelete: SetNull)
+
+  @@index([rating])
+  @@index([isFocused])
+  @@index([staffUserId])
+  @@map("reviews")
+}
+
+/// Reservasi mesin (cuci/kering). Mengunci mesin untuk satu customer; hanya
+/// pemesan yang bisa mengaktifkan (verifikasi scan QR mesin) → cegah dipakai
+/// orang lain. orderId opsional (bila booking ditautkan ke pembayaran).
+model MachineBooking {
+  id          String        @id @default(uuid())
+  deviceId    String
+  customerId  String
+  orderId     String?       @unique
+  bookingCode String        @unique
+  status      BookingStatus @default(RESERVED)
+  reservedAt  DateTime      @default(now())
+  expiresAt   DateTime
+  startedAt   DateTime?
+  endedAt     DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  device   IotDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  customer Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, status])
+  @@index([customerId])
+  @@index([bookingCode])
+  @@map("machine_bookings")
 }
