@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, ParseIntPipe } from '@nestjs/common';
+import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { IsString, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
@@ -41,8 +42,8 @@ export class KiosksController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'outletId', required: false, type: String })
   async findAll(
-    @Query('page', new ParseIntPipe({ optional: true })) page?: number,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
+    @Query('page', new ParseOptionalIntPipe(1)) page?: number,
+    @Query('limit', new ParseOptionalIntPipe(10)) limit?: number,
     @Query('outletId') outletId?: string,
   ) {
     return this.kiosksService.findAll(page, limit, outletId);

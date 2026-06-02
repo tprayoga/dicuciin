@@ -9,6 +9,7 @@ import {
   UseGuards,
   ParseIntPipe,
 } from '@nestjs/common';
+import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { WalletsService } from './wallets.service';
 import { TopupWalletDto, PayWithWalletDto, RefundWalletDto } from './dto/wallet.dto';
@@ -34,8 +35,8 @@ export class WalletsController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getTransactions(
     @Param('customerId') customerId: string,
-    @Query('page', new ParseIntPipe({ optional: true })) page?: number,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
+    @Query('page', new ParseOptionalIntPipe(1)) page?: number,
+    @Query('limit', new ParseOptionalIntPipe(10)) limit?: number,
   ) {
     return this.walletsService.getTransactions(customerId, page, limit);
   }
