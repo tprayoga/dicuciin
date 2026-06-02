@@ -51,38 +51,31 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   _MainTab _tab = _MainTab.home;
+  bool _popupScheduled = false;
 
-  @override
-  void initState() {
-    super.initState();
-    // Muat data dashboard (saldo, order, promo, banner) sekali saat home dibuka,
-    // lalu tampilkan pop-up promosi (HOME_POPUP) bila ada.
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final auth = context.read<AuthController>();
-      final user = auth.user;
-      final token = auth.accessToken;
-      if (user == null || token == null) return;
-      final controller = context.read<CustomerController>();
-      await controller.loadDashboard(user: user, accessToken: token);
-      if (!mounted) return;
-      _maybeShowPopup(controller);
-    });
-  }
-
+  /// Data dashboard dimuat oleh CustomerController (ProxyProvider) saat auth
+  /// siap. Di sini hanya menampilkan pop-up promosi begitu datanya tiba.
   void _maybeShowPopup(CustomerController controller) {
+    if (_popupScheduled) return;
     final popups = controller.popupBanners;
     if (popups.isEmpty) return;
+    _popupScheduled = true;
     controller.markPopupShown();
     final banner = popups.first;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      builder: (_) => _BannerPopupDialog(banner: banner),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        builder: (_) => _BannerPopupDialog(banner: banner),
+      );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    // Pantau pop-up banner; tampilkan sekali saat data siap.
+    _maybeShowPopup(context.watch<CustomerController>());
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(

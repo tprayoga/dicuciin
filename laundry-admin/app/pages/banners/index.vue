@@ -13,6 +13,13 @@ const promoItems = computed(() => [
   { label: 'Tanpa promo', value: '' },
   ...promos.value.map(p => ({ label: `${p.code} — ${p.name}`, value: p.id })),
 ])
+
+// Saat promo dipilih, otomatis isi judul (bila masih kosong) agar cepat.
+watch(() => form.promoId, (id) => {
+  if (!id) return
+  const p = promos.value.find(x => x.id === id)
+  if (p && !form.title.trim()) form.title = p.name
+})
 const showModal = ref(false)
 const editTarget = ref<AppBanner | null>(null)
 const deleteTarget = ref<AppBanner | null>(null)
@@ -217,6 +224,7 @@ onMounted(load)
 
           <UFormField label="URL Gambar">
             <UInput v-model="form.imageUrl" placeholder="https://..." class="w-full" required />
+            <div v-if="form.imageUrl" class="mt-2 h-28 rounded-lg border border-[#d7e0ee] bg-cover bg-center" :style="{ backgroundImage: `url(${form.imageUrl})` }" />
           </UFormField>
 
           <div class="grid md:grid-cols-2 gap-4">

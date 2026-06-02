@@ -16,8 +16,22 @@ const showDeleteModal = ref(false)
 const promoTypeItems = [
   { label: 'Persentase (%)', value: 'PERCENTAGE' },
   { label: 'Nominal (Rp)', value: 'FIXED_AMOUNT' },
+  { label: 'Cashback Wallet (%)', value: 'CASHBACK' },
   { label: 'Gratis Ongkir', value: 'FREE_DELIVERY' },
 ]
+
+const valueHint = computed(() => {
+  switch (form.promoType) {
+    case 'PERCENTAGE': return 'Dalam persen. Contoh: 20 = diskon 20%.'
+    case 'FIXED_AMOUNT': return 'Dalam Rupiah. Contoh: 10000 = potongan Rp 10.000.'
+    case 'CASHBACK': return 'Persen cashback ke wallet. Contoh: 5 = cashback 5%.'
+    case 'FREE_DELIVERY': return 'Gratis ongkir — nilai tidak dipakai (isi 0).'
+    default: return ''
+  }
+})
+const valueSuffix = computed(() =>
+  form.promoType === 'FIXED_AMOUNT' ? 'Rp' : (form.promoType === 'FREE_DELIVERY' ? '' : '%'),
+)
 
 const form = reactive({
   code: '',
@@ -204,6 +218,7 @@ onMounted(load)
 
           <UFormField label="URL Banner Promo">
             <UInput v-model="form.bannerUrl" placeholder="https://..." class="w-full" />
+            <div v-if="form.bannerUrl" class="mt-2 h-28 rounded-lg border border-[#d7e0ee] bg-cover bg-center" :style="{ backgroundImage: `url(${form.bannerUrl})` }" />
           </UFormField>
 
           <div class="grid md:grid-cols-2 gap-4">
@@ -217,7 +232,12 @@ onMounted(load)
 
           <div class="grid md:grid-cols-2 gap-4">
             <UFormField label="Nilai Promo">
-              <UInput v-model.number="form.value" type="number" min="0" placeholder="Masukkan nominal" class="w-full" :disabled="!!editTarget" />
+              <UInput v-model.number="form.value" type="number" min="0" placeholder="Masukkan nominal" class="w-full" :disabled="!!editTarget || form.promoType === 'FREE_DELIVERY'">
+                <template v-if="valueSuffix" #trailing>
+                  <span class="text-xs text-[#6f809f]">{{ valueSuffix }}</span>
+                </template>
+              </UInput>
+              <p class="text-xs text-[#6f809f] mt-1">{{ valueHint }}</p>
             </UFormField>
             <UFormField label="Status Promo">
               <USelect v-model="form.isActive" :items="[{ label: 'Aktif', value: true }, { label: 'Nonaktif', value: false }]" class="w-full" />

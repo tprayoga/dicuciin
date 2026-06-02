@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../core/network/api_exception.dart';
+import '../auth/auth_controller.dart';
 import '../auth/models/auth_models.dart';
 import 'customer_service.dart';
 import 'models/customer_models.dart';
@@ -10,6 +11,36 @@ class CustomerController extends ChangeNotifier {
       : _customerService = customerService;
 
   final CustomerService _customerService;
+
+  // Kunci untuk mendeteksi perubahan auth → muat ulang dashboard sekali.
+  String? _loadedForCustomerId;
+  String? _loadedToken;
+
+  /// Dipanggil ProxyProvider tiap auth berubah. Memuat dashboard begitu profil
+  /// customer tersedia (login maupun sesi dipulihkan), tanpa bergantung pada
+  /// timing initState halaman.
+  void syncFromAuth(AuthController auth) {
+    final user = auth.user;
+    final token = auth.accessToken;
+    final customerId = user?.customer?.id;
+
+    if (user == null || token == null || customerId == null) {
+      if (_loadedForCustomerId != null) {
+        _loadedForCustomerId = null;
+        _loadedToken = null;
+        clear();
+      }
+      return;
+    }
+
+    if (customerId != _loadedForCustomerId || token != _loadedToken) {
+      _loadedForCustomerId = customerId;
+      _loadedToken = token;
+      Future.microtask(
+        () => loadDashboard(user: user, accessToken: token),
+      );
+    }
+  }
 
   bool _isLoading = false;
   bool _isSubmittingOrder = false;

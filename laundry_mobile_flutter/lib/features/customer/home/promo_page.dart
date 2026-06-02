@@ -30,12 +30,34 @@ class _PromoPage extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               if (promos.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(top: 40),
+                Padding(
+                  padding: const EdgeInsets.only(top: 40),
                   child: Center(
-                    child: Text(
-                      'Belum ada promo aktif saat ini.',
-                      style: TextStyle(fontSize: 14, color: _textMuted),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'Belum ada promo aktif saat ini.',
+                          style: TextStyle(fontSize: 14, color: _textMuted),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: 160,
+                          child: AppOutlineButton(
+                            label: 'Muat ulang',
+                            onTap: () {
+                              final auth = context.read<AuthController>();
+                              final user = auth.user;
+                              final token = auth.accessToken;
+                              if (user != null && token != null) {
+                                context.read<CustomerController>().loadDashboard(
+                                      user: user,
+                                      accessToken: token,
+                                    );
+                              }
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 )

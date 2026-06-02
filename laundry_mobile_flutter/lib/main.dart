@@ -30,9 +30,12 @@ void main() {
             tokenStorage: tokenStorage,
           ),
         ),
-        ChangeNotifierProvider(
+        ChangeNotifierProxyProvider<AuthController, CustomerController>(
           create: (_) =>
               CustomerController(customerService: CustomerService(apiClient)),
+          update: (_, auth, customer) => (customer ??
+              CustomerController(customerService: CustomerService(apiClient)))
+            ..syncFromAuth(auth),
         ),
         ChangeNotifierProxyProvider<AuthController, WalletController>(
           create: (_) => WalletController(authService: authService),
