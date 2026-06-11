@@ -52,20 +52,22 @@ export class OrdersService {
       6,
     );
 
+    // Ambil semua harga layanan dalam satu query (hindari N+1 query di loop).
+    const servicePrices = await this.prisma.servicePrice.findMany({
+      where: {
+        serviceId: { in: items.map((i) => i.serviceId) },
+        outletId,
+        isActive: true,
+      },
+      include: { service: true },
+    });
+    const priceMap = new Map(servicePrices.map((sp) => [sp.serviceId, sp]));
+
     let subtotal = new Prisma.Decimal(0);
     const orderItems = [];
 
     for (const item of items) {
-      const servicePrice = await this.prisma.servicePrice.findFirst({
-        where: {
-          serviceId: item.serviceId,
-          outletId,
-          isActive: true,
-        },
-        include: {
-          service: true,
-        },
-      });
+      const servicePrice = priceMap.get(item.serviceId);
 
       if (!servicePrice) {
         throw new BadRequestException(`Service price not found for service ${item.serviceId}`);

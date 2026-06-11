@@ -17,11 +17,14 @@ describe('OrdersService.create', () => {
       outlet: { findUnique: jest.fn().mockResolvedValue({ id: 'out-1' }) },
       customer: { findUnique: jest.fn().mockResolvedValue({ id: 'cust-1' }) },
       servicePrice: {
-        findFirst: jest.fn().mockResolvedValue({
-          price: new Prisma.Decimal('85500'),
-          unit: 'kg',
-          service: { name: 'Cuci Setrika' },
-        }),
+        findMany: jest.fn().mockResolvedValue([
+          {
+            serviceId: 'svc-1',
+            price: new Prisma.Decimal('85500'),
+            unit: 'kg',
+            service: { name: 'Cuci Setrika' },
+          },
+        ]),
       },
       promo: {
         findUnique: jest.fn(),

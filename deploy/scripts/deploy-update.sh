@@ -28,11 +28,28 @@ docker compose up -d
 echo "==> Build backend"
 npm ci --legacy-peer-deps
 npx prisma generate
+# Build DULU sebelum migrate: kalau build gagal, schema DB belum terlanjur maju
+# sementara kode lama masih jalan.
+npm run build
+
+echo "==> Backup database sebelum migrate"
+BACKUP_DIR="$ROOT_DIR/backups"
+mkdir -p "$BACKUP_DIR"
+BACKUP_FILE="$BACKUP_DIR/laundry_db_$(date +%Y%m%d_%H%M%S).sql.gz"
+if docker exec -t laundry-postgres pg_dump -U laundry laundry_db | gzip > "$BACKUP_FILE"; then
+  echo "    backup → $BACKUP_FILE"
+  # Simpan 10 backup terakhir saja
+  ls -1t "$BACKUP_DIR"/laundry_db_*.sql.gz 2>/dev/null | tail -n +11 | xargs -r rm -f
+else
+  echo "    PERINGATAN: backup gagal, migrate dibatalkan" >&2
+  exit 1
+fi
+
+echo "==> Apply migrations"
 npx prisma migrate deploy
 if [[ "$RUN_SEED" == "true" ]]; then
   npm run prisma:seed
 fi
-npm run build
 
 echo "==> Build frontend"
 cd "$ROOT_DIR/laundry-admin"
