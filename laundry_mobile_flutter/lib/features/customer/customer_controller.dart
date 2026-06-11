@@ -167,14 +167,16 @@ class CustomerController extends ChangeNotifier {
     );
   }
 
-  /// Reservasi mesin berdasarkan kode perangkat hasil scan.
+  /// Reservasi mesin berdasarkan kode perangkat. [scheduledAt] (ISO) opsional.
   Future<MachineBooking> reserveMachine({
     required String accessToken,
     required String deviceCode,
+    String? scheduledAt,
   }) {
     return _customerService.reserveBooking(
       accessToken: accessToken,
       deviceCode: deviceCode,
+      scheduledAt: scheduledAt,
     );
   }
 

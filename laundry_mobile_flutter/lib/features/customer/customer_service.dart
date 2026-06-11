@@ -87,15 +87,19 @@ class CustomerService {
     return BookingVerifyResult.fromJson(payload as Map<String, dynamic>);
   }
 
-  /// Reservasi mesin berdasarkan kode perangkat (hasil scan).
+  /// Reservasi mesin berdasarkan kode perangkat. [scheduledAt] (ISO) opsional —
+  /// waktu terjadwal pemakaian.
   Future<MachineBooking> reserveBooking({
     required String accessToken,
     required String deviceCode,
+    String? scheduledAt,
   }) async {
+    final body = <String, dynamic>{'deviceCode': deviceCode};
+    if (scheduledAt != null) body['scheduledAt'] = scheduledAt;
     final payload = await _apiClient.post(
       '/bookings',
       headers: {'Authorization': 'Bearer $accessToken'},
-      body: jsonEncode({'deviceCode': deviceCode}),
+      body: jsonEncode(body),
     );
     return MachineBooking.fromJson(payload as Map<String, dynamic>);
   }

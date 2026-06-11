@@ -364,6 +364,7 @@ class MachineBooking {
     this.deviceName,
     this.deviceCode,
     this.expiresAt,
+    this.scheduledAt,
   });
 
   final String id;
@@ -372,6 +373,7 @@ class MachineBooking {
   final String? deviceName;
   final String? deviceCode;
   final DateTime? expiresAt;
+  final DateTime? scheduledAt;
 
   factory MachineBooking.fromJson(Map<String, dynamic> json) {
     final device = json['device'] as Map<String, dynamic>?;
@@ -382,6 +384,7 @@ class MachineBooking {
       deviceName: device?['name'] as String?,
       deviceCode: device?['deviceCode'] as String?,
       expiresAt: DateTime.tryParse((json['expiresAt'] as String?) ?? ''),
+      scheduledAt: DateTime.tryParse((json['scheduledAt'] as String?) ?? ''),
     );
   }
 }

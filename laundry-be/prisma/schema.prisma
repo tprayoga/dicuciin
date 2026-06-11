@@ -668,6 +668,7 @@ model MachineBooking {
   bookingCode String        @unique
   status      BookingStatus @default(RESERVED)
   reservedAt  DateTime      @default(now())
+  scheduledAt DateTime?
   expiresAt   DateTime
   startedAt   DateTime?
   endedAt     DateTime?

@@ -27,6 +27,7 @@ export class BookingsController {
       req.user?.userId,
       { deviceId: dto.deviceId, deviceCode: dto.deviceCode },
       dto.orderId,
+      dto.scheduledAt,
     );
   }
 

@@ -1,4 +1,4 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsDateString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateBookingDto {
@@ -16,6 +16,11 @@ export class CreateBookingDto {
   @IsString()
   @IsOptional()
   orderId?: string;
+
+  @ApiProperty({ required: false, description: 'Waktu terjadwal pemakaian (ISO 8601)' })
+  @IsDateString()
+  @IsOptional()
+  scheduledAt?: string;
 }
 
 export class VerifyBookingDto {

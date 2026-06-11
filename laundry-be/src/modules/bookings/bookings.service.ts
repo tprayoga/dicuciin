@@ -48,6 +48,7 @@ export class BookingsService {
     userId: string,
     ref: { deviceId?: string; deviceCode?: string },
     orderId?: string,
+    scheduledAtIso?: string,
   ) {
     const customerId = await this.resolveCustomerId(userId);
 
@@ -64,6 +65,22 @@ export class BookingsService {
     }
 
     const now = new Date();
+
+    // Waktu terjadwal opsional: tak boleh di masa lalu; reservasi ditahan sampai
+    // 30 menit setelah jadwal (atau 15 menit default bila tanpa jadwal).
+    let scheduledAt: Date | null = null;
+    let expiresAt = new Date(now.getTime() + RESERVE_TTL_MS);
+    if (scheduledAtIso) {
+      scheduledAt = new Date(scheduledAtIso);
+      if (Number.isNaN(scheduledAt.getTime())) {
+        throw new BadRequestException('Waktu terjadwal tidak valid');
+      }
+      if (scheduledAt.getTime() < now.getTime() - 60_000) {
+        throw new BadRequestException('Waktu terjadwal sudah lewat');
+      }
+      expiresAt = new Date(scheduledAt.getTime() + 30 * 60 * 1000);
+    }
+
     const active = await this.prisma.machineBooking.findFirst({
       where: {
         deviceId,
@@ -81,7 +98,8 @@ export class BookingsService {
         customerId,
         orderId: orderId ?? null,
         bookingCode: this.genCode(),
-        expiresAt: new Date(now.getTime() + RESERVE_TTL_MS),
+        scheduledAt,
+        expiresAt,
       },
       include: bookingInclude,
     });
