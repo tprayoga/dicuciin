@@ -1,16 +1,17 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/network/api_exception.dart';
 import '../../core/theme/app_colors.dart';
+import '../../shared/widgets/app_toast.dart';
 import '../../shared/widgets/pin_pad.dart';
 import '../customer/home_screen.dart';
-import '../customer/wallet_controller.dart';
 import 'auth_controller.dart';
+import 'login_screen.dart';
 
 const _bgColor = AppColors.surfaceAlt;
 const _primaryBlue = AppColors.primary;
@@ -65,6 +66,35 @@ const _countries = [
 ];
 
 enum AuthEntryType { login, register }
+
+/// Data registrasi yang dikumpulkan lintas layar (OTP → data diri → PIN).
+class RegistrationDraft {
+  RegistrationDraft({required this.phone, required this.verificationToken});
+
+  /// Nomor HP format internasional digit-only, mis. "6281222952857".
+  final String phone;
+
+  /// Token dari verifikasi OTP, wajib saat memanggil register.
+  final String verificationToken;
+
+  String name = '';
+  String? email;
+  String password = '';
+
+  /// Tanggal lahir format ISO (yyyy-MM-dd), bila diisi.
+  String? birthDate;
+
+  /// 'Laki-laki' / 'Perempuan'.
+  String? gender;
+
+  /// Kategori occupancy: 'Pekerja' / 'Anak Kos' / 'Ibu Rumah Tangga' /
+  /// 'Laundry Kiloan'.
+  String? occupation;
+
+  /// Foto profil dalam bytes (aman untuk Web). null = pakai avatar preset.
+  List<int>? photoBytes;
+  String? photoName;
+}
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -178,9 +208,7 @@ class WelcomeScreen extends StatelessWidget {
                     enabled: true,
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => const PhoneInputScreen(
-                          entryType: AuthEntryType.login,
-                        ),
+                        builder: (_) => const LoginScreen(),
                       ),
                     ),
                   ),
@@ -243,12 +271,51 @@ class PhoneInputScreen extends StatefulWidget {
 class _PhoneInputScreenState extends State<PhoneInputScreen> {
   final TextEditingController _phoneController = TextEditingController();
   bool _agreed = false;
+  bool _sending = false;
   _Country _selectedCountry = _countries.first; // default: Indonesia
 
   @override
   void dispose() {
     _phoneController.dispose();
     super.dispose();
+  }
+
+  /// Nomor HP final format internasional digit-only, mis. "6281222952857".
+  String get _normalizedPhone {
+    final dial = _selectedCountry.dialCode.replaceAll(RegExp(r'[^0-9]'), '');
+    var local = _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (local.startsWith('0')) local = local.substring(1);
+    return '$dial$local';
+  }
+
+  Future<void> _handleContinue() async {
+    FocusScope.of(context).unfocus();
+    final phone = _normalizedPhone;
+    setState(() => _sending = true);
+    try {
+      await context.read<AuthController>().requestOtp(phone: phone);
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => OtpInputScreen(
+            entryType: widget.entryType,
+            fullPhone: phone,
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal mengirim OTP. Coba lagi.')),
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
   }
 
   Future<void> _showCountryPicker() async {
@@ -570,17 +637,8 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
             const SizedBox(height: 12),
             _PrimaryButton(
               label: 'Lanjut',
-              enabled: canContinue,
-              onTap: canContinue
-                  ? () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => OtpInputScreen(
-                            entryType: widget.entryType,
-                            fullPhone: '+62 ${_phoneController.text}',
-                          ),
-                        ),
-                      )
-                  : null,
+              enabled: canContinue && !_sending,
+              onTap: canContinue && !_sending ? _handleContinue : null,
             ),
           ],
         ),
@@ -728,24 +786,27 @@ class _OtpInputScreenState extends State<OtpInputScreen> {
                 ).textTheme.titleMedium?.copyWith(color: _textMuted),
               ),
               const SizedBox(height: 6),
-              RichText(
-                text: TextSpan(
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: _textMuted,
-                    fontSize: 15,
-                  ),
-                  children: [
-                    const TextSpan(text: 'Kirim Ulang '),
-                    TextSpan(
-                      text: _remainingSeconds > 0
-                          ? _formatTime(_remainingSeconds)
-                          : 'Sekarang',
-                      style: TextStyle(
-                        color: _remainingSeconds > 0 ? _textDark : _primaryBlue,
-                        fontWeight: FontWeight.w700,
-                      ),
+              GestureDetector(
+                onTap: _remainingSeconds > 0 ? null : _handleResend,
+                child: RichText(
+                  text: TextSpan(
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: _textMuted,
+                      fontSize: 15,
                     ),
-                  ],
+                    children: [
+                      const TextSpan(text: 'Kirim Ulang '),
+                      TextSpan(
+                        text: _remainingSeconds > 0
+                            ? _formatTime(_remainingSeconds)
+                            : 'Sekarang',
+                        style: TextStyle(
+                          color: _remainingSeconds > 0 ? _textDark : _primaryBlue,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               if (_submitError != null) ...[
@@ -774,38 +835,60 @@ class _OtpInputScreenState extends State<OtpInputScreen> {
   }
 
   Future<void> _handleVerify() async {
-    if (widget.entryType == AuthEntryType.register) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => CompleteDataScreen(fullPhone: widget.fullPhone),
-        ),
-      );
-      return;
-    }
-
     setState(() {
       _isSubmitting = true;
       _submitError = null;
     });
 
     try {
-      await context.read<AuthController>().signInPreview(phone: widget.fullPhone);
+      final verificationToken = await context.read<AuthController>().verifyOtp(
+            phone: widget.fullPhone,
+            code: _otpController.text,
+          );
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-        (route) => false,
+      final draft = RegistrationDraft(
+        phone: widget.fullPhone,
+        verificationToken: verificationToken,
       );
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CompleteDataScreen(draft: draft),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _submitError = e.message);
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _submitError = 'Gagal login. Coba lagi.';
-      });
+      setState(() => _submitError = 'Gagal verifikasi OTP. Coba lagi.');
     } finally {
       if (mounted) {
         setState(() {
           _isSubmitting = false;
         });
       }
+    }
+  }
+
+  Future<void> _handleResend() async {
+    if (_remainingSeconds > 0) return;
+    try {
+      await context.read<AuthController>().requestOtp(phone: widget.fullPhone);
+      if (!mounted) return;
+      setState(() {
+        _remainingSeconds = 89;
+        _submitError = null;
+      });
+      _startTimer();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kode OTP baru telah dikirim.')),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _submitError = e.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _submitError = 'Gagal mengirim ulang OTP.');
     }
   }
 
@@ -837,9 +920,9 @@ class _OtpInputScreenState extends State<OtpInputScreen> {
 }
 
 class CompleteDataScreen extends StatefulWidget {
-  const CompleteDataScreen({super.key, required this.fullPhone});
+  const CompleteDataScreen({super.key, required this.draft});
 
-  final String fullPhone;
+  final RegistrationDraft draft;
 
   @override
   State<CompleteDataScreen> createState() => _CompleteDataScreenState();
@@ -850,19 +933,25 @@ class _CompleteDataScreenState extends State<CompleteDataScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _birthDateController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
 
   // FocusNodes untuk deteksi blur
   final FocusNode _nameFocus = FocusNode();
   final FocusNode _emailFocus = FocusNode();
+  final FocusNode _passwordFocus = FocusNode();
 
   // Touched per field (error tampil setelah user meninggalkan field)
   bool _touchedName = false;
   bool _touchedEmail = false;
   bool _touchedBirth = false;
   bool _touchedGender = false;
+  bool _touchedPassword = false;
   bool _submitted = false;
+  bool _obscurePassword = true;
 
   String? _gender;
+  String? _occupation;
+  DateTime? _birthDate;
 
   // ── Validasi ─────────────────────────────────────────────────
   bool get _isNameValid => _nameController.text.trim().isNotEmpty;
@@ -871,14 +960,21 @@ class _CompleteDataScreenState extends State<CompleteDataScreen> {
           .hasMatch(_emailController.text.trim());
   bool get _isBirthValid => _birthDateController.text.isNotEmpty;
   bool get _isGenderValid => _gender != null;
+  bool get _isPasswordValid => _passwordController.text.length >= 8;
   bool get _isFormValid =>
-      _isNameValid && _isEmailValid && _isBirthValid && _isGenderValid;
+      _isNameValid &&
+      _isEmailValid &&
+      _isBirthValid &&
+      _isGenderValid &&
+      _isPasswordValid;
 
   // Error tampil bila sudah disentuh DAN tidak valid
   bool get _showNameError => (_touchedName || _submitted) && !_isNameValid;
   bool get _showEmailError => (_touchedEmail || _submitted) && !_isEmailValid;
   bool get _showBirthError => (_touchedBirth || _submitted) && !_isBirthValid;
   bool get _showGenderError => (_touchedGender || _submitted) && !_isGenderValid;
+  bool get _showPasswordError =>
+      (_touchedPassword || _submitted) && !_isPasswordValid;
 
   String get _emailErrorMsg => _emailController.text.trim().isEmpty
       ? 'Email wajib diisi'
@@ -889,6 +985,7 @@ class _CompleteDataScreenState extends State<CompleteDataScreen> {
     super.initState();
     _nameController.addListener(_rebuild);
     _emailController.addListener(_rebuild);
+    _passwordController.addListener(_rebuild);
 
     // Tandai touched saat focus keluar
     _nameFocus.addListener(() {
@@ -901,6 +998,11 @@ class _CompleteDataScreenState extends State<CompleteDataScreen> {
         setState(() => _touchedEmail = true);
       }
     });
+    _passwordFocus.addListener(() {
+      if (!_passwordFocus.hasFocus && _passwordController.text.isNotEmpty) {
+        setState(() => _touchedPassword = true);
+      }
+    });
   }
 
   void _rebuild() => setState(() {});
@@ -909,11 +1011,14 @@ class _CompleteDataScreenState extends State<CompleteDataScreen> {
   void dispose() {
     _nameController.removeListener(_rebuild);
     _emailController.removeListener(_rebuild);
+    _passwordController.removeListener(_rebuild);
     _nameController.dispose();
     _emailController.dispose();
     _birthDateController.dispose();
+    _passwordController.dispose();
     _nameFocus.dispose();
     _emailFocus.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
@@ -1016,6 +1121,24 @@ class _CompleteDataScreenState extends State<CompleteDataScreen> {
               _errorText(_emailErrorMsg),
             const SizedBox(height: 14),
 
+            // Password
+            _LabeledInput(
+              label: 'Password',
+              hint: 'Minimal 8 karakter',
+              controller: _passwordController,
+              focusNode: _passwordFocus,
+              obscureText: _obscurePassword,
+              suffixIcon: _obscurePassword
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined,
+              onSuffixTap: () =>
+                  setState(() => _obscurePassword = !_obscurePassword),
+              isError: _showPasswordError,
+            ),
+            if (_showPasswordError)
+              _errorText('Password minimal 8 karakter'),
+            const SizedBox(height: 14),
+
             // Tanggal Lahir
             _LabeledInput(
               label: 'Tanggal Lahir',
@@ -1043,6 +1166,13 @@ class _CompleteDataScreenState extends State<CompleteDataScreen> {
             ),
             if (_showGenderError)
               _errorText('Jenis kelamin wajib dipilih'),
+            const SizedBox(height: 14),
+
+            // Kategori occupancy (opsional, untuk segmentasi)
+            _OccupationDropdown(
+              value: _occupation,
+              onChanged: (value) => setState(() => _occupation = value),
+            ),
 
             const SizedBox(height: 24),
           ],
@@ -1061,14 +1191,23 @@ class _CompleteDataScreenState extends State<CompleteDataScreen> {
               _touchedEmail = true;
               _touchedBirth = true;
               _touchedGender = true;
+              _touchedPassword = true;
             });
             if (!_isFormValid) return;
+            widget.draft
+              ..name = _nameController.text.trim()
+              ..email = _emailController.text.trim()
+              ..password = _passwordController.text
+              ..gender = _gender
+              ..occupation = _occupation
+              ..birthDate = _birthDate == null
+                  ? null
+                  : '${_birthDate!.year.toString().padLeft(4, '0')}-'
+                      '${_birthDate!.month.toString().padLeft(2, '0')}-'
+                      '${_birthDate!.day.toString().padLeft(2, '0')}';
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => UploadProfileScreen(
-                  fullPhone: widget.fullPhone,
-                  fullName: _nameController.text.trim(),
-                ),
+                builder: (_) => UploadProfileScreen(draft: widget.draft),
               ),
             );
           },
@@ -1104,6 +1243,7 @@ class _CompleteDataScreenState extends State<CompleteDataScreen> {
     // Tandai touched meskipun user cancel
     setState(() => _touchedBirth = true);
     if (selected == null || !mounted) return;
+    _birthDate = selected;
     _birthDateController.text =
         '${selected.day.toString().padLeft(2, '0')}/'
         '${selected.month.toString().padLeft(2, '0')}/'
@@ -1115,22 +1255,21 @@ class _CompleteDataScreenState extends State<CompleteDataScreen> {
 class UploadProfileScreen extends StatefulWidget {
   const UploadProfileScreen({
     super.key,
-    required this.fullPhone,
-    required this.fullName,
+    required this.draft,
   });
 
-  final String fullPhone;
-  final String fullName;
+  final RegistrationDraft draft;
 
   @override
   State<UploadProfileScreen> createState() => _UploadProfileScreenState();
 }
 
 class _UploadProfileScreenState extends State<UploadProfileScreen> {
-  File? _imageFile;
+  Uint8List? _imageBytes;
+  String? _imageName;
   int? _selectedAvatar; // index 0–5, null = belum pilih
 
-  bool get _hasSelection => _imageFile != null || _selectedAvatar != null;
+  bool get _hasSelection => _imageBytes != null || _selectedAvatar != null;
 
   static const _avatarColors = [
     AppColors.primary,
@@ -1225,8 +1364,11 @@ class _UploadProfileScreenState extends State<UploadProfileScreen> {
       maxWidth: 512,
     );
     if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    if (!mounted) return;
     setState(() {
-      _imageFile = File(picked.path);
+      _imageBytes = bytes;
+      _imageName = picked.name;
       _selectedAvatar = null;
     });
   }
@@ -1297,10 +1439,10 @@ class _UploadProfileScreenState extends State<UploadProfileScreen> {
                         width: 3,
                       ),
                     ),
-                    child: _imageFile != null
+                    child: _imageBytes != null
                         ? ClipOval(
-                            child: Image.file(
-                              _imageFile!,
+                            child: Image.memory(
+                              _imageBytes!,
                               fit: BoxFit.cover,
                               width: 150,
                               height: 150,
@@ -1355,11 +1497,12 @@ class _UploadProfileScreenState extends State<UploadProfileScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: List.generate(_avatarColors.length, (i) {
-                final isSelected = _selectedAvatar == i && _imageFile == null;
+                final isSelected = _selectedAvatar == i && _imageBytes == null;
                 return GestureDetector(
                   onTap: () => setState(() {
                     _selectedAvatar = i;
-                    _imageFile = null;
+                    _imageBytes = null;
+                    _imageName = null;
                   }),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
@@ -1411,13 +1554,14 @@ class _UploadProfileScreenState extends State<UploadProfileScreen> {
   }
 
   void _handleSave() {
-    // Langkah terakhir register: buat PIN wallet, lalu masuk ke Home.
+    // Simpan foto (bila pilih foto, bukan avatar preset) ke draft.
+    widget.draft
+      ..photoBytes = _imageBytes
+      ..photoName = _imageName;
+    // Langkah terakhir register: buat PIN wallet, lalu daftarkan akun.
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => CreatePinScreen(
-          fullPhone: widget.fullPhone,
-          fullName: widget.fullName,
-        ),
+        builder: (_) => CreatePinScreen(draft: widget.draft),
       ),
     );
   }
@@ -1426,12 +1570,10 @@ class _UploadProfileScreenState extends State<UploadProfileScreen> {
 class CreatePinScreen extends StatefulWidget {
   const CreatePinScreen({
     super.key,
-    required this.fullPhone,
-    required this.fullName,
+    required this.draft,
   });
 
-  final String fullPhone;
-  final String fullName;
+  final RegistrationDraft draft;
 
   @override
   State<CreatePinScreen> createState() => _CreatePinScreenState();
@@ -1492,21 +1634,41 @@ class _CreatePinScreenState extends State<CreatePinScreen> {
   Future<void> _finish(String pin) async {
     setState(() => _isSubmitting = true);
     try {
-      context.read<WalletController>().setPin(pin);
-      await context.read<AuthController>().signInPreview(
-        phone: widget.fullPhone,
-        name: widget.fullName,
-      );
+      final draft = widget.draft;
+      await context.read<AuthController>().completeRegistration(
+            name: draft.name,
+            email: (draft.email != null && draft.email!.isEmpty)
+                ? null
+                : draft.email,
+            phone: draft.phone,
+            password: draft.password,
+            verificationToken: draft.verificationToken,
+            walletPin: pin,
+            birthDate: draft.birthDate,
+            gender: draft.gender,
+            occupation: draft.occupation,
+            photoBytes: draft.photoBytes,
+            photoName: draft.photoName,
+          );
       if (!mounted) return;
+      AppToast.success(context, 'Registrasi berhasil. Selamat datang!');
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
         (route) => false,
       );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _error = e.message;
+        _firstPin = null;
+        _input = '';
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _isSubmitting = false;
-        _error = 'Gagal menyimpan PIN. Coba lagi.';
+        _error = 'Gagal membuat akun. Coba lagi.';
         _firstPin = null;
         _input = '';
       });
@@ -1623,6 +1785,8 @@ class _LabeledInput extends StatelessWidget {
     this.readOnly = false,
     this.suffixIcon,
     this.onTap,
+    this.onSuffixTap,
+    this.obscureText = false,
     this.isError = false,
   });
 
@@ -1634,6 +1798,8 @@ class _LabeledInput extends StatelessWidget {
   final bool readOnly;
   final IconData? suffixIcon;
   final VoidCallback? onTap;
+  final VoidCallback? onSuffixTap;
+  final bool obscureText;
   final bool isError;
 
   @override
@@ -1659,14 +1825,18 @@ class _LabeledInput extends StatelessWidget {
           keyboardType: keyboardType,
           readOnly: readOnly,
           onTap: onTap,
+          obscureText: obscureText,
           decoration: InputDecoration(
             hintText: hint,
             suffixIcon: suffixIcon == null
                 ? null
-                : Icon(
-                    suffixIcon,
-                    color: isError ? AppColors.error : _textMuted,
-                    size: 20,
+                : GestureDetector(
+                    onTap: onSuffixTap,
+                    child: Icon(
+                      suffixIcon,
+                      color: isError ? AppColors.error : _textMuted,
+                      size: 20,
+                    ),
                   ),
             filled: true,
             fillColor: isError
@@ -1772,6 +1942,77 @@ class _GenderDropdown extends StatelessWidget {
           items: const [
             DropdownMenuItem(value: 'Laki-laki', child: Text('Laki-laki')),
             DropdownMenuItem(value: 'Perempuan', child: Text('Perempuan')),
+          ],
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+}
+
+/// Dropdown kategori occupancy (opsional) untuk segmentasi customer.
+class _OccupationDropdown extends StatelessWidget {
+  const _OccupationDropdown({required this.value, required this.onChanged});
+
+  static const options = <String>[
+    'Pekerja',
+    'Anak Kos',
+    'Ibu Rumah Tangga',
+    'Laundry Kiloan',
+  ];
+
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Kategori (opsional)',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            color: _textDark,
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+          ),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          initialValue: value,
+          decoration: InputDecoration(
+            hintText: 'Pilih kategori kamu',
+            filled: true,
+            fillColor: _bgColor,
+            hintStyle: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(color: _textMuted, fontSize: 15),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 14,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(_inputRadius),
+              borderSide: BorderSide(color: _borderColor, width: 1),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(_inputRadius),
+              borderSide: BorderSide(color: _primaryBlue, width: 1.5),
+            ),
+          ),
+          dropdownColor: Colors.white,
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(color: _textDark, fontSize: 16),
+          icon: Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: _textMuted,
+          ),
+          items: [
+            for (final o in options)
+              DropdownMenuItem(value: o, child: Text(o)),
           ],
           onChanged: onChanged,
         ),

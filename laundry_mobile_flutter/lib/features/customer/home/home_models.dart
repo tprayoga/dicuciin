@@ -20,6 +20,8 @@ class _MachineData {
     this.capacity = '8 KG',
     this.estimasi = '30 Menit',
     this.price = 20000,
+    this.serviceId = '',
+    this.outletId = '',
   });
 
   final String name;
@@ -28,6 +30,10 @@ class _MachineData {
   final String capacity;
   final String estimasi;
   final int price;
+
+  /// ID layanan & outlet untuk membuat order nyata (kosong = data mock lama).
+  final String serviceId;
+  final String outletId;
 }
 
 /// Ringkasan order yang dibawa dari pilih mesin → checkout → pembayaran → sukses.
@@ -41,6 +47,8 @@ class _CheckoutData {
     required this.locationName,
     required this.orderNo,
     required this.date,
+    required this.serviceId,
+    required this.outletId,
   });
 
   factory _CheckoutData.fromMachine(
@@ -54,8 +62,10 @@ class _CheckoutData {
       estimasi: machine.estimasi,
       price: machine.price,
       locationName: locationName,
-      orderNo: '#ORD0001',
+      orderNo: '-',
       date: _formatDateId(DateTime.now()),
+      serviceId: machine.serviceId,
+      outletId: machine.outletId,
     );
   }
 
@@ -67,44 +77,11 @@ class _CheckoutData {
   final String locationName;
   final String orderNo;
   final String date;
+
+  /// ID layanan & outlet untuk membuat order nyata di checkout.
+  final String serviceId;
+  final String outletId;
 }
-
-class _PromoData {
-  const _PromoData({
-    required this.title,
-    required this.description,
-    required this.period,
-    required this.code,
-  });
-
-  final String title;
-  final String description;
-  final String period;
-  final String code; // sama dgn kode voucher yg berlaku di checkout
-}
-
-// Kode di sini sengaja sama dengan `_vouchers`/`_voucherDiscount` agar promo
-// yang ditampilkan benar-benar bisa dipakai di halaman checkout.
-const _promos = <_PromoData>[
-  _PromoData(
-    title: 'Diskon 25% Semua Layanan',
-    description: 'Berlaku untuk semua jenis mesin.',
-    period: 'Periode 1 s.d. 30 Mei 2026',
-    code: 'DISKON25',
-  ),
-  _PromoData(
-    title: 'Potongan Rp5.000',
-    description: 'Untuk setiap transaksi cuci atau pengering.',
-    period: 'Periode 1 s.d. 30 Mei 2026',
-    code: 'HEMAT5K',
-  ),
-  _PromoData(
-    title: 'Potongan Rp3.000',
-    description: 'Hemat tiap pemakaian mesin.',
-    period: 'Periode 1 s.d. 30 Mei 2026',
-    code: 'CUCIHEMAT',
-  ),
-];
 
 enum _OrderStatus { running, done }
 
@@ -171,12 +148,4 @@ String _formatRupiah(int value) {
     buf.write(s[i]);
   }
   return 'Rp $buf';
-}
-
-const _vouchers = <String, int>{'HEMAT5K': 5000, 'CUCIHEMAT': 3000};
-
-/// Diskon (rupiah) untuk [code] terhadap [price]. 0 = kode tidak dikenal.
-int _voucherDiscount(String code, int price) {
-  if (code == 'DISKON25') return (price * 0.25).round();
-  return _vouchers[code] ?? 0;
 }

@@ -19,21 +19,30 @@ void main() {
 
   final apiClient = ApiClient(baseUrl: AppConfig.apiBaseUrl);
   final tokenStorage = TokenStorage();
+  final authService = AuthService(apiClient);
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
           create: (_) => AuthController(
-            authService: AuthService(apiClient),
+            authService: authService,
             tokenStorage: tokenStorage,
           ),
         ),
-        ChangeNotifierProvider(
+        ChangeNotifierProxyProvider<AuthController, CustomerController>(
           create: (_) =>
               CustomerController(customerService: CustomerService(apiClient)),
+          update: (_, auth, customer) => (customer ??
+              CustomerController(customerService: CustomerService(apiClient)))
+            ..syncFromAuth(auth),
         ),
-        ChangeNotifierProvider(create: (_) => WalletController()),
+        ChangeNotifierProxyProvider<AuthController, WalletController>(
+          create: (_) => WalletController(authService: authService),
+          update: (_, auth, wallet) => (wallet ??
+              WalletController(authService: authService))
+            ..syncFromAuth(auth),
+        ),
       ],
       child: const CustomerApp(),
     ),

@@ -37,8 +37,15 @@ async function bootstrap() {
   app.use(compression());
   app.use(cookieParser());
 
-  // Serve file upload statis di /uploads (foto profil, bukti bayar).
-  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
+  // Serve file upload statis di /uploads (foto profil, bukti bayar, banner).
+  // Static middleware ini jalan sebelum enableCors → set header CORS manual agar
+  // gambar (banner/promo) bisa dimuat lintas origin oleh Flutter Web/mobile.
+  app.useStaticAssets(join(process.cwd(), 'uploads'), {
+    prefix: '/uploads/',
+    setHeaders: (res) => {
+      res.set('Access-Control-Allow-Origin', '*');
+    },
+  });
 
   // CORS: hanya izinkan origin yang terdaftar di env
   const allowedOriginPatterns = configService

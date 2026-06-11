@@ -238,9 +238,12 @@ class _LocationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const borderRadius = BorderRadius.all(Radius.circular(14));
-    final machineLabel = machineCount > 0
-        ? '$machineCount Mesin Tersedia'
-        : 'Mesin Penuh';
+    // machineCount < 0 → jumlah belum diketahui (mis. dari daftar outlet API).
+    final machineUnknown = machineCount < 0;
+    final machineAvailable = machineUnknown || machineCount > 0;
+    final machineLabel = machineUnknown
+        ? 'Mesin Tersedia'
+        : (machineCount > 0 ? '$machineCount Mesin Tersedia' : 'Mesin Penuh');
 
     return Opacity(
       opacity: enabled ? 1 : 0.55,
@@ -294,10 +297,10 @@ class _LocationCard extends StatelessWidget {
                             children: [
                               _buildTag(
                                 machineLabel,
-                                machineCount > 0
+                                machineAvailable
                                     ? AppColors.tintBlueAlt
                                     : AppColors.border,
-                                machineCount > 0 ? _primary : _textMuted,
+                                machineAvailable ? _primary : _textMuted,
                               ),
                               _buildTag(
                                 isOpen ? 'Buka' : 'Tutup',
@@ -319,7 +322,9 @@ class _LocationCard extends StatelessWidget {
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
-                                  'Tutup Pukul $closeTime WIB',
+                                  closeTime.isEmpty
+                                      ? 'Ketuk untuk lihat mesin'
+                                      : 'Tutup Pukul $closeTime WIB',
                                   style: const TextStyle(
                                     fontSize: 13,
                                     color: _textDark,

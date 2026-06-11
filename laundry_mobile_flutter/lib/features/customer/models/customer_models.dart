@@ -2,17 +2,25 @@ class CustomerProfile {
   CustomerProfile({
     required this.id,
     required this.memberCode,
+    this.hasWalletPin = false,
+    this.occupation,
     this.wallet,
   });
 
   final String id;
   final String memberCode;
+  final bool hasWalletPin;
+
+  /// Kategori occupancy (Pekerja / Anak Kos / Ibu Rumah Tangga / Laundry Kiloan).
+  final String? occupation;
   final WalletData? wallet;
 
   factory CustomerProfile.fromJson(Map<String, dynamic> json) {
     return CustomerProfile(
       id: json['id'] as String,
       memberCode: (json['memberCode'] as String?) ?? '-',
+      hasWalletPin: (json['hasWalletPin'] as bool?) ?? false,
+      occupation: json['occupation'] as String?,
       wallet: json['wallet'] is Map<String, dynamic>
           ? WalletData.fromJson(json['wallet'] as Map<String, dynamic>)
           : null,
@@ -114,6 +122,7 @@ class PromoSummary {
     required this.endDate,
     required this.isActive,
     this.description,
+    this.bannerUrl,
   });
 
   final String id;
@@ -124,6 +133,7 @@ class PromoSummary {
   final DateTime endDate;
   final bool isActive;
   final String? description;
+  final String? bannerUrl;
 
   factory PromoSummary.fromJson(Map<String, dynamic> json) {
     return PromoSummary(
@@ -136,6 +146,7 @@ class PromoSummary {
           DateTime.fromMillisecondsSinceEpoch(0),
       isActive: (json['isActive'] as bool?) ?? false,
       description: json['description'] as String?,
+      bannerUrl: json['bannerUrl'] as String?,
     );
   }
 }
@@ -168,6 +179,9 @@ class ServicePriceOption {
     required this.serviceName,
     required this.price,
     required this.unit,
+    this.machineType,
+    this.capacityKg,
+    this.estimateMinutes,
   });
 
   final String id;
@@ -176,6 +190,11 @@ class ServicePriceOption {
   final String serviceName;
   final double price;
   final String unit;
+
+  /// Tipe mesin dari katalog Service (mis. WASHER, DRYER, WASHER_DRYER, IRON).
+  final String? machineType;
+  final double? capacityKg;
+  final int? estimateMinutes;
 
   factory ServicePriceOption.fromJson(Map<String, dynamic> json) {
     final service = json['service'] as Map<String, dynamic>? ?? const {};
@@ -186,6 +205,11 @@ class ServicePriceOption {
       serviceName: (service['name'] as String?) ?? '-',
       price: _toDouble(json['price']),
       unit: (json['unit'] as String?) ?? 'unit',
+      machineType: service['machineType'] as String?,
+      capacityKg: service['capacityKg'] == null
+          ? null
+          : _toDouble(service['capacityKg']),
+      estimateMinutes: (service['estimateMinutes'] as num?)?.toInt(),
     );
   }
 }
@@ -327,6 +351,148 @@ class PaymentProofUploadResult {
       orderId: (json['orderId'] as String?) ?? '',
       filename: (json['filename'] as String?) ?? '',
       url: (json['url'] as String?) ?? '',
+    );
+  }
+}
+
+/// Reservasi mesin dari endpoint `/bookings`.
+class MachineBooking {
+  MachineBooking({
+    required this.id,
+    required this.bookingCode,
+    required this.status,
+    this.deviceName,
+    this.deviceCode,
+  });
+
+  final String id;
+  final String bookingCode;
+  final String status;
+  final String? deviceName;
+  final String? deviceCode;
+
+  factory MachineBooking.fromJson(Map<String, dynamic> json) {
+    final device = json['device'] as Map<String, dynamic>?;
+    return MachineBooking(
+      id: (json['id'] as String?) ?? '',
+      bookingCode: (json['bookingCode'] as String?) ?? '-',
+      status: (json['status'] as String?) ?? '-',
+      deviceName: device?['name'] as String?,
+      deviceCode: device?['deviceCode'] as String?,
+    );
+  }
+}
+
+/// Hasil verifikasi scan QR mesin (`POST /bookings/verify`).
+class BookingVerifyResult {
+  BookingVerifyResult({
+    required this.verified,
+    required this.status,
+    required this.message,
+    this.booking,
+  });
+
+  final bool verified;
+  final String status;
+  final String message;
+  final MachineBooking? booking;
+
+  factory BookingVerifyResult.fromJson(Map<String, dynamic> json) {
+    return BookingVerifyResult(
+      verified: json['verified'] == true,
+      status: (json['status'] as String?) ?? '-',
+      message: (json['message'] as String?) ?? '',
+      booking: json['booking'] is Map<String, dynamic>
+          ? MachineBooking.fromJson(json['booking'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+}
+
+/// Statistik member dari `GET /customers/:id/stats`.
+class MemberStats {
+  MemberStats({
+    required this.totalOrders,
+    required this.completedOrders,
+    required this.totalSpending,
+    this.favoriteService,
+  });
+
+  final int totalOrders;
+  final int completedOrders;
+  final double totalSpending;
+  final String? favoriteService;
+
+  factory MemberStats.fromJson(Map<String, dynamic> json) {
+    return MemberStats(
+      totalOrders: (json['totalOrders'] as num?)?.toInt() ?? 0,
+      completedOrders: (json['completedOrders'] as num?)?.toInt() ?? 0,
+      totalSpending: _toDouble(json['totalSpending']),
+      favoriteService: json['favoriteService'] as String?,
+    );
+  }
+
+  static MemberStats empty() => MemberStats(
+        totalOrders: 0,
+        completedOrders: 0,
+        totalSpending: 0,
+      );
+}
+
+/// Banner/pop-up terkelola admin dari `GET /banners/active`.
+class AppBanner {
+  AppBanner({
+    required this.id,
+    required this.title,
+    required this.imageUrl,
+    required this.placement,
+    this.linkUrl,
+    this.ctaLabel,
+    this.promoCode,
+    this.promoName,
+  });
+
+  final String id;
+  final String title;
+  final String imageUrl;
+
+  /// 'HOME_POPUP' atau 'HOME_CAROUSEL'.
+  final String placement;
+  final String? linkUrl;
+  final String? ctaLabel;
+
+  /// Bila banner ditautkan ke sebuah promo, kode & nama promonya.
+  final String? promoCode;
+  final String? promoName;
+
+  bool get hasPromo => (promoCode ?? '').isNotEmpty;
+
+  factory AppBanner.fromJson(Map<String, dynamic> json) {
+    final promo = json['promo'] as Map<String, dynamic>?;
+    return AppBanner(
+      id: json['id'] as String,
+      title: (json['title'] as String?) ?? '',
+      imageUrl: (json['imageUrl'] as String?) ?? '',
+      placement: (json['placement'] as String?) ?? 'HOME_CAROUSEL',
+      linkUrl: json['linkUrl'] as String?,
+      ctaLabel: json['ctaLabel'] as String?,
+      promoCode: promo?['code'] as String?,
+      promoName: promo?['name'] as String?,
+    );
+  }
+}
+
+/// Hasil validasi kode promo dari `POST /promos/validate`.
+class PromoValidation {
+  PromoValidation({required this.discount, required this.isValid});
+
+  final double discount;
+  final bool isValid;
+
+  factory PromoValidation.fromJson(Map<String, dynamic> json) {
+    return PromoValidation(
+      discount: _toDouble(json['discount']),
+      isValid: json['isValid'] == true,
     );
   }
 }

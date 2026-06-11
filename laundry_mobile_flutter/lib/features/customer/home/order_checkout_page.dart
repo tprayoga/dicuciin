@@ -26,6 +26,10 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
   bool _voucherApplied = false;
   String _appliedVoucherCode = '';
   int _discount = 0;
+  // Order nyata yang sudah dibuat di backend (dibuat sekali saat bayar).
+  // Direset bila voucher berubah agar diskon ikut terhitung ulang.
+  CreatedOrder? _createdOrder;
+  bool _processing = false;
 
   @override
   void dispose() {
@@ -472,32 +476,61 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
     );
   }
 
-  void _onApplyVoucher() {
+  Future<void> _onApplyVoucher() async {
     final code = _voucherController.text.trim().toUpperCase();
     if (code.isEmpty) return;
 
-    final discount = _voucherDiscount(code, widget.data.price);
-    if (discount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Kode promo "$code" tidak berlaku.')),
+    final auth = context.read<AuthController>();
+    final user = auth.user;
+    final token = auth.accessToken;
+    final messenger = ScaffoldMessenger.of(context);
+    if (user == null || token == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Sesi berakhir. Silakan masuk lagi.')),
       );
       return;
     }
 
-    setState(() {
-      _voucherApplied = true;
-      _appliedVoucherCode = code;
-      _discount = discount;
-      _voucherController.text = code;
-      _voucherController.selection = TextSelection.collapsed(
-        offset: _voucherController.text.length,
+    try {
+      final result = await context.read<CustomerController>().validatePromo(
+            user: user,
+            accessToken: token,
+            code: code,
+            orderAmount: widget.data.price,
+          );
+      if (!mounted) return;
+      if (!result.isValid || result.discount <= 0) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Kode promo "$code" tidak memberi potongan.')),
+        );
+        return;
+      }
+      setState(() {
+        _voucherApplied = true;
+        _appliedVoucherCode = code;
+        _discount = result.discount.round();
+        _createdOrder = null; // promo berubah → order dibuat ulang
+        _voucherController.text = code;
+        _voucherController.selection = TextSelection.collapsed(
+          offset: _voucherController.text.length,
+        );
+      });
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Voucher $code diterapkan, hemat ${_formatRupiah(_discount)}.',
+          ),
+        ),
       );
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Voucher $code diterapkan, hemat ${_formatRupiah(discount)}.'),
-      ),
-    );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Gagal memvalidasi voucher.')),
+      );
+    }
   }
 
   void _onRemoveVoucher() {
@@ -505,8 +538,55 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
       _voucherApplied = false;
       _appliedVoucherCode = '';
       _discount = 0;
+      _createdOrder = null; // promo dilepas → order dibuat ulang tanpa diskon
       _voucherController.clear();
     });
+  }
+
+  /// Buat order nyata di backend (sekali). Diskon dihitung server bila ada
+  /// voucher. Mengembalikan null bila gagal (pesan sudah ditampilkan).
+  Future<CreatedOrder?> _ensureOrder() async {
+    if (_createdOrder != null) return _createdOrder;
+
+    final auth = context.read<AuthController>();
+    final user = auth.user;
+    final token = auth.accessToken;
+    final messenger = ScaffoldMessenger.of(context);
+
+    if (user == null || token == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Sesi berakhir. Silakan masuk lagi.')),
+      );
+      return null;
+    }
+    if (widget.data.serviceId.isEmpty || widget.data.outletId.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Layanan ini belum bisa dipesan.')),
+      );
+      return null;
+    }
+
+    final controller = context.read<CustomerController>();
+    final created = await controller.createOrder(
+      user: user,
+      accessToken: token,
+      outletId: widget.data.outletId,
+      items: [
+        CreateOrderItemInput(serviceId: widget.data.serviceId, quantity: 1),
+      ],
+      promoCode: _voucherApplied ? _appliedVoucherCode : null,
+    );
+    if (created == null) {
+      if (!mounted) return null;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(controller.errorMessage ?? 'Gagal membuat order.'),
+        ),
+      );
+      return null;
+    }
+    _createdOrder = created;
+    return created;
   }
 
   Future<void> _payWithWallet() async {
@@ -544,7 +624,12 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
       return;
     }
 
-    if (!wallet.canPay(_total)) {
+    // Buat order dulu agar total final (setelah diskon) dihitung server.
+    final order = await _ensureOrder();
+    if (order == null || !mounted) return;
+    final total = order.totalAmount.round();
+
+    if (!wallet.canPay(total)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Saldo tidak cukup. Silakan top up dulu.')),
       );
@@ -555,32 +640,53 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _WalletPinSheet(amount: _total),
+      builder: (_) => _WalletPinSheet(amount: total),
     );
     if (verified != true || !mounted) return;
 
-    if (!wallet.pay(_total)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Saldo tidak cukup. Silakan top up dulu.')),
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      await wallet.payOrder(orderId: order.id, amount: total);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      return;
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Pembayaran gagal. Coba lagi.')),
       );
       return;
     }
+    if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    messenger.showSnackBar(
       const SnackBar(content: Text('Pembayaran saldo berhasil.')),
     );
-    Navigator.of(context).pushReplacement(
+    navigator.pushReplacement(
       MaterialPageRoute(
         builder: (_) => _OrderSuccessPage(
           data: widget.data,
           methodLabel: 'Saldo',
-          total: _total,
+          total: total,
+          orderId: order.id,
         ),
       ),
     );
   }
 
   Future<void> _onPayNow() async {
+    if (_processing) return;
+    setState(() => _processing = true);
+    try {
+      await _runPayment();
+    } finally {
+      if (mounted) setState(() => _processing = false);
+    }
+  }
+
+  Future<void> _runPayment() async {
     if (_method == _PaymentMethod.saldo) {
       await _payWithWallet();
       return;

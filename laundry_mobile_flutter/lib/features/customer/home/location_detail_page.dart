@@ -1,20 +1,23 @@
 part of '../home_screen.dart';
 
 class _LocationDetailPage extends StatefulWidget {
-  const _LocationDetailPage();
+  const _LocationDetailPage({required this.outlet});
+
+  final OutletOption outlet;
 
   @override
   State<_LocationDetailPage> createState() => _LocationDetailPageState();
 }
 
 class _LocationDetailPageState extends State<_LocationDetailPage> {
-  static const _locationName = 'Laundry Smart Sudirman';
-
   _MachineType _type = _MachineType.washer;
   bool _isMachineLoading = true;
   String? _machineError;
   List<_MachineData> _washerMachines = const [];
   List<_MachineData> _dryerMachines = const [];
+
+  String get _locationName => widget.outlet.name;
+  int get _availableCount => _washerMachines.length + _dryerMachines.length;
 
   @override
   void initState() {
@@ -24,10 +27,9 @@ class _LocationDetailPageState extends State<_LocationDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    const locationName = _locationName;
-    const locationAddress = 'Jl. Jend. Sudirman No. 45, Jakarta Pusat';
-    const closeTime = '21:00';
-    const availableMachineCount = 5;
+    final locationName = widget.outlet.name;
+    final locationAddress = widget.outlet.address;
+    final availableMachineCount = _availableCount;
 
     final machines = _machinesForSelectedType;
 
@@ -188,9 +190,9 @@ class _LocationDetailPageState extends State<_LocationDetailPage> {
                         Container(width: 1, height: 36, color: _line),
                         Expanded(
                           child: _infoTile(
-                            icon: Icons.access_time,
-                            title: 'Tutup',
-                            value: '$closeTime WIB',
+                            icon: Icons.local_laundry_service_outlined,
+                            title: 'Layanan',
+                            value: '$availableMachineCount Pilihan',
                           ),
                         ),
                         Container(width: 1, height: 36, color: _line),
@@ -317,66 +319,65 @@ class _LocationDetailPageState extends State<_LocationDetailPage> {
       _machineError = null;
     });
 
-    try {
-      // Simulasi fetch backend. Nanti diganti call API nyata.
-      await Future<void>.delayed(const Duration(milliseconds: 450));
-      if (!mounted) return;
+    final token = context.read<AuthController>().accessToken;
+    if (token == null) {
       setState(() {
-        _washerMachines = const [
-          _MachineData(
-            name: 'Mesin Cuci #01',
-            status: _MachineStatus.available,
-            type: _MachineType.washer,
-            capacity: '8 KG',
-            estimasi: '30 Menit',
-            price: 20000,
-          ),
-          _MachineData(
-            name: 'Mesin Cuci #02',
-            status: _MachineStatus.inUse,
-            type: _MachineType.washer,
-            capacity: '12 KG',
-            estimasi: '40 Menit',
-            price: 25000,
-          ),
-          _MachineData(
-            name: 'Mesin Cuci #03',
-            status: _MachineStatus.maintenance,
-            type: _MachineType.washer,
-          ),
-        ];
-        _dryerMachines = const [
-          _MachineData(
-            name: 'Mesin Pengering #01',
-            status: _MachineStatus.available,
-            type: _MachineType.dryer,
-            capacity: '10 KG',
-            estimasi: '25 Menit',
-            price: 18000,
-          ),
-          _MachineData(
-            name: 'Mesin Pengering #02',
-            status: _MachineStatus.inUse,
-            type: _MachineType.dryer,
-            capacity: '10 KG',
-            estimasi: '25 Menit',
-            price: 18000,
-          ),
-          _MachineData(
-            name: 'Mesin Pengering #03',
-            status: _MachineStatus.maintenance,
-            type: _MachineType.dryer,
-          ),
-        ];
+        _isMachineLoading = false;
+        _machineError = 'Silakan masuk untuk melihat layanan.';
+      });
+      return;
+    }
+
+    try {
+      final prices = await context.read<CustomerController>().getServicePrices(
+            accessToken: token,
+            outletId: widget.outlet.id,
+          );
+      if (!mounted) return;
+
+      final washers = <_MachineData>[];
+      final dryers = <_MachineData>[];
+      for (final p in prices) {
+        final type = _machineTypeOf(p.machineType);
+        final machine = _MachineData(
+          name: p.serviceName,
+          status: _MachineStatus.available,
+          type: type,
+          capacity: p.capacityKg != null
+              ? '${p.capacityKg!.toStringAsFixed(0)} KG'
+              : '—',
+          estimasi:
+              p.estimateMinutes != null ? '${p.estimateMinutes} Menit' : '—',
+          price: p.price.round(),
+          serviceId: p.serviceId,
+          outletId: p.outletId.isNotEmpty ? p.outletId : widget.outlet.id,
+        );
+        (type == _MachineType.dryer ? dryers : washers).add(machine);
+      }
+
+      setState(() {
+        _washerMachines = washers;
+        _dryerMachines = dryers;
         _isMachineLoading = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _isMachineLoading = false;
-        _machineError = 'Gagal memuat data mesin. Coba lagi.';
+        _machineError = 'Gagal memuat layanan. Coba lagi.';
       });
     }
+  }
+
+  /// Klasifikasi tipe mesin dari `machineType` katalog Service.
+  /// Hanya yang murni pengering masuk tab Pengering; sisanya (cuci, cuci+kering,
+  /// setrika, dll) masuk tab Mesin Cuci.
+  _MachineType _machineTypeOf(String? machineType) {
+    final t = (machineType ?? '').toUpperCase();
+    if (t.contains('DRYER') && !t.contains('WASHER')) {
+      return _MachineType.dryer;
+    }
+    return _MachineType.washer;
   }
 
   List<Widget> _buildMachineStateSlivers(

@@ -37,7 +37,13 @@ class _WalletPinSheetState extends State<_WalletPinSheet> {
   Future<void> _verify() async {
     await Future<void>.delayed(const Duration(milliseconds: 120));
     if (!mounted) return;
-    final ok = context.read<WalletController>().verifyPin(_input);
+    bool ok;
+    try {
+      ok = await context.read<WalletController>().verifyPin(_input);
+    } catch (_) {
+      ok = false;
+    }
+    if (!mounted) return;
     if (ok) {
       Navigator.of(context).pop(true);
       return;

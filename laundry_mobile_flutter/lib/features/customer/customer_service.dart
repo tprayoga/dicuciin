@@ -8,6 +8,17 @@ class CustomerService {
 
   final ApiClient _apiClient;
 
+  /// Ambil list dari payload, tahan dua bentuk respons paginated:
+  /// (a) sudah berupa List (interceptor menaikkan `data` ke atas), atau
+  /// (b) Map `{data: [...], meta}`.
+  List<dynamic> _asList(dynamic payload) {
+    if (payload is List) return payload;
+    if (payload is Map<String, dynamic> && payload['data'] is List) {
+      return payload['data'] as List<dynamic>;
+    }
+    return const [];
+  }
+
   Future<WalletData> getWallet({
     required String customerId,
     required String accessToken,
@@ -34,7 +45,7 @@ class CustomerService {
       },
     );
 
-    final list = (payload as Map<String, dynamic>)['data'] as List<dynamic>? ?? const [];
+    final list = _asList(payload);
     return list
         .whereType<Map<String, dynamic>>()
         .map(OrderSummary.fromJson)
@@ -55,12 +66,101 @@ class CustomerService {
       },
     );
 
-    final list = (payload as Map<String, dynamic>)['data'] as List<dynamic>? ?? const [];
+    final list = _asList(payload);
     return list
         .whereType<Map<String, dynamic>>()
         .map(PromoSummary.fromJson)
         .where((promo) => promo.isActive)
         .toList();
+  }
+
+  /// Verifikasi pemesan via scan QR mesin (deviceCode).
+  Future<BookingVerifyResult> verifyBooking({
+    required String accessToken,
+    required String deviceCode,
+  }) async {
+    final payload = await _apiClient.post(
+      '/bookings/verify',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({'deviceCode': deviceCode}),
+    );
+    return BookingVerifyResult.fromJson(payload as Map<String, dynamic>);
+  }
+
+  /// Reservasi mesin berdasarkan kode perangkat (hasil scan).
+  Future<MachineBooking> reserveBooking({
+    required String accessToken,
+    required String deviceCode,
+  }) async {
+    final payload = await _apiClient.post(
+      '/bookings',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({'deviceCode': deviceCode}),
+    );
+    return MachineBooking.fromJson(payload as Map<String, dynamic>);
+  }
+
+  Future<MemberStats> getMemberStats({
+    required String customerId,
+    required String accessToken,
+  }) async {
+    final payload = await _apiClient.get(
+      '/customers/$customerId/stats',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return MemberStats.fromJson(payload as Map<String, dynamic>);
+  }
+
+  Future<List<AppBanner>> getBanners({
+    required String accessToken,
+    required String placement,
+  }) async {
+    final payload = await _apiClient.get(
+      '/banners/active',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      queryParameters: {'placement': placement},
+    );
+    final list = _asList(payload);
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(AppBanner.fromJson)
+        .toList();
+  }
+
+  Future<void> submitReview({
+    required String accessToken,
+    required String orderId,
+    required int rating,
+    String? comment,
+  }) async {
+    await _apiClient.post(
+      '/reviews',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({
+        'orderId': orderId,
+        'rating': rating,
+        'source': 'APP',
+        if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
+      }),
+    );
+  }
+
+  Future<PromoValidation> validatePromo({
+    required String accessToken,
+    required String customerId,
+    required String code,
+    required int orderAmount,
+  }) async {
+    final payload = await _apiClient.post(
+      '/promos/validate',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({
+        'code': code,
+        'customerId': customerId,
+        'orderAmount': orderAmount,
+      }),
+    );
+    return PromoValidation.fromJson(payload as Map<String, dynamic>);
   }
 
   Future<List<OutletOption>> getOutlets({required String accessToken}) async {
@@ -70,7 +170,7 @@ class CustomerService {
       queryParameters: const {'page': '1', 'limit': '100'},
     );
 
-    final list = (payload as Map<String, dynamic>)['data'] as List<dynamic>? ?? const [];
+    final list = _asList(payload);
     return list
         .whereType<Map<String, dynamic>>()
         .map(OutletOption.fromJson)
@@ -87,7 +187,7 @@ class CustomerService {
       queryParameters: {'outletId': outletId},
     );
 
-    final list = payload as List<dynamic>? ?? const [];
+    final list = _asList(payload);
     return list
         .whereType<Map<String, dynamic>>()
         .map(ServicePriceOption.fromJson)

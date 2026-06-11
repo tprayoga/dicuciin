@@ -88,6 +88,15 @@ class _AccountPage extends StatelessWidget {
                           ),
                         ),
                         _AccountItem(
+                          icon: Icons.dashboard_outlined,
+                          title: 'Dashboard Member',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const _MemberDashboardPage(),
+                            ),
+                          ),
+                        ),
+                        _AccountItem(
                           icon: Icons.lock_outline,
                           title: context.watch<WalletController>().hasPin
                               ? 'Ubah PIN Wallet'

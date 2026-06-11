@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../core/network/api_exception.dart';
+import '../auth/auth_controller.dart';
 import '../auth/models/auth_models.dart';
 import 'customer_service.dart';
 import 'models/customer_models.dart';
@@ -11,6 +12,36 @@ class CustomerController extends ChangeNotifier {
 
   final CustomerService _customerService;
 
+  // Kunci untuk mendeteksi perubahan auth → muat ulang dashboard sekali.
+  String? _loadedForCustomerId;
+  String? _loadedToken;
+
+  /// Dipanggil ProxyProvider tiap auth berubah. Memuat dashboard begitu profil
+  /// customer tersedia (login maupun sesi dipulihkan), tanpa bergantung pada
+  /// timing initState halaman.
+  void syncFromAuth(AuthController auth) {
+    final user = auth.user;
+    final token = auth.accessToken;
+    final customerId = user?.customer?.id;
+
+    if (user == null || token == null || customerId == null) {
+      if (_loadedForCustomerId != null) {
+        _loadedForCustomerId = null;
+        _loadedToken = null;
+        clear();
+      }
+      return;
+    }
+
+    if (customerId != _loadedForCustomerId || token != _loadedToken) {
+      _loadedForCustomerId = customerId;
+      _loadedToken = token;
+      Future.microtask(
+        () => loadDashboard(user: user, accessToken: token),
+      );
+    }
+  }
+
   bool _isLoading = false;
   bool _isSubmittingOrder = false;
   bool _isUploadingPaymentProof = false;
@@ -19,6 +50,10 @@ class CustomerController extends ChangeNotifier {
   WalletData? _wallet;
   List<OrderSummary> _orders = const [];
   List<PromoSummary> _promos = const [];
+  List<AppBanner> _carouselBanners = const [];
+  List<AppBanner> _popupBanners = const [];
+  bool _popupConsumed = false;
+  MemberStats? _stats;
 
   bool get isLoading => _isLoading;
   bool get isSubmittingOrder => _isSubmittingOrder;
@@ -28,6 +63,16 @@ class CustomerController extends ChangeNotifier {
   WalletData? get wallet => _wallet;
   List<OrderSummary> get orders => _orders;
   List<PromoSummary> get promos => _promos;
+  List<AppBanner> get carouselBanners => _carouselBanners;
+
+  /// Banner pop-up yang belum ditampilkan di sesi ini. Setelah diambil sekali,
+  /// kosong agar pop-up tidak muncul berulang.
+  List<AppBanner> get popupBanners => _popupConsumed ? const [] : _popupBanners;
+
+  /// Tandai pop-up sudah ditampilkan (tidak muncul lagi sesi ini).
+  void markPopupShown() => _popupConsumed = true;
+
+  MemberStats get stats => _stats ?? MemberStats.empty();
 
   Future<void> loadDashboard({required AppUser user, required String accessToken}) async {
     final customerId = user.customer?.id;
@@ -41,23 +86,38 @@ class CustomerController extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
-    try {
-      final results = await Future.wait([
-        _customerService.getWallet(customerId: customerId, accessToken: accessToken),
-        _customerService.getOrders(customerId: customerId, accessToken: accessToken),
-        _customerService.getPromos(accessToken: accessToken),
-      ]);
+    // Tiap bagian dimuat mandiri: kegagalan satu endpoint (mis. server belum
+    // ter-restart untuk fitur baru) tidak mengosongkan bagian lain.
+    final walletF = _guard(() => _customerService.getWallet(
+        customerId: customerId, accessToken: accessToken));
+    final ordersF = _guard(() => _customerService.getOrders(
+        customerId: customerId, accessToken: accessToken));
+    final promosF =
+        _guard(() => _customerService.getPromos(accessToken: accessToken));
+    final carouselF = _guard(() => _customerService.getBanners(
+        accessToken: accessToken, placement: 'HOME_CAROUSEL'));
+    final popupF = _guard(() => _customerService.getBanners(
+        accessToken: accessToken, placement: 'HOME_POPUP'));
+    final statsF = _guard(() => _customerService.getMemberStats(
+        customerId: customerId, accessToken: accessToken));
 
-      _wallet = results[0] as WalletData;
-      _orders = results[1] as List<OrderSummary>;
-      _promos = results[2] as List<PromoSummary>;
-    } on ApiException catch (e) {
-      _errorMessage = e.message;
+    _wallet = await walletF ?? _wallet;
+    _orders = await ordersF ?? _orders;
+    _promos = await promosF ?? _promos;
+    _carouselBanners = await carouselF ?? _carouselBanners;
+    _popupBanners = await popupF ?? _popupBanners;
+    _stats = await statsF ?? _stats;
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  /// Jalankan [fn], kembalikan null bila gagal (tanpa mematikan fetch lain).
+  Future<T?> _guard<T>(Future<T> Function() fn) async {
+    try {
+      return await fn();
     } catch (_) {
-      _errorMessage = 'Gagal memuat data customer.';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      return null;
     }
   }
 
@@ -95,6 +155,74 @@ class CustomerController extends ChangeNotifier {
     }
   }
 
+  /// Verifikasi pemesan via scan QR mesin. Melempar [ApiException] (mis. mesin
+  /// dibooking pelanggan lain / belum booking) agar bisa ditampilkan.
+  Future<BookingVerifyResult> verifyMachine({
+    required String accessToken,
+    required String deviceCode,
+  }) {
+    return _customerService.verifyBooking(
+      accessToken: accessToken,
+      deviceCode: deviceCode,
+    );
+  }
+
+  /// Reservasi mesin berdasarkan kode perangkat hasil scan.
+  Future<MachineBooking> reserveMachine({
+    required String accessToken,
+    required String deviceCode,
+  }) {
+    return _customerService.reserveBooking(
+      accessToken: accessToken,
+      deviceCode: deviceCode,
+    );
+  }
+
+  /// Kirim ulasan untuk sebuah order. true bila berhasil; pesan error di
+  /// [errorMessage] bila gagal (mis. order sudah diulas).
+  Future<bool> submitReview({
+    required String accessToken,
+    required String orderId,
+    required int rating,
+    String? comment,
+  }) async {
+    try {
+      await _customerService.submitReview(
+        accessToken: accessToken,
+        orderId: orderId,
+        rating: rating,
+        comment: comment,
+      );
+      return true;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      return false;
+    } catch (_) {
+      _errorMessage = 'Gagal mengirim ulasan.';
+      return false;
+    }
+  }
+
+  /// Validasi kode promo ke backend. Melempar [ApiException] dengan pesan
+  /// alasan (mis. minimum transaksi) agar bisa ditampilkan ke user.
+  Future<PromoValidation> validatePromo({
+    required AppUser user,
+    required String accessToken,
+    required String code,
+    required int orderAmount,
+  }) {
+    final customerId = user.customer?.id;
+    if (customerId == null) {
+      throw StateError('Akun belum terhubung ke profil customer.');
+    }
+    return _customerService.validatePromo(
+      accessToken: accessToken,
+      customerId: customerId,
+      code: code,
+      orderAmount: orderAmount,
+    );
+  }
+
   Future<OrderDetail?> getOrderDetail({
     required String accessToken,
     required String orderId,
@@ -121,6 +249,10 @@ class CustomerController extends ChangeNotifier {
     _wallet = null;
     _orders = const [];
     _promos = const [];
+    _carouselBanners = const [];
+    _popupBanners = const [];
+    _popupConsumed = false;
+    _stats = null;
     notifyListeners();
   }
 
