@@ -46,18 +46,13 @@ class _AccountPage extends StatelessWidget {
                           padding: const EdgeInsets.all(20),
                           child: Row(
                             children: [
-                              Container(
-                                width: 102,
-                                height: 102,
-                                decoration: const BoxDecoration(
-                                  color: AppColors.tintBlue,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.image_outlined,
-                                  size: 46,
-                                  color: AppColors.textMutedLight,
-                                ),
+                              UserAvatar(
+                                avatarUrl: user?.avatarUrl,
+                                name: user?.name,
+                                size: 102,
+                                iconSize: 46,
+                                backgroundColor: AppColors.tintBlue,
+                                foregroundColor: AppColors.textMutedLight,
                               ),
                               const SizedBox(width: 14),
                               Expanded(

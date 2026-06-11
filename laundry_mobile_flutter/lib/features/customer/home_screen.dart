@@ -10,6 +10,7 @@ import '../../core/network/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/app_buttons.dart';
 import '../../shared/widgets/pin_pad.dart';
+import '../../shared/widgets/user_avatar.dart';
 import '../auth/auth_controller.dart';
 import 'customer_controller.dart';
 import 'models/customer_models.dart';

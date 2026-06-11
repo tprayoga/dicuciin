@@ -190,18 +190,11 @@ class _HomePageState extends State<_HomePage> {
                           // Avatar
                           GestureDetector(
                             onTap: widget.onOpenAccount,
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.2),
-                              ),
-                              child: const Icon(
-                                Icons.person,
-                                color: Colors.white,
-                                size: 20,
-                              ),
+                            child: UserAvatar(
+                              avatarUrl: user?.avatarUrl,
+                              name: user?.name,
+                              size: 40,
+                              iconSize: 20,
                             ),
                           ),
                           const Spacer(),
