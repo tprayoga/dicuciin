@@ -76,6 +76,24 @@ async function onFilePick(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    toast.add({
+      title: 'Format gambar tidak didukung',
+      description: 'Gunakan file JPG, PNG, atau WebP.',
+      color: 'error',
+    })
+    input.value = ''
+    return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    toast.add({
+      title: 'Ukuran gambar terlalu besar',
+      description: 'Ukuran maksimal gambar adalah 10 MB.',
+      color: 'error',
+    })
+    input.value = ''
+    return
+  }
   uploading.value = true
   try {
     const res = await api.upload<{ url: string }>('/uploads/image', file)
@@ -314,7 +332,7 @@ onMounted(load)
                   <input type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="onFilePick">
                   {{ uploading ? 'Mengunggah...' : (form.imageUrl ? 'Ganti Gambar' : 'Pilih Gambar') }}
                 </label>
-                <span class="text-xs text-[#6f809f]">PNG/JPG/WebP, maks 5MB</span>
+                <span class="text-xs text-[#6f809f]">PNG/JPG/WebP, maks. 10 MB</span>
               </div>
               <div v-if="form.imageUrl" class="mt-2 h-32 rounded-lg border border-[#d7e0ee] bg-cover bg-center" :style="{ backgroundImage: `url(${form.imageUrl})` }" />
             </template>

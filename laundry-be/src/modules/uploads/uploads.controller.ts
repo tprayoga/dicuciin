@@ -18,6 +18,9 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { NotFoundException } from '@nestjs/common';
 
+const allowedImageMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+const maxImageSize = 10 * 1024 * 1024;
+
 function fileStorageFactory(destination: string) {
   return diskStorage({
     destination,
@@ -27,6 +30,25 @@ function fileStorageFactory(destination: string) {
     },
   });
 }
+
+const imageUploadOptions = (destination: string) => ({
+  storage: fileStorageFactory(destination),
+  limits: { fileSize: maxImageSize },
+  fileFilter: (
+    _req: Express.Request,
+    file: Express.Multer.File,
+    callback: (error: Error | null, acceptFile: boolean) => void,
+  ) => {
+    if (!allowedImageMimeTypes.includes(file.mimetype)) {
+      callback(
+        new BadRequestException('Hanya file JPEG, PNG, dan WebP yang diizinkan'),
+        false,
+      );
+      return;
+    }
+    callback(null, true);
+  },
+});
 
 @ApiTags('Uploads')
 @ApiBearerAuth()
@@ -50,7 +72,7 @@ export class UploadsController {
     },
   })
   @UseInterceptors(
-    FileInterceptor('file', { storage: fileStorageFactory('uploads/profiles') }),
+    FileInterceptor('file', imageUploadOptions('uploads/profiles')),
   )
   async uploadProfilePhoto(
     @Param('userId') userId: string,
@@ -98,12 +120,18 @@ export class UploadsController {
     },
   })
   @UseInterceptors(
-    FileInterceptor('file', { storage: fileStorageFactory('uploads/images') }),
+    FileInterceptor('file', imageUploadOptions('uploads/images')),
   )
-  async uploadImage(@UploadedFile() file: Express.Multer.File) {
+  async uploadImage(
+    @UploadedFile() file: Express.Multer.File,
+    @Request() req: any,
+  ) {
     if (!file) throw new BadRequestException('No file uploaded');
     this.uploadsService.validateImageFile(file);
-    const url = this.uploadsService.getImageUrl(file.filename);
+    const url = this.uploadsService.getImageUrl(
+      file.filename,
+      `${req.protocol}://${req.get('host')}`,
+    );
     return {
       message: 'Image uploaded successfully',
       filename: file.filename,
@@ -125,7 +153,7 @@ export class UploadsController {
     },
   })
   @UseInterceptors(
-    FileInterceptor('file', { storage: fileStorageFactory('uploads/payments') }),
+    FileInterceptor('file', imageUploadOptions('uploads/payments')),
   )
   async uploadPaymentProof(
     @Param('orderId') orderId: string,

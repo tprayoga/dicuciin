@@ -14,6 +14,24 @@ async function onFilePick(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    toast.add({
+      title: 'Format gambar tidak didukung',
+      description: 'Gunakan file JPG, PNG, atau WebP.',
+      color: 'error',
+    })
+    input.value = ''
+    return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    toast.add({
+      title: 'Ukuran gambar terlalu besar',
+      description: 'Ukuran maksimal gambar adalah 10 MB.',
+      color: 'error',
+    })
+    input.value = ''
+    return
+  }
   uploading.value = true
   try {
     const res = await api.upload<{ url: string }>('/uploads/image', file)
@@ -230,7 +248,7 @@ onMounted(load)
                 <input type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="onFilePick">
                 {{ uploading ? 'Mengunggah...' : (form.bannerUrl ? 'Ganti Gambar' : 'Pilih Gambar') }}
               </label>
-              <span class="text-xs text-[#6f809f]">Dipakai di halaman promo & banner yang menautkan promo ini</span>
+              <span class="text-xs text-[#6f809f]">JPG/PNG/WebP maks. 10 MB</span>
             </div>
             <div v-if="form.bannerUrl" class="mt-2 h-28 rounded-lg border border-[#d7e0ee] bg-cover bg-center" :style="{ backgroundImage: `url(${form.bannerUrl})` }" />
           </UFormField>
@@ -270,7 +288,7 @@ onMounted(load)
           <p class="text-xs text-[#6f809f]">Isi URL gambar agar banner tampil di halaman promo</p>
 
           <div class="flex justify-end pt-2">
-            <UButton type="submit" class="dc-btn-primary px-4 py-2">Simpan</UButton>
+            <UButton type="submit" :disabled="uploading" class="dc-btn-primary px-4 py-2">Simpan</UButton>
           </div>
         </form>
       </template>

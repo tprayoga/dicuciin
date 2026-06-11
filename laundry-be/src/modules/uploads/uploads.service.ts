@@ -18,7 +18,16 @@ export class UploadsService {
   }
 
   /** URL gambar umum (mis. banner/pop-up) yang diunggah admin. */
-  getImageUrl(filename: string): string {
+  getImageUrl(filename: string, requestBaseUrl?: string): string {
+    const configuredBaseUrl = this.configService
+      .get<string>('PUBLIC_BASE_URL')
+      ?.replace(/\/+$/, '');
+    if (configuredBaseUrl) {
+      return `${configuredBaseUrl}/uploads/images/${filename}`;
+    }
+    if (requestBaseUrl) {
+      return `${requestBaseUrl.replace(/\/+$/, '')}/uploads/images/${filename}`;
+    }
     const port = this.configService.get<number>('APP_PORT', 3000);
     return `http://localhost:${port}/uploads/images/${filename}`;
   }
@@ -36,9 +45,9 @@ export class UploadsService {
       throw new BadRequestException('Only JPEG, PNG, and WebP images are allowed');
     }
 
-    const maxSize = 5 * 1024 * 1024; // 5MB
+    const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
-      throw new BadRequestException('File size must not exceed 5MB');
+      throw new BadRequestException('Ukuran file maksimal 10 MB');
     }
   }
 }
