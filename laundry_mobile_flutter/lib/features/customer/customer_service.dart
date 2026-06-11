@@ -142,6 +142,57 @@ class CustomerService {
     );
   }
 
+  /// Daftar mesin nyata sebuah outlet + ringkasan keramaian.
+  Future<OutletMachines> getOutletMachines({
+    required String accessToken,
+    required String outletId,
+  }) async {
+    final payload = await _apiClient.get(
+      '/bookings/outlet/$outletId/machines',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return OutletMachines.fromJson(payload as Map<String, dynamic>);
+  }
+
+  /// Ringkasan keramaian semua outlet → map keyed by outletId.
+  Future<Map<String, OutletOccupancy>> getOccupancyMap({
+    required String accessToken,
+  }) async {
+    final payload = await _apiClient.get(
+      '/bookings/occupancy',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    final list = (payload as List).cast<Map<String, dynamic>>();
+    return {
+      for (final o in list)
+        (o['outletId'] as String): OutletOccupancy.fromJson(o),
+    };
+  }
+
+  /// Booking aktif (RESERVED belum kadaluarsa / IN_USE) milik customer.
+  Future<List<MachineBooking>> getActiveBookings({
+    required String accessToken,
+  }) async {
+    final payload = await _apiClient.get(
+      '/bookings/active',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return (payload as List)
+        .map((e) => MachineBooking.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Batalkan reservasi yang belum aktif.
+  Future<void> cancelBooking({
+    required String accessToken,
+    required String bookingId,
+  }) async {
+    await _apiClient.post(
+      '/bookings/$bookingId/cancel',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+  }
+
   Future<MemberStats> getMemberStats({
     required String customerId,
     required String accessToken,

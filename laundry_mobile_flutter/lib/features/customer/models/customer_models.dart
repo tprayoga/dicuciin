@@ -363,6 +363,7 @@ class MachineBooking {
     required this.status,
     this.deviceName,
     this.deviceCode,
+    this.expiresAt,
   });
 
   final String id;
@@ -370,6 +371,7 @@ class MachineBooking {
   final String status;
   final String? deviceName;
   final String? deviceCode;
+  final DateTime? expiresAt;
 
   factory MachineBooking.fromJson(Map<String, dynamic> json) {
     final device = json['device'] as Map<String, dynamic>?;
@@ -379,8 +381,83 @@ class MachineBooking {
       status: (json['status'] as String?) ?? '-',
       deviceName: device?['name'] as String?,
       deviceCode: device?['deviceCode'] as String?,
+      expiresAt: DateTime.tryParse((json['expiresAt'] as String?) ?? ''),
     );
   }
+}
+
+/// Ringkasan keramaian mesin sebuah outlet.
+class OutletOccupancy {
+  OutletOccupancy({
+    required this.total,
+    required this.available,
+    required this.busy,
+    required this.offline,
+    required this.remark,
+    required this.level,
+  });
+
+  final int total;
+  final int available;
+  final int busy;
+  final int offline;
+  final String remark; // Sepi | Normal | Ramai | Penuh | Mesin tidak tersedia
+  final String level; // none | low | medium | high | full
+
+  factory OutletOccupancy.fromJson(Map<String, dynamic> json) => OutletOccupancy(
+        total: (json['total'] as num?)?.toInt() ?? 0,
+        available: (json['available'] as num?)?.toInt() ?? 0,
+        busy: (json['busy'] as num?)?.toInt() ?? 0,
+        offline: (json['offline'] as num?)?.toInt() ?? 0,
+        remark: (json['remark'] as String?) ?? '-',
+        level: (json['level'] as String?) ?? 'none',
+      );
+}
+
+/// Satu mesin nyata (IoT device) sebuah outlet.
+class OutletMachine {
+  OutletMachine({
+    required this.deviceId,
+    required this.deviceCode,
+    required this.name,
+    required this.type,
+    required this.status,
+    required this.bookable,
+  });
+
+  final String deviceId;
+  final String deviceCode;
+  final String name;
+  final String type; // WASHING_MACHINE | DRYER_MACHINE
+  final String status; // AVAILABLE | RESERVED | IN_USE | OFFLINE
+  final bool bookable;
+
+  bool get isWasher => type == 'WASHING_MACHINE';
+
+  factory OutletMachine.fromJson(Map<String, dynamic> json) => OutletMachine(
+        deviceId: (json['deviceId'] as String?) ?? '',
+        deviceCode: (json['deviceCode'] as String?) ?? '-',
+        name: (json['name'] as String?) ?? 'Mesin',
+        type: (json['type'] as String?) ?? '',
+        status: (json['status'] as String?) ?? 'OFFLINE',
+        bookable: json['bookable'] == true,
+      );
+}
+
+/// Daftar mesin outlet + ringkasan keramaian.
+class OutletMachines {
+  OutletMachines({required this.occupancy, required this.machines});
+
+  final OutletOccupancy occupancy;
+  final List<OutletMachine> machines;
+
+  factory OutletMachines.fromJson(Map<String, dynamic> json) => OutletMachines(
+        occupancy:
+            OutletOccupancy.fromJson(json['occupancy'] as Map<String, dynamic>? ?? {}),
+        machines: ((json['machines'] as List?) ?? [])
+            .map((e) => OutletMachine.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
 }
 
 /// Hasil verifikasi scan QR mesin (`POST /bookings/verify`).

@@ -224,6 +224,7 @@ class _LocationCard extends StatelessWidget {
     required this.closeTime,
     required this.isOpen,
     required this.enabled,
+    this.occupancy,
     this.onTap,
   });
 
@@ -233,6 +234,7 @@ class _LocationCard extends StatelessWidget {
   final String closeTime;
   final bool isOpen;
   final bool enabled;
+  final OutletOccupancy? occupancy;
   final VoidCallback? onTap;
 
   @override
@@ -295,13 +297,20 @@ class _LocationCard extends StatelessWidget {
                             spacing: 8,
                             runSpacing: 8,
                             children: [
-                              _buildTag(
-                                machineLabel,
-                                machineAvailable
-                                    ? AppColors.tintBlueAlt
-                                    : AppColors.border,
-                                machineAvailable ? _primary : _textMuted,
-                              ),
+                              if (occupancy != null)
+                                _buildTag(
+                                  occupancy!.remark,
+                                  _occupancyBg(occupancy!.level),
+                                  _occupancyFg(occupancy!.level),
+                                )
+                              else
+                                _buildTag(
+                                  machineLabel,
+                                  machineAvailable
+                                      ? AppColors.tintBlueAlt
+                                      : AppColors.border,
+                                  machineAvailable ? _primary : _textMuted,
+                                ),
                               _buildTag(
                                 isOpen ? 'Buka' : 'Tutup',
                                 isOpen
@@ -379,6 +388,22 @@ class _LocationCard extends StatelessWidget {
       ),
     );
   }
+
+  Color _occupancyBg(String level) => switch (level) {
+        'low' => AppColors.successBg,
+        'medium' => AppColors.tintBlueAlt,
+        'high' => AppColors.warningBg,
+        'full' => AppColors.errorBg,
+        _ => AppColors.border,
+      };
+
+  Color _occupancyFg(String level) => switch (level) {
+        'low' => AppColors.success,
+        'medium' => _primary,
+        'high' => AppColors.warning,
+        'full' => AppColors.error,
+        _ => _textMuted,
+      };
 }
 
 class _BookingSheet extends StatefulWidget {

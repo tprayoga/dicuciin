@@ -14,6 +14,7 @@ class _LocationPageState extends State<_LocationPage> {
   bool _loading = true;
   String? _error;
   List<OutletOption> _outlets = const [];
+  Map<String, OutletOccupancy> _occupancy = const {};
 
   @override
   void initState() {
@@ -37,11 +38,19 @@ class _LocationPageState extends State<_LocationPage> {
       _error = null;
     });
 
-    final outlets =
-        await context.read<CustomerController>().getOutlets(accessToken: token);
+    final ctrl = context.read<CustomerController>();
+    final outlets = await ctrl.getOutlets(accessToken: token);
+    // Keramaian best-effort — kegagalan tak memblok daftar outlet.
+    Map<String, OutletOccupancy> occupancy = const {};
+    try {
+      occupancy = await ctrl.getOccupancyMap(accessToken: token);
+    } catch (_) {
+      // abaikan
+    }
     if (!mounted) return;
     setState(() {
       _outlets = outlets;
+      _occupancy = occupancy;
       _loading = false;
       _error = outlets.isEmpty ? 'Belum ada outlet tersedia.' : null;
     });
@@ -123,6 +132,7 @@ class _LocationPageState extends State<_LocationPage> {
             closeTime: '',
             isOpen: true,
             enabled: true,
+            occupancy: _occupancy[outlet.id],
             onTap: () => widget.onOpenDetail(outlet),
           );
         },

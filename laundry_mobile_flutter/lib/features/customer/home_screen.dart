@@ -26,6 +26,7 @@ part 'home/order_page.dart';
 part 'home/order_detail_page.dart';
 part 'home/account_page.dart';
 part 'home/location_detail_page.dart';
+part 'home/booking_machines_page.dart';
 part 'home/order_checkout_page.dart';
 part 'home/wallet_pin_sheet.dart';
 part 'home/wallet_pin_settings_page.dart';

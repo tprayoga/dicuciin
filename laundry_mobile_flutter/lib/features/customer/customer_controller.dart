@@ -178,6 +178,42 @@ class CustomerController extends ChangeNotifier {
     );
   }
 
+  /// Daftar mesin nyata + keramaian sebuah outlet.
+  Future<OutletMachines> getOutletMachines({
+    required String accessToken,
+    required String outletId,
+  }) {
+    return _customerService.getOutletMachines(
+      accessToken: accessToken,
+      outletId: outletId,
+    );
+  }
+
+  /// Ringkasan keramaian semua outlet (map by outletId).
+  Future<Map<String, OutletOccupancy>> getOccupancyMap({
+    required String accessToken,
+  }) {
+    return _customerService.getOccupancyMap(accessToken: accessToken);
+  }
+
+  /// Booking aktif milik customer.
+  Future<List<MachineBooking>> getActiveBookings({
+    required String accessToken,
+  }) {
+    return _customerService.getActiveBookings(accessToken: accessToken);
+  }
+
+  /// Batalkan reservasi yang belum aktif.
+  Future<void> cancelBooking({
+    required String accessToken,
+    required String bookingId,
+  }) {
+    return _customerService.cancelBooking(
+      accessToken: accessToken,
+      bookingId: bookingId,
+    );
+  }
+
   /// Buat tagihan QRIS/VA via gateway untuk order.
   Future<GatewayPayment> createGatewayPayment({
     required String accessToken,
