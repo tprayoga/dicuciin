@@ -603,7 +603,14 @@ async function main() {
     });
   }
 
-  const deviceSeeds = [
+  const deviceSeeds: Array<{
+    outletCode: string;
+    kioskCode: string;
+    deviceCode: string;
+    deviceType: DeviceType;
+    name: string;
+    status?: string;
+  }> = [
     {
       outletCode: 'OUT-001',
       kioskCode: 'KSK-SDM-01',
@@ -646,6 +653,54 @@ async function main() {
       deviceType: DeviceType.WASHING_MACHINE,
       name: 'Washer Electrolux 03',
     },
+    // Mesin tambahan per outlet dengan status bervariasi (demo keramaian/booking).
+    // OUT-001 → cenderung ramai; OUT-002 → sepi; OUT-003 → ada yg offline.
+    {
+      outletCode: 'OUT-001',
+      kioskCode: 'KSK-SDM-01',
+      deviceCode: 'WS-01B',
+      deviceType: DeviceType.WASHING_MACHINE,
+      name: 'Washer LG 02',
+      status: 'IN_USE',
+    },
+    {
+      outletCode: 'OUT-001',
+      kioskCode: 'KSK-SDM-01',
+      deviceCode: 'DR-01B',
+      deviceType: DeviceType.DRYER_MACHINE,
+      name: 'Dryer LG 02',
+      status: 'IN_USE',
+    },
+    {
+      outletCode: 'OUT-002',
+      kioskCode: 'KSK-KMG-01',
+      deviceCode: 'WS-02B',
+      deviceType: DeviceType.WASHING_MACHINE,
+      name: 'Washer Samsung 03',
+    },
+    {
+      outletCode: 'OUT-002',
+      kioskCode: 'KSK-KMG-01',
+      deviceCode: 'DR-02',
+      deviceType: DeviceType.DRYER_MACHINE,
+      name: 'Dryer Samsung 01',
+    },
+    {
+      outletCode: 'OUT-003',
+      kioskCode: 'KSK-BKS-01',
+      deviceCode: 'DR-03',
+      deviceType: DeviceType.DRYER_MACHINE,
+      name: 'Dryer Electrolux 01',
+      status: 'IN_USE',
+    },
+    {
+      outletCode: 'OUT-003',
+      kioskCode: 'KSK-BKS-01',
+      deviceCode: 'WS-03B',
+      deviceType: DeviceType.WASHING_MACHINE,
+      name: 'Washer Electrolux 04',
+      status: 'OFFLINE',
+    },
   ];
 
   for (const device of deviceSeeds) {
@@ -662,7 +717,7 @@ async function main() {
         manufacturer: 'LG',
         model: 'Smart Laundry V2',
         firmwareVersion: '2.5.1',
-        status: 'ONLINE',
+        status: device.status ?? 'ONLINE',
         lastHeartbeatAt: new Date(),
         metadata: { seed: true, area: device.outletCode },
       },
@@ -675,7 +730,7 @@ async function main() {
         manufacturer: 'LG',
         model: 'Smart Laundry V2',
         firmwareVersion: '2.5.1',
-        status: 'ONLINE',
+        status: device.status ?? 'ONLINE',
         lastHeartbeatAt: new Date(),
         metadata: { seed: true, area: device.outletCode },
       },

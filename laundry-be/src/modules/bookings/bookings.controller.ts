@@ -42,6 +42,18 @@ export class BookingsController {
     return this.bookingsService.getActive(req.user?.userId);
   }
 
+  @Get('occupancy')
+  @ApiOperation({ summary: 'Ringkasan keramaian mesin semua outlet' })
+  async occupancy() {
+    return this.bookingsService.occupancyForAllOutlets();
+  }
+
+  @Get('outlet/:outletId/machines')
+  @ApiOperation({ summary: 'Daftar mesin outlet + status ketersediaan + keramaian' })
+  async outletMachines(@Param('outletId') outletId: string) {
+    return this.bookingsService.listOutletMachines(outletId);
+  }
+
   @Post(':id/complete')
   @ApiOperation({ summary: 'Selesaikan pemakaian mesin (lepas kunci)' })
   async complete(@Param('id') id: string, @Request() req: any) {

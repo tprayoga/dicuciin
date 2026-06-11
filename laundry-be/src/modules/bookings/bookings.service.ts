@@ -213,6 +213,136 @@ export class BookingsService {
     return updated;
   }
 
+  /**
+   * Daftar mesin (cuci/pengering) sebuah outlet + status ketersediaannya,
+   * beserta ringkasan keramaian. Status diturunkan dari booking aktif & status
+   * perangkat: IN_USE > RESERVED > OFFLINE > AVAILABLE.
+   */
+  async listOutletMachines(outletId: string) {
+    const outlet = await this.prisma.outlet.findUnique({ where: { id: outletId } });
+    if (!outlet) throw new NotFoundException('Outlet tidak ditemukan');
+
+    const devices = await this.prisma.iotDevice.findMany({
+      where: { outletId, deviceType: { in: MACHINE_TYPES } },
+      orderBy: { deviceCode: 'asc' },
+    });
+
+    const statusByDevice = await this.activeBookingStatusByDevice(
+      devices.map((d) => d.id),
+    );
+
+    const machines = devices.map((d) => {
+      const status = this.effectiveStatus(d.status, statusByDevice.get(d.id));
+      return {
+        deviceId: d.id,
+        deviceCode: d.deviceCode,
+        name: d.name,
+        type: d.deviceType,
+        status,
+        bookable: status === 'AVAILABLE',
+      };
+    });
+
+    return { outletId, occupancy: this.occupancyOf(machines), machines };
+  }
+
+  /** Ringkasan keramaian semua outlet aktif (untuk halaman daftar lokasi). */
+  async occupancyForAllOutlets() {
+    const [outlets, devices] = await Promise.all([
+      this.prisma.outlet.findMany({
+        where: { isActive: true },
+        select: { id: true },
+      }),
+      this.prisma.iotDevice.findMany({
+        where: { deviceType: { in: MACHINE_TYPES } },
+        select: { id: true, outletId: true, status: true },
+      }),
+    ]);
+
+    const statusByDevice = await this.activeBookingStatusByDevice(
+      devices.map((d) => d.id),
+    );
+
+    return outlets.map((o) => {
+      const machines = devices
+        .filter((d) => d.outletId === o.id)
+        .map((d) => ({
+          status: this.effectiveStatus(d.status, statusByDevice.get(d.id)),
+        }));
+      return { outletId: o.id, ...this.occupancyOf(machines) };
+    });
+  }
+
+  /** Peta deviceId → status booking aktif (IN_USE diprioritaskan atas RESERVED). */
+  private async activeBookingStatusByDevice(deviceIds: string[]) {
+    const map = new Map<string, BookingStatus>();
+    if (deviceIds.length === 0) return map;
+    const now = new Date();
+    const active = await this.prisma.machineBooking.findMany({
+      where: {
+        deviceId: { in: deviceIds },
+        OR: [
+          { status: BookingStatus.IN_USE },
+          { status: BookingStatus.RESERVED, expiresAt: { gt: now } },
+        ],
+      },
+      select: { deviceId: true, status: true },
+    });
+    for (const b of active) {
+      if (map.get(b.deviceId) === BookingStatus.IN_USE) continue;
+      map.set(b.deviceId, b.status);
+    }
+    return map;
+  }
+
+  /**
+   * Status efektif sebuah mesin: booking aktif diprioritaskan (IN_USE/RESERVED),
+   * lalu fallback ke status perangkat tersimpan (OFFLINE/IN_USE/RESERVED), sisanya
+   * AVAILABLE.
+   */
+  private effectiveStatus(deviceStatus: string, bs?: BookingStatus): string {
+    if (bs === BookingStatus.IN_USE) return 'IN_USE';
+    if (bs === BookingStatus.RESERVED) return 'RESERVED';
+    if (deviceStatus === 'OFFLINE') return 'OFFLINE';
+    if (deviceStatus === 'IN_USE') return 'IN_USE';
+    if (deviceStatus === 'RESERVED') return 'RESERVED';
+    return 'AVAILABLE';
+  }
+
+  /** Hitung ringkasan keramaian dari daftar status mesin. */
+  private occupancyOf(machines: { status: string }[]) {
+    const total = machines.length;
+    const offline = machines.filter((m) => m.status === 'OFFLINE').length;
+    const busy = machines.filter(
+      (m) => m.status === 'IN_USE' || m.status === 'RESERVED',
+    ).length;
+    const available = machines.filter((m) => m.status === 'AVAILABLE').length;
+    const operational = total - offline;
+
+    let level: string;
+    let remark: string;
+    if (operational === 0) {
+      level = 'none';
+      remark = 'Mesin tidak tersedia';
+    } else if (busy === 0) {
+      level = 'low';
+      remark = 'Sepi';
+    } else {
+      const ratio = busy / operational;
+      if (ratio < 0.5) {
+        level = 'medium';
+        remark = 'Normal';
+      } else if (ratio < 1) {
+        level = 'high';
+        remark = 'Ramai';
+      } else {
+        level = 'full';
+        remark = 'Penuh';
+      }
+    }
+    return { total, available, busy, offline, level, remark };
+  }
+
   /** Booking aktif (RESERVED belum kadaluarsa / IN_USE) milik customer. */
   async getActive(userId: string) {
     const customerId = await this.resolveCustomerId(userId);
