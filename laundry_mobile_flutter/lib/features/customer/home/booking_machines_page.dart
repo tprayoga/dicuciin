@@ -213,9 +213,11 @@ class _BookingMachinesPageState extends State<_BookingMachinesPage> {
               children: [
                 _OccupancyChip(level: occ.level, remark: occ.remark),
                 const SizedBox(width: 10),
-                Text(
-                  '${occ.available} dari ${occ.total} mesin tersedia',
-                  style: const TextStyle(fontSize: 12.5, color: _textMuted),
+                Flexible(
+                  child: Text(
+                    '${occ.available} dari ${occ.total} mesin tersedia',
+                    style: const TextStyle(fontSize: 12.5, color: _textMuted),
+                  ),
                 ),
               ],
             ),
@@ -323,7 +325,7 @@ class _BookingMachinesPageState extends State<_BookingMachinesPage> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : SizedBox(
-                    height: 38,
+                    width: 100,
                     child: AppPrimaryButton(
                       label: 'Booking',
                       onTap: () => _reserve(m),
