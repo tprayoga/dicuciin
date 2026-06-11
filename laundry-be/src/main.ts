@@ -31,6 +31,10 @@ async function bootstrap() {
   const appEnv = configService.get<string>('APP_ENV', 'development');
   const isProduction = appEnv === 'production';
 
+  // Di belakang reverse proxy (Nginx) → percayai X-Forwarded-For agar rate
+  // limiter (ThrottlerGuard) memakai IP klien asli, bukan IP proxy.
+  app.set('trust proxy', 1);
+
   // crossOriginResourcePolicy 'cross-origin' agar file (mis. foto profil) bisa
   // dimuat dari origin berbeda (Flutter Web/mobile).
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));

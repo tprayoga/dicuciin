@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { PrismaModule } from './common/prisma/prisma.module';
@@ -31,6 +32,14 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
       isGlobal: true,
       envFilePath: '.env',
     }),
+    // Rate limiting global per-IP (in-memory; single-VM). Default longgar agar
+    // pemakaian normal app tak terganggu; endpoint auth diperketat via @Throttle.
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60_000,
+        limit: Number(process.env.THROTTLE_LIMIT ?? 300),
+      },
+    ]),
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
@@ -56,6 +65,11 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     NotificationsModule,
   ],
   providers: [
+    // Throttler pertama → brute-force ditolak sebelum auth/role guard berjalan.
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,

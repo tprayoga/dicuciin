@@ -1,4 +1,5 @@
 import { Controller, Post, Get, Body, Request, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { OtpService } from './otp.service';
@@ -19,7 +20,10 @@ export class AuthController {
     private readonly otpService: OtpService,
   ) {}
 
+  // Rate limit ketat per-IP untuk endpoint sensitif (anti brute-force/spam).
+  // OTP request juga punya rate-limit per-nomor berbasis DB (3/jam) di OtpService.
   @Public()
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @Post('otp/request')
   @ApiOperation({ summary: 'Request OTP via WhatsApp (verifikasi nomor)' })
   async requestOtp(@Body() dto: RequestOtpDto) {
@@ -27,6 +31,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('otp/verify')
   @ApiOperation({ summary: 'Verifikasi OTP — balikin verification token' })
   async verifyOtp(@Body() dto: VerifyOtpDto) {
@@ -34,6 +39,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('register')
   @ApiOperation({ summary: 'Register new user (wajib verificationToken dari OTP)' })
   async register(@Body() registerDto: RegisterDto) {
@@ -41,6 +47,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('login')
   @ApiOperation({ summary: 'Login user' })
   async login(@Body() loginDto: LoginDto) {
@@ -48,6 +55,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token (token rotation — lama di-revoke)' })
   async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
