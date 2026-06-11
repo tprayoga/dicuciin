@@ -12,6 +12,7 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UserRole, OtpPurpose } from '@prisma/client';
 import { generateDailySequence } from '../../common/utils/sequence.util';
 import { OtpService } from './otp.service';
@@ -157,6 +158,42 @@ export class AuthService {
       if (err instanceof UnauthorizedException) throw err;
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
+  }
+
+  /**
+   * Reset password via OTP. Wajib verificationToken hasil verifikasi OTP
+   * (purpose RESET_PASSWORD) untuk nomor yang sama. Setelah reset, semua refresh
+   * token user di-revoke agar sesi lama tak bisa dipakai.
+   */
+  async resetPassword(dto: ResetPasswordDto) {
+    const { phone, newPassword, verificationToken } = dto;
+
+    await this.otpService.assertVerifiedPhone(
+      verificationToken,
+      phone,
+      OtpPurpose.RESET_PASSWORD,
+    );
+
+    const user = await this.prisma.user.findUnique({ where: { phone } });
+    if (!user) throw new NotFoundException('User tidak ditemukan');
+
+    const saltRounds = parseInt(
+      this.configService.get<string>('BCRYPT_SALT_ROUNDS', '10'),
+    );
+    const passwordHash = await bcrypt.hash(newPassword, saltRounds);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+
+    return { message: 'Password berhasil direset. Silakan login dengan password baru.' };
   }
 
   async logout(userId: string, refreshToken?: string) {

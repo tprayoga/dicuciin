@@ -55,6 +55,23 @@ class AuthService {
     return (payload as Map<String, dynamic>)['verificationToken'] as String;
   }
 
+  /// Reset password via OTP (purpose RESET_PASSWORD). Memakai verificationToken
+  /// hasil verifyOtp.
+  Future<void> resetPassword({
+    required String phone,
+    required String newPassword,
+    required String verificationToken,
+  }) async {
+    await _apiClient.post(
+      '/auth/password/reset',
+      body: jsonEncode({
+        'phone': phone,
+        'newPassword': newPassword,
+        'verificationToken': verificationToken,
+      }),
+    );
+  }
+
   Future<LoginResult> register({
     required String name,
     String? email,

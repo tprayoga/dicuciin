@@ -101,6 +101,19 @@ class AuthController extends ChangeNotifier {
     return _authService.verifyOtp(phone: phone, code: code, purpose: purpose);
   }
 
+  /// Reset password via OTP (purpose RESET_PASSWORD).
+  Future<void> resetPassword({
+    required String phone,
+    required String newPassword,
+    required String verificationToken,
+  }) {
+    return _authService.resetPassword(
+      phone: phone,
+      newPassword: newPassword,
+      verificationToken: verificationToken,
+    );
+  }
+
   /// Langkah akhir register: buat akun (butuh verificationToken + password),
   /// lalu set PIN wallet. Status auth menjadi authenticated bila sukses.
   /// Melempar bila gagal agar UI bisa menampilkan error tanpa pindah layar.

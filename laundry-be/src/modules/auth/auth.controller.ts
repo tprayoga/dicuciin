@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { OtpService } from './otp.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { RequestOtpDto } from './dto/request-otp.dto';
@@ -60,6 +61,14 @@ export class AuthController {
   @ApiOperation({ summary: 'Refresh access token (token rotation — lama di-revoke)' })
   async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
     return this.authService.refreshToken(refreshTokenDto.refreshToken);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('password/reset')
+  @ApiOperation({ summary: 'Reset password via OTP (wajib verificationToken RESET_PASSWORD)' })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 
   @UseGuards(JwtAuthGuard)

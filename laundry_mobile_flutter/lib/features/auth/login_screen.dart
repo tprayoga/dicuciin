@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/app_toast.dart';
 import 'auth_controller.dart';
 import 'auth_flow_screens.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -161,9 +162,10 @@ class _LoginScreenState extends State<LoginScreen> {
               Align(
                 alignment: Alignment.centerRight,
                 child: GestureDetector(
-                  onTap: () => AppToast.info(
-                    context,
-                    'Fitur lupa password segera hadir.',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ForgotPasswordScreen(),
+                    ),
                   ),
                   child: const Padding(
                     padding: EdgeInsets.symmetric(vertical: 4),

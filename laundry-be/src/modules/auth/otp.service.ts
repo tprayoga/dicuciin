@@ -3,6 +3,7 @@ import {
   ConflictException,
   UnauthorizedException,
   BadRequestException,
+  NotFoundException,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
@@ -47,6 +48,12 @@ export class OtpService {
     if (purpose === OtpPurpose.REGISTER) {
       const existing = await this.prisma.user.findUnique({ where: { phone } });
       if (existing) throw new ConflictException('Nomor HP sudah terdaftar');
+    }
+
+    // Untuk RESET_PASSWORD / LOGIN: nomor HARUS sudah terdaftar.
+    if (purpose === OtpPurpose.RESET_PASSWORD || purpose === OtpPurpose.LOGIN) {
+      const existing = await this.prisma.user.findUnique({ where: { phone } });
+      if (!existing) throw new NotFoundException('Nomor HP tidak terdaftar');
     }
 
     // Rate limit: maks OTP_RATE_LIMIT request/jam/nomor.
