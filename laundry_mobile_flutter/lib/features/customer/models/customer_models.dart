@@ -509,6 +509,42 @@ class CreateOrderItemInput {
   final String? notes;
 }
 
+/// Tagihan QRIS/VA dari payment gateway.
+class GatewayPayment {
+  GatewayPayment({
+    required this.paymentNumber,
+    required this.method,
+    required this.amount,
+    required this.status,
+    this.qrString,
+    this.vaNumber,
+    this.bank,
+    this.expiresAt,
+  });
+
+  final String paymentNumber;
+  final String method;
+  final double amount;
+  final String status; // PENDING | PAID | FAILED | EXPIRED
+  final String? qrString;
+  final String? vaNumber;
+  final String? bank;
+  final String? expiresAt;
+
+  bool get isPaid => status == 'PAID';
+
+  factory GatewayPayment.fromJson(Map<String, dynamic> json) => GatewayPayment(
+        paymentNumber: json['paymentNumber'] as String,
+        method: json['method'] as String? ?? '',
+        amount: _toDouble(json['amount']),
+        status: json['status'] as String? ?? 'PENDING',
+        qrString: json['qrString'] as String?,
+        vaNumber: json['vaNumber'] as String?,
+        bank: json['bank'] as String?,
+        expiresAt: json['expiresAt'] as String?,
+      );
+}
+
 double _toDouble(dynamic value) {
   if (value is int) return value.toDouble();
   if (value is double) return value;

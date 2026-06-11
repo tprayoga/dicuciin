@@ -100,6 +100,48 @@ class CustomerService {
     return MachineBooking.fromJson(payload as Map<String, dynamic>);
   }
 
+  /// Buat tagihan QRIS/VA via gateway untuk sebuah order.
+  Future<GatewayPayment> createGatewayPayment({
+    required String accessToken,
+    required String orderId,
+    required String method, // 'QRIS' | 'VA'
+    String? bank,
+  }) async {
+    final payload = await _apiClient.post(
+      '/payments/gateway',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({
+        'orderId': orderId,
+        'method': method,
+        if (bank != null && bank.isNotEmpty) 'bank': bank,
+      }),
+    );
+    return GatewayPayment.fromJson(payload as Map<String, dynamic>);
+  }
+
+  /// Cek status pembayaran (untuk polling).
+  Future<GatewayPayment> getPaymentStatus({
+    required String accessToken,
+    required String paymentNumber,
+  }) async {
+    final payload = await _apiClient.get(
+      '/payments/$paymentNumber/status',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return GatewayPayment.fromJson(payload as Map<String, dynamic>);
+  }
+
+  /// [DEV] Simulasikan pembayaran berhasil (mock gateway).
+  Future<void> simulatePayment({
+    required String accessToken,
+    required String paymentNumber,
+  }) async {
+    await _apiClient.post(
+      '/payments/$paymentNumber/simulate',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+  }
+
   Future<MemberStats> getMemberStats({
     required String customerId,
     required String accessToken,

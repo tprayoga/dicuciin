@@ -178,6 +178,43 @@ class CustomerController extends ChangeNotifier {
     );
   }
 
+  /// Buat tagihan QRIS/VA via gateway untuk order.
+  Future<GatewayPayment> createGatewayPayment({
+    required String accessToken,
+    required String orderId,
+    required String method,
+    String? bank,
+  }) {
+    return _customerService.createGatewayPayment(
+      accessToken: accessToken,
+      orderId: orderId,
+      method: method,
+      bank: bank,
+    );
+  }
+
+  /// Cek status pembayaran gateway (polling).
+  Future<GatewayPayment> getPaymentStatus({
+    required String accessToken,
+    required String paymentNumber,
+  }) {
+    return _customerService.getPaymentStatus(
+      accessToken: accessToken,
+      paymentNumber: paymentNumber,
+    );
+  }
+
+  /// [DEV] Simulasikan pembayaran gateway berhasil.
+  Future<void> simulatePayment({
+    required String accessToken,
+    required String paymentNumber,
+  }) {
+    return _customerService.simulatePayment(
+      accessToken: accessToken,
+      paymentNumber: paymentNumber,
+    );
+  }
+
   /// Kirim ulasan untuk sebuah order. true bila berhasil; pesan error di
   /// [errorMessage] bila gagal (mis. order sudah diulas).
   Future<bool> submitReview({

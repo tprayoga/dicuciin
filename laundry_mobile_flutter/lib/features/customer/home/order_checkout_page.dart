@@ -692,13 +692,19 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
       return;
     }
 
+    // QRIS/VA: buat order dulu (total final + orderId) sebelum buka halaman bayar.
+    final order = await _ensureOrder();
+    if (order == null || !mounted) return;
+    final total = order.totalAmount.round();
+
     if (_method == _PaymentMethod.va) {
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => _PaymentVaPage(
             bank: _selectedBank,
             data: widget.data,
-            total: _total,
+            total: total,
+            orderId: order.id,
           ),
         ),
       );
@@ -707,7 +713,11 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => _PaymentQrisPage(data: widget.data, total: _total),
+        builder: (_) => _PaymentQrisPage(
+          data: widget.data,
+          total: total,
+          orderId: order.id,
+        ),
       ),
     );
   }
