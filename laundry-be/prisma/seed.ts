@@ -341,7 +341,7 @@ async function main() {
   };
   for (const outlet of outletRows) {
     for (const service of serviceRows) {
-      const price = Math.round((service.basePrice ?? 0) * outletPriceMultiplier[outlet.code]);
+      const price = Math.round(Number(service.basePrice ?? 0) * outletPriceMultiplier[outlet.code]);
       await prisma.servicePrice.upsert({
         where: {
           serviceId_outletId: {
@@ -758,7 +758,7 @@ async function main() {
     });
     if (!servicePrice) continue;
 
-    const subtotal = servicePrice.price * template.qty;
+    const subtotal = Number(servicePrice.price) * template.qty;
     const discountAmount = template.withPromo ? Math.min(20000, subtotal * 0.2) : 0;
     const deliveryFee = i % 3 === 0 ? 10000 : 0;
     const totalAmount = subtotal - discountAmount + deliveryFee;
@@ -878,7 +878,7 @@ async function main() {
     });
 
     if (template.payment === PaymentMethod.WALLET && isPaidStatus && customer.wallet) {
-      const before = customer.wallet.balance;
+      const before = Number(customer.wallet.balance);
       const after = Math.max(0, before - totalAmount);
       await prisma.wallet.update({
         where: { id: customer.wallet.id },

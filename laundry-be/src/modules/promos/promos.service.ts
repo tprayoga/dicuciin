@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreatePromoDto, UpdatePromoDto } from './dto/promo.dto';
+import { toNum } from '../../common/utils/money.util';
 
 @Injectable()
 export class PromosService {
@@ -75,7 +76,7 @@ export class PromosService {
 
     const rule = promo.rules[0];
     if (rule) {
-      if (rule.minTransaction && orderAmount < rule.minTransaction) {
+      if (rule.minTransaction && orderAmount < toNum(rule.minTransaction)) {
         throw new BadRequestException(`Minimum transaction is ${rule.minTransaction}`);
       }
 
@@ -91,13 +92,13 @@ export class PromosService {
 
     let discount = 0;
     if (promo.promoType === 'PERCENTAGE') {
-      discount = (orderAmount * promo.value) / 100;
+      discount = (orderAmount * toNum(promo.value)) / 100;
     } else if (promo.promoType === 'FIXED_AMOUNT') {
-      discount = promo.value;
+      discount = toNum(promo.value);
     }
 
-    if (rule?.maxDiscount && discount > rule.maxDiscount) {
-      discount = rule.maxDiscount;
+    if (rule?.maxDiscount && discount > toNum(rule.maxDiscount)) {
+      discount = toNum(rule.maxDiscount);
     }
 
     return { promo, discount, isValid: true };

@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { OrderStatus } from '@prisma/client';
+import { toNum } from '../../common/utils/money.util';
 
 const PAID_STATUSES: OrderStatus[] = [
   OrderStatus.PAID,
@@ -85,7 +86,7 @@ export class ReportsService {
           name: userMap.get(id)?.name ?? '-',
           role: userMap.get(id)?.role ?? null,
           totalOrders: o?._count ?? 0,
-          totalRevenue: o?._sum.totalAmount ?? 0,
+          totalRevenue: toNum(o?._sum.totalAmount),
           reviewCount: r?._count ?? 0,
           avgRating: r?._avg.rating ?? 0,
         };
@@ -128,7 +129,7 @@ export class ReportsService {
     return items.map((item) => ({
       serviceId: item.serviceId,
       serviceName: item.serviceName,
-      totalRevenue: item._sum.subtotal ?? 0,
+      totalRevenue: toNum(item._sum.subtotal),
       totalQuantity: item._sum.quantity ?? 0,
       totalOrders: item._count._all,
     }));

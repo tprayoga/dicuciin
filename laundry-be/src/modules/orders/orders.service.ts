@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateOrderDto, UpdateOrderStatusDto, CancelOrderDto } from './dto/order.dto';
-import { OrderStatus, UserRole } from '@prisma/client';
+import { OrderStatus, UserRole, Prisma } from '@prisma/client';
 import { generateDailySequence } from '../../common/utils/sequence.util';
+import { toNum } from '../../common/utils/money.util';
 
 @Injectable()
 export class OrdersService {
@@ -51,7 +52,7 @@ export class OrdersService {
       6,
     );
 
-    let subtotal = 0;
+    let subtotal = new Prisma.Decimal(0);
     const orderItems = [];
 
     for (const item of items) {
@@ -70,8 +71,8 @@ export class OrdersService {
         throw new BadRequestException(`Service price not found for service ${item.serviceId}`);
       }
 
-      const itemSubtotal = servicePrice.price * item.quantity;
-      subtotal += itemSubtotal;
+      const itemSubtotal = new Prisma.Decimal(servicePrice.price).mul(item.quantity);
+      subtotal = subtotal.plus(itemSubtotal);
 
       orderItems.push({
         serviceId: item.serviceId,
@@ -84,7 +85,7 @@ export class OrdersService {
       });
     }
 
-    let discountAmount = 0;
+    let discountAmount = new Prisma.Decimal(0);
     let promoId = null;
 
     if (promoCode) {
@@ -98,14 +99,14 @@ export class OrdersService {
         if (now >= promo.startDate && now <= promo.endDate) {
           if (!promo.quota || promo.usedCount < promo.quota) {
             if (promo.promoType === 'PERCENTAGE') {
-              discountAmount = (subtotal * promo.value) / 100;
+              discountAmount = subtotal.mul(promo.value).div(100);
             } else if (promo.promoType === 'FIXED_AMOUNT') {
-              discountAmount = promo.value;
+              discountAmount = new Prisma.Decimal(promo.value);
             }
 
             const rule = promo.rules[0];
-            if (rule?.maxDiscount && discountAmount > rule.maxDiscount) {
-              discountAmount = rule.maxDiscount;
+            if (rule?.maxDiscount && discountAmount.gt(rule.maxDiscount)) {
+              discountAmount = new Prisma.Decimal(rule.maxDiscount);
             }
 
             promoId = promo.id;
@@ -114,7 +115,7 @@ export class OrdersService {
       }
     }
 
-    const totalAmount = subtotal - discountAmount + deliveryFee;
+    const totalAmount = subtotal.minus(discountAmount).plus(deliveryFee);
 
     const order = await this.prisma.order.create({
       data: {
@@ -312,7 +313,7 @@ export class OrdersService {
     const dailyMap = new Map<string, number>();
     for (const order of last30DaysOrders) {
       const key = formatDateKey(new Date(order.orderDate));
-      dailyMap.set(key, (dailyMap.get(key) ?? 0) + order.totalAmount);
+      dailyMap.set(key, (dailyMap.get(key) ?? 0) + toNum(order.totalAmount));
     }
 
     const dailySeries = [];
@@ -332,7 +333,7 @@ export class OrdersService {
       totalMachines,
       totalOutlets,
       totalStaff,
-      totalRevenueToday: todayAggregate._sum.totalAmount ?? 0,
+      totalRevenueToday: toNum(todayAggregate._sum.totalAmount),
       totalPaidOrdersToday: todayAggregate._count._all,
       recentOrders,
       dailySeries,
@@ -386,7 +387,7 @@ export class OrdersService {
       const m = `${date.getMonth() + 1}`.padStart(2, '0');
       const d = `${date.getDate()}`.padStart(2, '0');
       const key = `${y}-${m}-${d}`;
-      dailyMap.set(key, (dailyMap.get(key) ?? 0) + order.totalAmount);
+      dailyMap.set(key, (dailyMap.get(key) ?? 0) + toNum(order.totalAmount));
     }
 
     const dailySeries = Array.from(dailyMap.entries())
@@ -397,7 +398,7 @@ export class OrdersService {
         profit: Math.round(revenue * this.PROFIT_MARGIN),
       }));
 
-    const totalRevenue = aggregate._sum.totalAmount ?? 0;
+    const totalRevenue = toNum(aggregate._sum.totalAmount);
     const operationalCost = Math.round(totalRevenue * (1 - this.PROFIT_MARGIN));
     const estimatedProfit = totalRevenue - operationalCost;
 

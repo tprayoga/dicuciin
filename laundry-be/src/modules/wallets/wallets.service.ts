@@ -132,13 +132,14 @@ export class WalletsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const balanceBefore = wallet.balance;
-      const balanceAfter = balanceBefore + amount;
-
+      // Increment atomik di DB → balanceBefore/After diturunkan dari hasil update,
+      // mencegah lost-update saat ada top-up bersamaan.
       const updatedWallet = await tx.wallet.update({
         where: { id: wallet.id },
-        data: { balance: balanceAfter },
+        data: { balance: { increment: amount } },
       });
+      const balanceAfter = updatedWallet.balance;
+      const balanceBefore = balanceAfter.minus(amount);
 
       const transaction = await tx.walletTransaction.create({
         data: {
@@ -213,7 +214,7 @@ export class WalletsService {
           where: { id: wallet.id },
         });
         const balanceAfter = refreshed.balance;
-        const balanceBefore = balanceAfter + amount;
+        const balanceBefore = balanceAfter.plus(amount);
 
         const transaction = await tx.walletTransaction.create({
           data: {
@@ -304,13 +305,13 @@ export class WalletsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const balanceBefore = wallet.balance;
-      const balanceAfter = balanceBefore + amount;
-
+      // Increment atomik (lihat topup) → cegah lost-update saat refund bersamaan.
       const updatedWallet = await tx.wallet.update({
         where: { id: wallet.id },
-        data: { balance: balanceAfter },
+        data: { balance: { increment: amount } },
       });
+      const balanceAfter = updatedWallet.balance;
+      const balanceBefore = balanceAfter.minus(amount);
 
       const transaction = await tx.walletTransaction.create({
         data: {

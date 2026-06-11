@@ -233,7 +233,7 @@ model Service {
   machineType     String?
   capacityKg      Float?
   estimateMinutes Int?
-  basePrice       Float?
+  basePrice       Decimal? @db.Decimal(14, 2)
   description     String?
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
@@ -250,7 +250,7 @@ model ServicePrice {
   serviceId              String
   outletId               String
   pricingType            String
-  price                  Float
+  price                  Decimal  @db.Decimal(14, 2)
   unit                   String
   estimatedDurationHours Int      @default(24)
   isActive               Boolean  @default(true)
@@ -277,10 +277,10 @@ model Order {
   sourcePlatform    String
   orderDate         DateTime    @default(now())
   status            OrderStatus @default(DRAFT)
-  subtotal          Float       @default(0)
-  discountAmount    Float       @default(0)
-  deliveryFee       Float       @default(0)
-  totalAmount       Float       @default(0)
+  subtotal          Decimal     @default(0) @db.Decimal(14, 2)
+  discountAmount    Decimal     @default(0) @db.Decimal(14, 2)
+  deliveryFee       Decimal     @default(0) @db.Decimal(14, 2)
+  totalAmount       Decimal     @default(0) @db.Decimal(14, 2)
   notes             String?
   estimatedFinishAt DateTime?
   completedAt       DateTime?
@@ -317,8 +317,8 @@ model OrderItem {
   serviceName  String
   quantity     Float
   unit         String
-  pricePerUnit Float
-  subtotal     Float
+  pricePerUnit Decimal  @db.Decimal(14, 2)
+  subtotal     Decimal  @db.Decimal(14, 2)
   notes        String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -349,7 +349,7 @@ model Payment {
   orderId          String
   paymentNumber    String        @unique
   paymentMethod    PaymentMethod
-  amount           Float
+  amount           Decimal       @db.Decimal(14, 2)
   status           PaymentStatus @default(PENDING)
   paidAt           DateTime?
   externalId       String?
@@ -368,7 +368,7 @@ model Payment {
 model Wallet {
   id         String   @id @default(uuid())
   customerId String   @unique
-  balance    Float    @default(0)
+  balance    Decimal  @default(0) @db.Decimal(14, 2)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -383,9 +383,9 @@ model WalletTransaction {
   walletId        String
   orderId         String?
   transactionType WalletTransactionType
-  amount          Float
-  balanceBefore   Float
-  balanceAfter    Float
+  amount          Decimal               @db.Decimal(14, 2)
+  balanceBefore   Decimal               @db.Decimal(14, 2)
+  balanceAfter    Decimal               @db.Decimal(14, 2)
   description     String?
   idempotencyKey  String?               @unique
   createdAt       DateTime              @default(now())
@@ -406,7 +406,7 @@ model Promo {
   description String?
   bannerUrl   String?
   promoType   PromoType
-  value       Float
+  value       Decimal   @db.Decimal(14, 2)
   startDate   DateTime
   endDate     DateTime
   quota       Int?
@@ -427,8 +427,8 @@ model Promo {
 model PromoRule {
   id                  String   @id @default(uuid())
   promoId             String
-  minTransaction      Float?
-  maxDiscount         Float?
+  minTransaction      Decimal? @db.Decimal(14, 2)
+  maxDiscount         Decimal? @db.Decimal(14, 2)
   maxUsagePerCustomer Int?
   applicableServices  String?
   applicableOutlets   String?
@@ -446,7 +446,7 @@ model PromoUsage {
   promoId    String
   customerId String
   orderId    String
-  discount   Float
+  discount   Decimal  @db.Decimal(14, 2)
   usedAt     DateTime @default(now())
 
   promo    Promo    @relation(fields: [promoId], references: [id])

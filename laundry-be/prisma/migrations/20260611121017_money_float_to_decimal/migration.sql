@@ -1,0 +1,37 @@
+-- AlterTable
+ALTER TABLE "order_items" ALTER COLUMN "pricePerUnit" SET DATA TYPE DECIMAL(14,2),
+ALTER COLUMN "subtotal" SET DATA TYPE DECIMAL(14,2);
+
+-- AlterTable
+ALTER TABLE "orders" ALTER COLUMN "subtotal" SET DATA TYPE DECIMAL(14,2),
+ALTER COLUMN "discountAmount" SET DATA TYPE DECIMAL(14,2),
+ALTER COLUMN "deliveryFee" SET DATA TYPE DECIMAL(14,2),
+ALTER COLUMN "totalAmount" SET DATA TYPE DECIMAL(14,2);
+
+-- AlterTable
+ALTER TABLE "payments" ALTER COLUMN "amount" SET DATA TYPE DECIMAL(14,2);
+
+-- AlterTable
+ALTER TABLE "promo_rules" ALTER COLUMN "minTransaction" SET DATA TYPE DECIMAL(14,2),
+ALTER COLUMN "maxDiscount" SET DATA TYPE DECIMAL(14,2);
+
+-- AlterTable
+ALTER TABLE "promo_usages" ALTER COLUMN "discount" SET DATA TYPE DECIMAL(14,2);
+
+-- AlterTable
+ALTER TABLE "promos" ALTER COLUMN "value" SET DATA TYPE DECIMAL(14,2);
+
+-- AlterTable
+ALTER TABLE "service_prices" ALTER COLUMN "price" SET DATA TYPE DECIMAL(14,2);
+
+-- AlterTable
+ALTER TABLE "services" ALTER COLUMN "basePrice" SET DATA TYPE DECIMAL(14,2);
+
+-- AlterTable
+ALTER TABLE "wallet_transactions" ALTER COLUMN "amount" SET DATA TYPE DECIMAL(14,2),
+ALTER COLUMN "balanceBefore" SET DATA TYPE DECIMAL(14,2),
+ALTER COLUMN "balanceAfter" SET DATA TYPE DECIMAL(14,2);
+
+-- AlterTable
+ALTER TABLE "wallets" ALTER COLUMN "balance" SET DATA TYPE DECIMAL(14,2);
+

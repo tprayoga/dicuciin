@@ -3,6 +3,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { UserRole, OrderStatus } from '@prisma/client';
 import { CreateCustomerDto } from './dto/create-customer.dto';
+import { toNum } from '../../common/utils/money.util';
 
 @Injectable()
 export class CustomersService {
@@ -203,7 +204,7 @@ export class CustomersService {
     return {
       totalOrders,
       completedOrders,
-      totalSpending: spend._sum.totalAmount ?? 0,
+      totalSpending: toNum(spend._sum.totalAmount),
       favoriteService: favItems[0]?.serviceName ?? null,
     };
   }
