@@ -36,7 +36,9 @@ echo "==> Backup database sebelum migrate"
 BACKUP_DIR="$ROOT_DIR/backups"
 mkdir -p "$BACKUP_DIR"
 BACKUP_FILE="$BACKUP_DIR/laundry_db_$(date +%Y%m%d_%H%M%S).sql.gz"
-if docker exec -t laundry-postgres pg_dump -U laundry laundry_db | gzip > "$BACKUP_FILE"; then
+PG_USER="${POSTGRES_USER:-laundry}"
+PG_DB="${POSTGRES_DB:-laundry_db}"
+if docker exec -t laundry-postgres pg_dump -U "$PG_USER" "$PG_DB" | gzip > "$BACKUP_FILE"; then
   echo "    backup → $BACKUP_FILE"
   # Simpan 10 backup terakhir saja
   ls -1t "$BACKUP_DIR"/laundry_db_*.sql.gz 2>/dev/null | tail -n +11 | xargs -r rm -f

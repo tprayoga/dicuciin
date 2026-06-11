@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { OrdersService } from './orders.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -28,10 +28,12 @@ describe('OrdersService.create', () => {
       },
       promo: {
         findUnique: jest.fn(),
-        update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       order: { create: jest.fn().mockImplementation(({ data }: any) => ({ id: 'ord-1', ...data })) },
     };
+    // $transaction menjalankan callback dengan prisma itu sendiri sebagai tx.
+    prisma.$transaction = jest.fn((cb: any) => cb(prisma));
     const moduleRef = await Test.createTestingModule({
       providers: [OrdersService, { provide: PrismaService, useValue: prisma }],
     }).compile();
@@ -71,11 +73,31 @@ describe('OrdersService.create', () => {
     expect(data.subtotal.toString()).toBe('85500');
     expect(data.discountAmount.toString()).toBe('17100');
     expect(data.totalAmount.toString()).toBe('68400');
-    // kuota promo dinaikkan
-    expect(prisma.promo.update).toHaveBeenCalledWith({
+    // kuota promo dinaikkan (atomik, tanpa guard karena quota null)
+    expect(prisma.promo.updateMany).toHaveBeenCalledWith({
       where: { id: 'promo-1' },
       data: { usedCount: { increment: 1 } },
     });
+  });
+
+  it('kuota promo habis saat create (race) → BadRequest', async () => {
+    const now = new Date();
+    prisma.promo.findUnique.mockResolvedValue({
+      id: 'promo-1',
+      isActive: true,
+      startDate: new Date(now.getTime() - 86_400_000),
+      endDate: new Date(now.getTime() + 86_400_000),
+      quota: 10,
+      usedCount: 0,
+      promoType: 'PERCENTAGE',
+      value: new Prisma.Decimal(20),
+      rules: [],
+    });
+    // increment bersyarat tidak kena baris (kuota sudah habis di DB) → count 0
+    prisma.promo.updateMany.mockResolvedValue({ count: 0 });
+    await expect(
+      service.create({ ...baseDto, promoCode: 'WELCOME20' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('deliveryFee ditambahkan ke total', async () => {

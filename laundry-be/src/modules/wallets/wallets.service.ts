@@ -20,6 +20,21 @@ import {
 export class WalletsService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Terjemahkan bentrok unique key (Prisma P2002) — mis. idempotencyKey ganda —
+   * menjadi ConflictException. Mengandalkan unique constraint DB lebih aman dari
+   * cek-lalu-tulis manual yang racy (dua request bisa lolos cek bersamaan).
+   */
+  private rethrowDuplicate(err: unknown): never {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
+      throw new ConflictException('Transaction already processed');
+    }
+    throw err;
+  }
+
   /** Pastikan customer ada dan dimiliki oleh user yang sedang login. */
   private async getOwnedCustomer(customerId: string, userId: string) {
     const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
@@ -114,15 +129,6 @@ export class WalletsService {
   async topup(customerId: string, topupWalletDto: TopupWalletDto) {
     const { amount, description, idempotencyKey } = topupWalletDto;
 
-    if (idempotencyKey) {
-      const existing = await this.prisma.walletTransaction.findUnique({
-        where: { idempotencyKey },
-      });
-      if (existing) {
-        throw new ConflictException('Transaction already processed');
-      }
-    }
-
     const wallet = await this.prisma.wallet.findUnique({
       where: { customerId },
     });
@@ -131,46 +137,42 @@ export class WalletsService {
       throw new NotFoundException('Wallet not found');
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      // Increment atomik di DB → balanceBefore/After diturunkan dari hasil update,
-      // mencegah lost-update saat ada top-up bersamaan.
-      const updatedWallet = await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: { increment: amount } },
-      });
-      const balanceAfter = updatedWallet.balance;
-      const balanceBefore = balanceAfter.minus(amount);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // Increment atomik di DB → balanceBefore/After diturunkan dari hasil update,
+        // mencegah lost-update saat ada top-up bersamaan. idempotencyKey ganda →
+        // create gagal P2002 dan seluruh transaksi (termasuk increment) di-rollback.
+        const updatedWallet = await tx.wallet.update({
+          where: { id: wallet.id },
+          data: { balance: { increment: amount } },
+        });
+        const balanceAfter = updatedWallet.balance;
+        const balanceBefore = balanceAfter.minus(amount);
 
-      const transaction = await tx.walletTransaction.create({
-        data: {
-          walletId: wallet.id,
-          transactionType: WalletTransactionType.TOPUP,
-          amount,
-          balanceBefore,
-          balanceAfter,
-          description: description || 'Wallet top-up',
-          idempotencyKey,
-        },
-      });
+        const transaction = await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            transactionType: WalletTransactionType.TOPUP,
+            amount,
+            balanceBefore,
+            balanceAfter,
+            description: description || 'Wallet top-up',
+            idempotencyKey,
+          },
+        });
 
-      return {
-        wallet: updatedWallet,
-        transaction,
-      };
-    });
+        return {
+          wallet: updatedWallet,
+          transaction,
+        };
+      });
+    } catch (err) {
+      this.rethrowDuplicate(err);
+    }
   }
 
   async pay(customerId: string, payWithWalletDto: PayWithWalletDto) {
     const { orderId, amount, idempotencyKey } = payWithWalletDto;
-
-    if (idempotencyKey) {
-      const existing = await this.prisma.walletTransaction.findUnique({
-        where: { idempotencyKey },
-      });
-      if (existing) {
-        throw new ConflictException('Transaction already processed');
-      }
-    }
 
     const wallet = await this.prisma.wallet.findUnique({
       where: { customerId },
@@ -279,15 +281,6 @@ export class WalletsService {
   async refund(customerId: string, refundWalletDto: RefundWalletDto) {
     const { orderId, amount, description, idempotencyKey } = refundWalletDto;
 
-    if (idempotencyKey) {
-      const existing = await this.prisma.walletTransaction.findUnique({
-        where: { idempotencyKey },
-      });
-      if (existing) {
-        throw new ConflictException('Transaction already processed');
-      }
-    }
-
     const wallet = await this.prisma.wallet.findUnique({
       where: { customerId },
     });
@@ -304,32 +297,36 @@ export class WalletsService {
       throw new NotFoundException('Order not found');
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      // Increment atomik (lihat topup) → cegah lost-update saat refund bersamaan.
-      const updatedWallet = await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: { increment: amount } },
-      });
-      const balanceAfter = updatedWallet.balance;
-      const balanceBefore = balanceAfter.minus(amount);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // Increment atomik (lihat topup) → cegah lost-update saat refund bersamaan.
+        const updatedWallet = await tx.wallet.update({
+          where: { id: wallet.id },
+          data: { balance: { increment: amount } },
+        });
+        const balanceAfter = updatedWallet.balance;
+        const balanceBefore = balanceAfter.minus(amount);
 
-      const transaction = await tx.walletTransaction.create({
-        data: {
-          walletId: wallet.id,
-          orderId,
-          transactionType: WalletTransactionType.REFUND,
-          amount,
-          balanceBefore,
-          balanceAfter,
-          description: description || `Refund for order ${order.orderNumber}`,
-          idempotencyKey,
-        },
-      });
+        const transaction = await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            orderId,
+            transactionType: WalletTransactionType.REFUND,
+            amount,
+            balanceBefore,
+            balanceAfter,
+            description: description || `Refund for order ${order.orderNumber}`,
+            idempotencyKey,
+          },
+        });
 
-      return {
-        wallet: updatedWallet,
-        transaction,
-      };
-    });
+        return {
+          wallet: updatedWallet,
+          transaction,
+        };
+      });
+    } catch (err) {
+      this.rethrowDuplicate(err);
+    }
   }
 }

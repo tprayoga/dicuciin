@@ -64,7 +64,7 @@ export class OrdersService {
     const priceMap = new Map(servicePrices.map((sp) => [sp.serviceId, sp]));
 
     let subtotal = new Prisma.Decimal(0);
-    const orderItems = [];
+    const orderItems: any[] = [];
 
     for (const item of items) {
       const servicePrice = priceMap.get(item.serviceId);
@@ -88,7 +88,8 @@ export class OrdersService {
     }
 
     let discountAmount = new Prisma.Decimal(0);
-    let promoId = null;
+    let promoId: string | null = null;
+    let promoQuota: number | null = null;
 
     if (promoCode) {
       const promo = await this.prisma.promo.findUnique({
@@ -112,6 +113,7 @@ export class OrdersService {
             }
 
             promoId = promo.id;
+            promoQuota = promo.quota;
           }
         }
       }
@@ -119,52 +121,66 @@ export class OrdersService {
 
     const totalAmount = subtotal.minus(discountAmount).plus(deliveryFee);
 
-    const order = await this.prisma.order.create({
-      data: {
-        orderNumber,
-        customerId,
-        outletId,
-        ...orderData,
-        subtotal,
-        discountAmount,
-        deliveryFee,
-        totalAmount,
-        status: OrderStatus.DRAFT,
-        items: {
-          create: orderItems,
-        },
-        statusLogs: {
-          create: {
-            status: OrderStatus.DRAFT,
-            notes: 'Order created',
-            createdBy,
+    // Buat order + naikkan kuota promo dalam SATU transaksi. Kuota dinaikkan
+    // secara bersyarat (updateMany guard usedCount < quota) → race-safe: dua order
+    // bersamaan tak bisa menembus kuota. Bila kuota habis di titik ini, transaksi
+    // di-rollback (order batal) dan customer dapat error.
+    const order = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.order.create({
+        data: {
+          orderNumber,
+          customerId,
+          outletId,
+          ...orderData,
+          subtotal,
+          discountAmount,
+          deliveryFee,
+          totalAmount,
+          status: OrderStatus.DRAFT,
+          items: {
+            create: orderItems,
           },
-        },
-        ...(promoId && customerId
-          ? {
-              promoUsages: {
-                create: {
-                  promoId,
-                  customerId,
-                  discount: discountAmount,
+          statusLogs: {
+            create: {
+              status: OrderStatus.DRAFT,
+              notes: 'Order created',
+              createdBy,
+            },
+          },
+          ...(promoId && customerId
+            ? {
+                promoUsages: {
+                  create: {
+                    promoId,
+                    customerId,
+                    discount: discountAmount,
+                  },
                 },
-              },
-            }
-          : {}),
-      },
-      include: {
-        items: true,
-        outlet: true,
-        customer: true,
-      },
-    });
-
-    if (promoId) {
-      await this.prisma.promo.update({
-        where: { id: promoId },
-        data: { usedCount: { increment: 1 } },
+              }
+            : {}),
+        },
+        include: {
+          items: true,
+          outlet: true,
+          customer: true,
+        },
       });
-    }
+
+      if (promoId) {
+        const bumped = await tx.promo.updateMany({
+          where:
+            promoQuota != null
+              ? { id: promoId, usedCount: { lt: promoQuota } }
+              : { id: promoId },
+          data: { usedCount: { increment: 1 } },
+        });
+        if (bumped.count === 0) {
+          throw new BadRequestException('Kuota promo sudah habis');
+        }
+      }
+
+      return created;
+    });
 
     return order;
   }

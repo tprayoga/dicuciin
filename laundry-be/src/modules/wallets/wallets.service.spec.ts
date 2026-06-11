@@ -143,6 +143,19 @@ describe('WalletsService', () => {
       expect(txnArg.balanceBefore.toString()).toBe('281600'); // 331600 - 50000
       expect(txnArg.balanceAfter.toString()).toBe('331600');
     });
+
+    it('idempotencyKey ganda (P2002) → Conflict', async () => {
+      prisma.wallet.findUnique.mockResolvedValue({ id: 'w-1' });
+      prisma.$transaction.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('dup', {
+          code: 'P2002',
+          clientVersion: '5.8.0',
+        }),
+      );
+      await expect(
+        service.topup('cust-1', { amount: 50000, idempotencyKey: 'k1' } as any),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
   });
 
   describe('verifyPin', () => {
