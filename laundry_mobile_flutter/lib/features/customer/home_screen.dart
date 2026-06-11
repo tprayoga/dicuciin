@@ -23,7 +23,6 @@ part 'home/home_page.dart';
 part 'home/promo_page.dart';
 part 'home/location_page.dart';
 part 'home/order_page.dart';
-part 'home/order_detail_page.dart';
 part 'home/account_page.dart';
 part 'home/location_detail_page.dart';
 part 'home/booking_machines_page.dart';
@@ -132,9 +131,9 @@ Future<void> _openBannerLink(BuildContext context, String? url) async {
   if (uri == null) return;
   final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
   if (!ok && context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Tidak bisa membuka tautan.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Tidak bisa membuka tautan.')));
   }
 }
 
@@ -167,8 +166,11 @@ class _BannerPopupDialog extends StatelessWidget {
                   errorBuilder: (_, _, _) => Container(
                     color: AppColors.tintBlueAlt,
                     child: const Center(
-                      child: Icon(Icons.image_outlined,
-                          size: 48, color: AppColors.textMutedLight),
+                      child: Icon(
+                        Icons.image_outlined,
+                        size: 48,
+                        color: AppColors.textMutedLight,
+                      ),
                     ),
                   ),
                 ),
@@ -215,7 +217,8 @@ class _BannerPopupDialog extends StatelessWidget {
                       ),
                       onPressed: () {
                         Clipboard.setData(
-                            ClipboardData(text: banner.promoCode!));
+                          ClipboardData(text: banner.promoCode!),
+                        );
                         Navigator.of(context).pop();
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -225,8 +228,10 @@ class _BannerPopupDialog extends StatelessWidget {
                           ),
                         );
                       },
-                      icon: const Icon(Icons.confirmation_number_outlined,
-                          size: 18),
+                      icon: const Icon(
+                        Icons.confirmation_number_outlined,
+                        size: 18,
+                      ),
                       label: Text('Salin Kode ${banner.promoCode}'),
                     ),
                   ),
@@ -243,9 +248,11 @@ class _BannerPopupDialog extends StatelessWidget {
                         Navigator.of(context).pop();
                         _openBannerLink(context, banner.linkUrl);
                       },
-                      child: Text(banner.ctaLabel?.trim().isNotEmpty == true
-                          ? banner.ctaLabel!
-                          : 'Lihat'),
+                      child: Text(
+                        banner.ctaLabel?.trim().isNotEmpty == true
+                            ? banner.ctaLabel!
+                            : 'Lihat',
+                      ),
                     ),
                   ),
                 ],

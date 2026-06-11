@@ -390,20 +390,20 @@ class _LocationCard extends StatelessWidget {
   }
 
   Color _occupancyBg(String level) => switch (level) {
-        'low' => AppColors.successBg,
-        'medium' => AppColors.tintBlueAlt,
-        'high' => AppColors.warningBg,
-        'full' => AppColors.errorBg,
-        _ => AppColors.border,
-      };
+    'low' => AppColors.successBg,
+    'medium' => AppColors.tintBlueAlt,
+    'high' => AppColors.warningBg,
+    'full' => AppColors.errorBg,
+    _ => AppColors.border,
+  };
 
   Color _occupancyFg(String level) => switch (level) {
-        'low' => AppColors.success,
-        'medium' => _primary,
-        'high' => AppColors.warning,
-        'full' => AppColors.error,
-        _ => _textMuted,
-      };
+    'low' => AppColors.success,
+    'medium' => _primary,
+    'high' => AppColors.warning,
+    'full' => AppColors.error,
+    _ => _textMuted,
+  };
 }
 
 class _BookingSheet extends StatefulWidget {
@@ -612,151 +612,6 @@ class _SummaryStatusChip extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OrderActiveCard extends StatelessWidget {
-  const _OrderActiveCard({required this.order, required this.onDetail});
-
-  final _OrderItem order;
-  final VoidCallback onDetail;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.warningBg,
-                ),
-                child: const Icon(
-                  Icons.notifications_none,
-                  color: AppColors.warning,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Sebentar lagi mesin selesai!',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Sisa waktu penggunaan ${order.machineName}',
-                      style: const TextStyle(color: _textMuted, fontSize: 14),
-                    ),
-                    RichText(
-                      text: TextSpan(
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: order.remainingLabel ?? 'Sedang berjalan',
-                            style: const TextStyle(color: AppColors.warning),
-                          ),
-                          if (order.finishLabel != null)
-                            TextSpan(
-                              text: ' (${order.finishLabel})',
-                              style: const TextStyle(color: _textMuted),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          const Divider(height: 1),
-          const SizedBox(height: 14),
-          Text(
-            order.machineName,
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          _DetailRow(left: 'Kapasitas', right: order.capacity),
-          _DetailRow(left: 'Estimasi', right: order.estimasi),
-          _DetailRow(
-            left: 'Status',
-            rightWidget: _statusDot(order.status.label, AppColors.warning),
-          ),
-          const SizedBox(height: 14),
-          AppOutlineButton(label: 'Detail Order', onTap: onDetail),
-        ],
-      ),
-    );
-  }
-}
-
-class _OrderHistoryCard extends StatelessWidget {
-  const _OrderHistoryCard({required this.order, required this.onDetail});
-
-  final _OrderItem order;
-  final VoidCallback onDetail;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  order.machineName,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Text(
-                order.date,
-                style: const TextStyle(fontSize: 12, color: _textMuted),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _DetailRow(left: 'Kapasitas', right: order.capacity),
-          _DetailRow(left: 'Estimasi', right: order.estimasi),
-          _DetailRow(
-            left: 'Status',
-            rightWidget: _statusDot(order.status.label, AppColors.success),
-          ),
-          const SizedBox(height: 14),
-          AppOutlineButton(label: 'Detail Order', onTap: onDetail),
         ],
       ),
     );
@@ -1203,16 +1058,10 @@ class _SegmentButton extends StatelessWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.left,
-    this.right,
-    this.rightWidget,
-    this.greenRight = false,
-  });
+  const _DetailRow({required this.left, this.right, this.greenRight = false});
 
   final String left;
   final String? right;
-  final Widget? rightWidget;
   final bool greenRight;
 
   @override
@@ -1224,18 +1073,15 @@ class _DetailRow extends StatelessWidget {
         children: [
           Text(left, style: const TextStyle(fontSize: 14, color: _textMuted)),
           const Spacer(),
-          if (rightWidget != null)
-            rightWidget!
-          else
-            Text(
-              right ?? '-',
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 14,
-                color: greenRight ? AppColors.success : _textDark,
-                fontWeight: FontWeight.w600,
-              ),
+          Text(
+            right ?? '-',
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontSize: 14,
+              color: greenRight ? AppColors.success : _textDark,
+              fontWeight: FontWeight.w600,
             ),
+          ),
         ],
       ),
     );

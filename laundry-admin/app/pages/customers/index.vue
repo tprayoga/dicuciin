@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { useApi } from '~/composables/useApi'
+import { useAuthStore } from '~/stores/auth'
 import type { PaginatedResponse } from '~/types'
 
 const api = useApi()
 const toast = useToast()
+const authStore = useAuthStore()
+const canRefund = computed(() =>
+  ['SUPER_ADMIN', 'OWNER', 'ADMIN_OUTLET'].includes(authStore.user?.role || ''),
+)
 
 interface CustomerItem {
   id: string
@@ -48,6 +53,10 @@ const showDetail = ref(false)
 const detailLoading = ref(false)
 const selectedCustomer = ref<CustomerDetail | null>(null)
 const selectedOrders = ref<OrderItem[]>([])
+const selectedRefundOrder = ref<OrderItem | null>(null)
+const showRefundModal = ref(false)
+const refundReason = ref('')
+const refunding = ref(false)
 const createForm = reactive({
   name: '',
   email: '',
@@ -102,6 +111,55 @@ async function openDetail(item: CustomerItem) {
     showDetail.value = false
   } finally {
     detailLoading.value = false
+  }
+}
+
+function openRefund(order: OrderItem) {
+  selectedRefundOrder.value = order
+  refundReason.value = ''
+  showRefundModal.value = true
+}
+
+async function submitRefund() {
+  const order = selectedRefundOrder.value
+  const customer = selectedCustomer.value
+  const reason = refundReason.value.trim()
+  if (!order || !customer) return
+  if (reason.length < 3) {
+    toast.add({
+      title: 'Alasan refund belum lengkap',
+      description: 'Masukkan alasan minimal 3 karakter.',
+      color: 'error',
+    })
+    return
+  }
+
+  refunding.value = true
+  try {
+    const result = await api.post<{ wallet: { balance: number } }>(
+      `/wallets/orders/${order.id}/refund`,
+      { description: reason },
+    )
+    order.status = 'REFUNDED'
+    if (customer.wallet) customer.wallet.balance = result.wallet.balance
+
+    const listItem = customers.value.find(item => item.id === customer.id)
+    if (listItem?.wallet) listItem.wallet.balance = result.wallet.balance
+
+    showRefundModal.value = false
+    toast.add({
+      title: 'Refund berhasil',
+      description: `${order.orderNumber} dikembalikan ke saldo ${customer.user?.name || 'member'}.`,
+      color: 'success',
+    })
+  } catch (e: any) {
+    toast.add({
+      title: 'Refund gagal',
+      description: e.message,
+      color: 'error',
+    })
+  } finally {
+    refunding.value = false
   }
 }
 
@@ -338,9 +396,54 @@ onMounted(load)
                 <div class="text-right">
                   <p class="font-semibold text-[#19984d]">Rp {{ order.totalAmount.toLocaleString('id-ID') }}</p>
                   <p class="text-xs text-[#6f809f]">{{ order.status }}</p>
+                  <UButton
+                    v-if="order.status === 'PAID' && canRefund"
+                    class="mt-2"
+                    color="error"
+                    variant="outline"
+                    size="xs"
+                    icon="i-heroicons-arrow-uturn-left"
+                    @click="openRefund(order)"
+                  >
+                    Refund
+                  </UButton>
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </template>
+    </UModal>
+
+    <UModal v-model:open="showRefundModal" title="Refund Transaksi Member">
+      <template #body>
+        <div v-if="selectedRefundOrder && selectedCustomer" class="space-y-4">
+          <div class="rounded-lg bg-[#f6f8fc] p-3 text-sm">
+            <p class="font-semibold">{{ selectedRefundOrder.orderNumber }}</p>
+            <p class="text-[#4f607f]">
+              Rp {{ selectedRefundOrder.totalAmount.toLocaleString('id-ID') }}
+              akan dikembalikan ke saldo {{ selectedCustomer.user?.name || 'member' }}.
+            </p>
+          </div>
+          <UFormField label="Alasan Refund" required>
+            <UTextarea
+              v-model="refundReason"
+              class="w-full"
+              :rows="3"
+              placeholder="Contoh: customer salah memilih layanan"
+            />
+          </UFormField>
+          <div class="flex justify-end gap-2">
+            <UButton
+              variant="ghost"
+              :disabled="refunding"
+              @click="showRefundModal = false"
+            >
+              Batal
+            </UButton>
+            <UButton color="error" :loading="refunding" @click="submitRefund">
+              Proses Refund
+            </UButton>
           </div>
         </div>
       </template>

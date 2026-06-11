@@ -109,6 +109,13 @@ export class AuthService {
 
     const user = await this.prisma.user.findFirst({
       where: { OR: [{ email: identifier }, { phone: identifier }] },
+      include: {
+        outletUsers: {
+          include: {
+            outlet: { select: { id: true, name: true, code: true } },
+          },
+        },
+      },
     });
 
     if (!user) throw new UnauthorizedException('Invalid credentials');

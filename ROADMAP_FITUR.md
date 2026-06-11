@@ -162,3 +162,50 @@ per-mesin di UI location_detail kosmetik (booking nyata via scan); kiosk fronten
 
 Commit lengkap di branch: `263a0e0 F0 · ebe2831 F1 · a8445ab F2 · 5378e73 F3 · 73bd942 F5 ·
 ebd1ab3 F4 · f84db93 seed · 65678e0 · fbc62b7 · 854d912 · 9d1ad01`.
+
+---
+
+## 🔵 Update Integrasi Operasional (2026-06-11)
+
+### Mobile customer
+- **Saldo dan top-up diperbaiki**: wallet customer lama dibuat otomatis bila belum memiliki
+  row wallet; saldo home/top-up dimuat dari API dan endpoint mengarah ke
+  `/wallets/customer/:customerId/topup`.
+- **Menu Order memakai data backend**: order dan booking aktif/riwayat tidak lagi memakai
+  data mock. Data dimuat ulang setelah booking/order dan mendukung pull-to-refresh.
+- **Detail order disatukan ke menu Order** agar status, layanan, outlet, jadwal, total, dan
+  tindakan refund memakai model backend yang sama.
+- **Refund customer**: order berstatus PAID dapat diajukan refund ke wallet dengan alasan;
+  saldo dan daftar order diperbarui setelah refund berhasil.
+
+### Backend dan admin
+- **Refund tervalidasi server**: refund hanya untuk order PAID milik customer terkait,
+  idempotent terhadap refund ganda, mengubah order menjadi REFUNDED, menambah saldo secara
+  atomik, dan mencatat transaksi/status log.
+- **Refund admin** tersedia dari menu Transaksi/Order dan Kelola Member untuk
+  SUPER_ADMIN/OWNER/ADMIN_OUTLET. ADMIN_OUTLET dibatasi ke outlet penugasannya.
+- Test wallet diperluas untuk ownership, otorisasi outlet, refund ganda, dan perubahan saldo.
+
+### Kiosk Flutter
+- Aplikasi baru `laundry_kiosk_flutter` menggunakan tampilan portrait 9:16 dan alur
+  self-service: welcome → pilih layanan → keranjang → konfirmasi → nomor pesanan.
+- **Device enrollment menggantikan login staff**:
+  - Admin membuat kode 6 digit sekali pakai dari **Kelola Outlet → Kelola Kiosk**.
+  - Kode berlaku 10 menit dan menghasilkan device token yang hanya disimpan dalam bentuk hash
+    di backend.
+  - Android/desktop menyimpan token melalui secure storage; web memakai browser localStorage
+    melalui conditional import.
+  - Restart atau jadwal OFF tidak melepas enrollment.
+- **Runtime kiosk**: bootstrap otomatis, heartbeat 30 detik, runtime session dibuat ulang saat
+  perangkat aktif, revoke hanya dari admin, dan order kiosk memakai device token khusus.
+- **Jadwal operasional per kiosk**: hari, jam buka/tutup, dan timezone dikelola dari outlet.
+  Di luar jadwal kiosk menampilkan layar tutup dan aktif kembali otomatis.
+- Migration: `20260611170000_add_kiosk_enrollment`.
+
+### Verifikasi
+- Backend: Prisma schema valid, production build berhasil, **38 test lulus**.
+- Admin Nuxt: production build berhasil.
+- Mobile Flutter: perubahan terkait lolos analyzer pada sesi implementasi.
+- Kiosk Flutter: analyzer, widget test, dan web build berhasil.
+- Endpoint enrollment telah diverifikasi aktif setelah migration dan restart backend:
+  `/api/v1/kiosks/:id/enrollment-code`.

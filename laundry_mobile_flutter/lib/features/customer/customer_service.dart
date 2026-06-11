@@ -8,6 +8,11 @@ class CustomerService {
 
   final ApiClient _apiClient;
 
+  int _moneyToInt(Object? value) {
+    if (value is num) return value.round();
+    return double.tryParse(value?.toString() ?? '')?.round() ?? 0;
+  }
+
   /// Ambil list dari payload, tahan dua bentuk respons paginated:
   /// (a) sudah berupa List (interceptor menaikkan `data` ke atas), atau
   /// (b) Map `{data: [...], meta}`.
@@ -39,10 +44,7 @@ class CustomerService {
     final payload = await _apiClient.get(
       '/customers/$customerId/orders',
       headers: {'Authorization': 'Bearer $accessToken'},
-      queryParameters: {
-        'page': '$page',
-        'limit': '$limit',
-      },
+      queryParameters: {'page': '$page', 'limit': '$limit'},
     );
 
     final list = _asList(payload);
@@ -60,10 +62,7 @@ class CustomerService {
     final payload = await _apiClient.get(
       '/promos',
       headers: {'Authorization': 'Bearer $accessToken'},
-      queryParameters: {
-        'page': '$page',
-        'limit': '$limit',
-      },
+      queryParameters: {'page': '$page', 'limit': '$limit'},
     );
 
     final list = _asList(payload);
@@ -237,7 +236,8 @@ class CustomerService {
         'orderId': orderId,
         'rating': rating,
         'source': 'APP',
-        if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
+        if (comment != null && comment.trim().isNotEmpty)
+          'comment': comment.trim(),
       }),
     );
   }
@@ -304,7 +304,8 @@ class CustomerService {
           (item) => {
             'serviceId': item.serviceId,
             'quantity': item.quantity,
-            if (item.notes != null && item.notes!.isNotEmpty) 'notes': item.notes,
+            if (item.notes != null && item.notes!.isNotEmpty)
+              'notes': item.notes,
           },
         )
         .toList();
@@ -361,5 +362,21 @@ class CustomerService {
       body: jsonEncode({'cancelReason': cancelReason}),
     );
     return OrderDetail.fromJson(payload as Map<String, dynamic>);
+  }
+
+  Future<int> refundOrderToWallet({
+    required String accessToken,
+    required String customerId,
+    required String orderId,
+    required String reason,
+  }) async {
+    final payload = await _apiClient.post(
+      '/wallets/customer/$customerId/refund',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({'orderId': orderId, 'description': reason}),
+    );
+    final wallet =
+        (payload as Map<String, dynamic>)['wallet'] as Map<String, dynamic>?;
+    return _moneyToInt(wallet?['balance']);
   }
 }

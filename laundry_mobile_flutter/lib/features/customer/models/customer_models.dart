@@ -46,9 +46,9 @@ class WalletData {
       balance: _toDouble(json['balance']),
       transactions: rawTransactions is List
           ? rawTransactions
-              .whereType<Map<String, dynamic>>()
-              .map(WalletTransaction.fromJson)
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map(WalletTransaction.fromJson)
+                .toList()
           : const [],
     );
   }
@@ -74,7 +74,8 @@ class WalletTransaction {
       id: (json['id'] as String?) ?? '',
       type: (json['type'] as String?) ?? '-',
       amount: _toDouble(json['amount']),
-      createdAt: DateTime.tryParse((json['createdAt'] as String?) ?? '') ??
+      createdAt:
+          DateTime.tryParse((json['createdAt'] as String?) ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
       description: json['description'] as String?,
     );
@@ -89,6 +90,7 @@ class OrderSummary {
     required this.totalAmount,
     required this.orderDate,
     required this.outletName,
+    required this.serviceName,
   });
 
   final String id;
@@ -97,17 +99,22 @@ class OrderSummary {
   final double totalAmount;
   final DateTime orderDate;
   final String outletName;
+  final String serviceName;
 
   factory OrderSummary.fromJson(Map<String, dynamic> json) {
+    final items = json['items'] as List<dynamic>? ?? const [];
+    final firstItem = items.whereType<Map<String, dynamic>>().firstOrNull;
     return OrderSummary(
       id: json['id'] as String,
       orderNumber: (json['orderNumber'] as String?) ?? '-',
       status: (json['status'] as String?) ?? '-',
       totalAmount: _toDouble(json['totalAmount']),
-      orderDate: DateTime.tryParse((json['orderDate'] as String?) ?? '') ??
+      orderDate:
+          DateTime.tryParse((json['orderDate'] as String?) ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
-      outletName: (json['outlet'] as Map<String, dynamic>?)?['name'] as String? ??
-          '-',
+      outletName:
+          (json['outlet'] as Map<String, dynamic>?)?['name'] as String? ?? '-',
+      serviceName: (firstItem?['serviceName'] as String?) ?? 'Layanan Laundry',
     );
   }
 }
@@ -142,7 +149,8 @@ class PromoSummary {
       name: (json['name'] as String?) ?? '-',
       type: (json['promoType'] as String?) ?? '-',
       value: _toDouble(json['value']),
-      endDate: DateTime.tryParse((json['endDate'] as String?) ?? '') ??
+      endDate:
+          DateTime.tryParse((json['endDate'] as String?) ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
       isActive: (json['isActive'] as bool?) ?? false,
       description: json['description'] as String?,
@@ -152,11 +160,7 @@ class PromoSummary {
 }
 
 class OutletOption {
-  OutletOption({
-    required this.id,
-    required this.name,
-    required this.address,
-  });
+  OutletOption({required this.id, required this.name, required this.address});
 
   final String id;
   final String name;
@@ -270,7 +274,8 @@ class OrderDetail {
       id: (json['id'] as String?) ?? '',
       orderNumber: (json['orderNumber'] as String?) ?? '-',
       status: (json['status'] as String?) ?? '-',
-      orderDate: DateTime.tryParse((json['orderDate'] as String?) ?? '') ??
+      orderDate:
+          DateTime.tryParse((json['orderDate'] as String?) ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
       subtotal: _toDouble(json['subtotal']),
       discountAmount: _toDouble(json['discountAmount']),
@@ -328,7 +333,8 @@ class OrderStatusLogEntry {
   factory OrderStatusLogEntry.fromJson(Map<String, dynamic> json) {
     return OrderStatusLogEntry(
       status: (json['status'] as String?) ?? '-',
-      createdAt: DateTime.tryParse((json['createdAt'] as String?) ?? '') ??
+      createdAt:
+          DateTime.tryParse((json['createdAt'] as String?) ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
       notes: json['notes'] as String?,
     );
@@ -407,7 +413,8 @@ class OutletOccupancy {
   final String remark; // Sepi | Normal | Ramai | Penuh | Mesin tidak tersedia
   final String level; // none | low | medium | high | full
 
-  factory OutletOccupancy.fromJson(Map<String, dynamic> json) => OutletOccupancy(
+  factory OutletOccupancy.fromJson(Map<String, dynamic> json) =>
+      OutletOccupancy(
         total: (json['total'] as num?)?.toInt() ?? 0,
         available: (json['available'] as num?)?.toInt() ?? 0,
         busy: (json['busy'] as num?)?.toInt() ?? 0,
@@ -438,13 +445,13 @@ class OutletMachine {
   bool get isWasher => type == 'WASHING_MACHINE';
 
   factory OutletMachine.fromJson(Map<String, dynamic> json) => OutletMachine(
-        deviceId: (json['deviceId'] as String?) ?? '',
-        deviceCode: (json['deviceCode'] as String?) ?? '-',
-        name: (json['name'] as String?) ?? 'Mesin',
-        type: (json['type'] as String?) ?? '',
-        status: (json['status'] as String?) ?? 'OFFLINE',
-        bookable: json['bookable'] == true,
-      );
+    deviceId: (json['deviceId'] as String?) ?? '',
+    deviceCode: (json['deviceCode'] as String?) ?? '-',
+    name: (json['name'] as String?) ?? 'Mesin',
+    type: (json['type'] as String?) ?? '',
+    status: (json['status'] as String?) ?? 'OFFLINE',
+    bookable: json['bookable'] == true,
+  );
 }
 
 /// Daftar mesin outlet + ringkasan keramaian.
@@ -455,12 +462,13 @@ class OutletMachines {
   final List<OutletMachine> machines;
 
   factory OutletMachines.fromJson(Map<String, dynamic> json) => OutletMachines(
-        occupancy:
-            OutletOccupancy.fromJson(json['occupancy'] as Map<String, dynamic>? ?? {}),
-        machines: ((json['machines'] as List?) ?? [])
-            .map((e) => OutletMachine.fromJson(e as Map<String, dynamic>))
-            .toList(),
-      );
+    occupancy: OutletOccupancy.fromJson(
+      json['occupancy'] as Map<String, dynamic>? ?? {},
+    ),
+    machines: ((json['machines'] as List?) ?? [])
+        .map((e) => OutletMachine.fromJson(e as Map<String, dynamic>))
+        .toList(),
+  );
 }
 
 /// Hasil verifikasi scan QR mesin (`POST /bookings/verify`).
@@ -512,11 +520,8 @@ class MemberStats {
     );
   }
 
-  static MemberStats empty() => MemberStats(
-        totalOrders: 0,
-        completedOrders: 0,
-        totalSpending: 0,
-      );
+  static MemberStats empty() =>
+      MemberStats(totalOrders: 0, completedOrders: 0, totalSpending: 0);
 }
 
 /// Banner/pop-up terkelola admin dari `GET /banners/active`.
@@ -614,15 +619,15 @@ class GatewayPayment {
   bool get isPaid => status == 'PAID';
 
   factory GatewayPayment.fromJson(Map<String, dynamic> json) => GatewayPayment(
-        paymentNumber: json['paymentNumber'] as String,
-        method: json['method'] as String? ?? '',
-        amount: _toDouble(json['amount']),
-        status: json['status'] as String? ?? 'PENDING',
-        qrString: json['qrString'] as String?,
-        vaNumber: json['vaNumber'] as String?,
-        bank: json['bank'] as String?,
-        expiresAt: json['expiresAt'] as String?,
-      );
+    paymentNumber: json['paymentNumber'] as String,
+    method: json['method'] as String? ?? '',
+    amount: _toDouble(json['amount']),
+    status: json['status'] as String? ?? 'PENDING',
+    qrString: json['qrString'] as String?,
+    vaNumber: json['vaNumber'] as String?,
+    bank: json['bank'] as String?,
+    expiresAt: json['expiresAt'] as String?,
+  );
 }
 
 double _toDouble(dynamic value) {

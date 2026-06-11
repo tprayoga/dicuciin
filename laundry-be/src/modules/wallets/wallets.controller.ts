@@ -10,11 +10,23 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { WalletsService } from './wallets.service';
-import { TopupWalletDto, PayWithWalletDto, RefundWalletDto } from './dto/wallet.dto';
+import {
+  TopupWalletDto,
+  PayWithWalletDto,
+  RefundWalletDto,
+  AdminRefundWalletDto,
+} from './dto/wallet.dto';
 import { WalletPinDto } from './dto/wallet-pin.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
 
 @ApiTags('Wallets')
 @ApiBearerAuth()
@@ -43,20 +55,49 @@ export class WalletsController {
 
   @Post('customer/:customerId/topup')
   @ApiOperation({ summary: 'Top-up wallet' })
-  async topup(@Param('customerId') customerId: string, @Body() topupWalletDto: TopupWalletDto) {
+  async topup(
+    @Param('customerId') customerId: string,
+    @Body() topupWalletDto: TopupWalletDto,
+  ) {
     return this.walletsService.topup(customerId, topupWalletDto);
   }
 
   @Post('customer/:customerId/pay')
   @ApiOperation({ summary: 'Pay with wallet' })
-  async pay(@Param('customerId') customerId: string, @Body() payWithWalletDto: PayWithWalletDto) {
+  async pay(
+    @Param('customerId') customerId: string,
+    @Body() payWithWalletDto: PayWithWalletDto,
+  ) {
     return this.walletsService.pay(customerId, payWithWalletDto);
   }
 
   @Post('customer/:customerId/refund')
-  @ApiOperation({ summary: 'Refund to wallet' })
-  async refund(@Param('customerId') customerId: string, @Body() refundWalletDto: RefundWalletDto) {
-    return this.walletsService.refund(customerId, refundWalletDto);
+  @ApiOperation({ summary: 'Refund paid order to customer wallet' })
+  async refund(
+    @Param('customerId') customerId: string,
+    @Request() req: any,
+    @Body() refundWalletDto: RefundWalletDto,
+  ) {
+    return this.walletsService.refund(
+      customerId,
+      req.user.userId,
+      refundWalletDto,
+    );
+  }
+
+  @Post('orders/:orderId/refund')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER, UserRole.ADMIN_OUTLET)
+  @ApiOperation({ summary: 'Refund paid order to wallet by admin' })
+  async refundByAdmin(
+    @Param('orderId') orderId: string,
+    @Request() req: any,
+    @Body() dto: AdminRefundWalletDto,
+  ) {
+    return this.walletsService.refundByAdmin(
+      orderId,
+      req.user.userId,
+      dto.description,
+    );
   }
 
   @Post('customer/:customerId/pin/set')

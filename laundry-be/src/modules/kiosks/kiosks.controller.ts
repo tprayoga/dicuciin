@@ -1,14 +1,28 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+  Req,
+  Headers,
+} from '@nestjs/common';
 import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { IsString, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { KiosksService } from './kiosks.service';
-import { CreateKioskDto, UpdateKioskDto } from './dto/kiosk.dto';
+import { CreateKioskDto, EnrollKioskDto, UpdateKioskDto } from './dto/kiosk.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { Public } from '../../common/decorators/public.decorator';
+import { CreateOrderDto } from '../orders/dto/order.dto';
 
 class StartSessionDto {
   @ApiProperty({ required: false })
@@ -16,10 +30,6 @@ class StartSessionDto {
   @IsOptional()
   customerId?: string;
 
-  @ApiProperty({ required: false, description: 'Staff yang bertugas di kiosk' })
-  @IsString()
-  @IsOptional()
-  staffUserId?: string;
 }
 
 @ApiTags('Kiosks')
@@ -36,6 +46,67 @@ export class KiosksController {
     return this.kiosksService.create(createKioskDto);
   }
 
+  @Public()
+  @Post('device/enroll')
+  @ApiOperation({ summary: 'Enroll kiosk device with a one-time code' })
+  async enroll(@Body() dto: EnrollKioskDto) {
+    return this.kiosksService.enroll(dto.code, dto.deviceId);
+  }
+
+  @Public()
+  @Get('device/bootstrap')
+  @ApiOperation({ summary: 'Restore an enrolled kiosk device' })
+  async bootstrap(@Headers('authorization') authorization?: string) {
+    return this.kiosksService.bootstrap(this.deviceToken(authorization));
+  }
+
+  @Public()
+  @Post('device/heartbeat')
+  @ApiOperation({ summary: 'Record kiosk heartbeat and return schedule state' })
+  async heartbeat(@Headers('authorization') authorization?: string) {
+    return this.kiosksService.heartbeat(this.deviceToken(authorization));
+  }
+
+  @Public()
+  @Get('device/services')
+  @ApiOperation({ summary: 'Get active services for an enrolled kiosk outlet' })
+  async deviceServices(@Headers('authorization') authorization?: string) {
+    return this.kiosksService.deviceServices(this.deviceToken(authorization));
+  }
+
+  @Public()
+  @Post('device/session/start')
+  @ApiOperation({ summary: 'Start a runtime session for an enrolled kiosk' })
+  async startDeviceSession(@Headers('authorization') authorization?: string) {
+    return this.kiosksService.startDeviceSession(this.deviceToken(authorization));
+  }
+
+  @Public()
+  @Post('device/session/:sessionId/end')
+  @ApiOperation({ summary: 'End a runtime session for an enrolled kiosk' })
+  async endDeviceSession(
+    @Param('sessionId') sessionId: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.kiosksService.endDeviceSession(
+      this.deviceToken(authorization),
+      sessionId,
+    );
+  }
+
+  @Public()
+  @Post('device/orders')
+  @ApiOperation({ summary: 'Create an order from an enrolled kiosk' })
+  async createDeviceOrder(
+    @Body() dto: CreateOrderDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.kiosksService.createDeviceOrder(
+      this.deviceToken(authorization),
+      dto,
+    );
+  }
+
   @Get()
   @ApiOperation({ summary: 'Get all kiosks' })
   @ApiQuery({ name: 'page', required: false, type: Number })
@@ -47,6 +118,26 @@ export class KiosksController {
     @Query('outletId') outletId?: string,
   ) {
     return this.kiosksService.findAll(page, limit, outletId);
+  }
+
+  @Get('assigned')
+  @ApiOperation({ summary: 'Get active kiosks assigned to the staff outlet' })
+  async findAssigned(@Req() req: any) {
+    return this.kiosksService.findAssigned(req.user.userId);
+  }
+
+  @Post(':id/enrollment-code')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER, UserRole.ADMIN_OUTLET)
+  @ApiOperation({ summary: 'Generate a one-time enrollment code' })
+  async generateEnrollmentCode(@Param('id') id: string) {
+    return this.kiosksService.generateEnrollmentCode(id);
+  }
+
+  @Post(':id/enrollment/revoke')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER, UserRole.ADMIN_OUTLET)
+  @ApiOperation({ summary: 'Revoke an enrolled kiosk device' })
+  async revokeEnrollment(@Param('id') id: string) {
+    return this.kiosksService.revokeEnrollment(id);
   }
 
   @Get(':id')
@@ -71,11 +162,15 @@ export class KiosksController {
 
   @Post(':id/session/start')
   @ApiOperation({ summary: 'Start kiosk session' })
-  async startSession(@Param('id') id: string, @Body() startSessionDto: StartSessionDto) {
+  async startSession(
+    @Param('id') id: string,
+    @Body() startSessionDto: StartSessionDto,
+    @Req() req: any,
+  ) {
     return this.kiosksService.startSession(
       id,
       startSessionDto.customerId,
-      startSessionDto.staffUserId,
+      req.user.userId,
     );
   }
 
@@ -83,5 +178,9 @@ export class KiosksController {
   @ApiOperation({ summary: 'End kiosk session' })
   async endSession(@Param('sessionId') sessionId: string) {
     return this.kiosksService.endSession(sessionId);
+  }
+
+  private deviceToken(authorization?: string) {
+    return authorization?.replace(/^Bearer\s+/i, '').trim() || '';
   }
 }

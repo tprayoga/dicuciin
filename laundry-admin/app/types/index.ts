@@ -184,6 +184,14 @@ export interface Kiosk {
   createdAt: string
   updatedAt: string
   outlet?: Outlet
+  deviceId?: string | null
+  enrolledAt?: string | null
+  isEnrolled?: boolean
+  scheduleEnabled?: boolean
+  scheduleDays?: number[]
+  scheduleOpenTime?: string | null
+  scheduleCloseTime?: string | null
+  timezone?: string
 }
 
 export interface IotDevice {

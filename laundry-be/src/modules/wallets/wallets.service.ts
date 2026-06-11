@@ -4,21 +4,50 @@ import {
   BadRequestException,
   ConflictException,
   UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { TopupWalletDto, PayWithWalletDto, RefundWalletDto } from './dto/wallet.dto';
+import {
+  TopupWalletDto,
+  PayWithWalletDto,
+  RefundWalletDto,
+} from './dto/wallet.dto';
 import {
   WalletTransactionType,
   PaymentMethod,
   PaymentStatus,
   OrderStatus,
+  UserRole,
   Prisma,
 } from '@prisma/client';
 
 @Injectable()
 export class WalletsService {
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * Akun customer lama dapat belum memiliki row wallet. Buat wallet saldo nol
+   * saat pertama kali diakses agar endpoint wallet tetap dapat digunakan.
+   */
+  private async getOrCreateWallet(customerId: string) {
+    const existing = await this.prisma.wallet.findUnique({
+      where: { customerId },
+    });
+    if (existing) return existing;
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { id: true },
+    });
+    if (!customer) throw new NotFoundException('Customer not found');
+
+    return this.prisma.wallet.upsert({
+      where: { customerId },
+      update: {},
+      create: { customerId, balance: 0 },
+    });
+  }
 
   /**
    * Terjemahkan bentrok unique key (Prisma P2002) — mis. idempotencyKey ganda —
@@ -37,10 +66,14 @@ export class WalletsService {
 
   /** Pastikan customer ada dan dimiliki oleh user yang sedang login. */
   private async getOwnedCustomer(customerId: string, userId: string) {
-    const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+    });
     if (!customer) throw new NotFoundException('Customer not found');
     if (customer.userId !== userId) {
-      throw new UnauthorizedException('Tidak boleh mengakses PIN customer lain');
+      throw new UnauthorizedException(
+        'Tidak boleh mengakses PIN customer lain',
+      );
     }
     return customer;
   }
@@ -61,7 +94,8 @@ export class WalletsService {
   /** Verifikasi PIN wallet. */
   async verifyPin(customerId: string, userId: string, pin: string) {
     const customer = await this.getOwnedCustomer(customerId, userId);
-    if (!customer.walletPinHash) throw new BadRequestException('PIN wallet belum diatur');
+    if (!customer.walletPinHash)
+      throw new BadRequestException('PIN wallet belum diatur');
 
     const valid = await bcrypt.compare(pin, customer.walletPinHash);
     if (!valid) throw new UnauthorizedException('PIN salah');
@@ -70,7 +104,9 @@ export class WalletsService {
   }
 
   async getWallet(customerId: string) {
-    const wallet = await this.prisma.wallet.findUnique({
+    await this.getOrCreateWallet(customerId);
+
+    return this.prisma.wallet.findUniqueOrThrow({
       where: { customerId },
       include: {
         customer: {
@@ -86,22 +122,14 @@ export class WalletsService {
         },
       },
     });
-
-    if (!wallet) {
-      throw new NotFoundException('Wallet not found');
-    }
-
-    return wallet;
   }
 
-  async getTransactions(customerId: string, page: number = 1, limit: number = 10) {
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { customerId },
-    });
-
-    if (!wallet) {
-      throw new NotFoundException('Wallet not found');
-    }
+  async getTransactions(
+    customerId: string,
+    page: number = 1,
+    limit: number = 10,
+  ) {
+    const wallet = await this.getOrCreateWallet(customerId);
 
     const skip = (page - 1) * limit;
 
@@ -129,13 +157,7 @@ export class WalletsService {
   async topup(customerId: string, topupWalletDto: TopupWalletDto) {
     const { amount, description, idempotencyKey } = topupWalletDto;
 
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { customerId },
-    });
-
-    if (!wallet) {
-      throw new NotFoundException('Wallet not found');
-    }
+    const wallet = await this.getOrCreateWallet(customerId);
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -174,13 +196,7 @@ export class WalletsService {
   async pay(customerId: string, payWithWalletDto: PayWithWalletDto) {
     const { orderId, amount, idempotencyKey } = payWithWalletDto;
 
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { customerId },
-    });
-
-    if (!wallet) {
-      throw new NotFoundException('Wallet not found');
-    }
+    const wallet = await this.getOrCreateWallet(customerId);
 
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
@@ -278,27 +294,140 @@ export class WalletsService {
     }
   }
 
-  async refund(customerId: string, refundWalletDto: RefundWalletDto) {
-    const { orderId, amount, description, idempotencyKey } = refundWalletDto;
-
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { customerId },
+  async refund(
+    customerId: string,
+    userId: string,
+    refundWalletDto: RefundWalletDto,
+  ) {
+    const { orderId, description } = refundWalletDto;
+    return this.processRefund({
+      orderId,
+      expectedCustomerId: customerId,
+      actorUserId: userId,
+      description,
+      requireCustomerOwnership: true,
     });
+  }
 
-    if (!wallet) {
-      throw new NotFoundException('Wallet not found');
+  async refundByAdmin(
+    orderId: string,
+    adminUserId: string,
+    description: string,
+  ) {
+    const [admin, order] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: adminUserId },
+        select: {
+          role: true,
+          outletUsers: { select: { outletId: true } },
+        },
+      }),
+      this.prisma.order.findUnique({
+        where: { id: orderId },
+        select: { outletId: true },
+      }),
+    ]);
+    if (!admin) throw new ForbiddenException('Admin tidak ditemukan');
+    if (!order) throw new NotFoundException('Order not found');
+
+    const allowedRoles: UserRole[] = [
+      UserRole.SUPER_ADMIN,
+      UserRole.OWNER,
+      UserRole.ADMIN_OUTLET,
+    ];
+    if (!allowedRoles.includes(admin.role)) {
+      throw new ForbiddenException('Tidak memiliki izin refund');
+    }
+    if (
+      admin.role === UserRole.ADMIN_OUTLET &&
+      !admin.outletUsers.some(
+        (assignment) => assignment.outletId === order.outletId,
+      )
+    ) {
+      throw new ForbiddenException('Order bukan dari outlet yang Anda kelola');
     }
 
+    return this.processRefund({
+      orderId,
+      actorUserId: adminUserId,
+      description,
+      requireCustomerOwnership: false,
+    });
+  }
+
+  private async processRefund(params: {
+    orderId: string;
+    expectedCustomerId?: string;
+    actorUserId: string;
+    description: string;
+    requireCustomerOwnership: boolean;
+  }) {
+    const {
+      orderId,
+      expectedCustomerId,
+      actorUserId,
+      description,
+      requireCustomerOwnership,
+    } = params;
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
+      include: {
+        customer: { select: { userId: true } },
+        payments: {
+          where: { status: PaymentStatus.PAID },
+          orderBy: { paidAt: 'desc' },
+          take: 1,
+        },
+      },
     });
 
     if (!order) {
       throw new NotFoundException('Order not found');
     }
+    if (!order.customerId || !order.customer) {
+      throw new BadRequestException(
+        'Order tanpa customer tidak dapat direfund ke wallet',
+      );
+    }
+    if (
+      requireCustomerOwnership &&
+      (order.customerId !== expectedCustomerId ||
+        order.customer.userId !== actorUserId)
+    ) {
+      throw new UnauthorizedException('Order bukan milik customer ini');
+    }
+    if (order.status === OrderStatus.REFUNDED) {
+      throw new ConflictException('Order sudah direfund');
+    }
+    if (order.status !== OrderStatus.PAID) {
+      throw new BadRequestException(
+        'Refund hanya tersedia sebelum proses laundry dimulai',
+      );
+    }
+
+    const payment = order.payments[0];
+    if (!payment) {
+      throw new BadRequestException('Pembayaran lunas tidak ditemukan');
+    }
+
+    const customerId = order.customerId;
+    const wallet = await this.getOrCreateWallet(customerId);
+    const amount = payment.amount;
+    const idempotencyKey = `refund-order-${orderId}`;
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+        const markedRefunded = await tx.payment.updateMany({
+          where: { id: payment.id, status: PaymentStatus.PAID },
+          data: {
+            status: PaymentStatus.REFUNDED,
+            notes: description,
+          },
+        });
+        if (markedRefunded.count === 0) {
+          throw new ConflictException('Order sudah direfund');
+        }
+
         // Increment atomik (lihat topup) → cegah lost-update saat refund bersamaan.
         const updatedWallet = await tx.wallet.update({
           where: { id: wallet.id },
@@ -315,14 +444,32 @@ export class WalletsService {
             amount,
             balanceBefore,
             balanceAfter,
-            description: description || `Refund for order ${order.orderNumber}`,
+            description,
             idempotencyKey,
+          },
+        });
+
+        const updatedOrder = await tx.order.update({
+          where: { id: order.id },
+          data: {
+            status: OrderStatus.REFUNDED,
+            cancelReason: description,
+          },
+        });
+        await tx.orderStatusLog.create({
+          data: {
+            orderId: order.id,
+            status: OrderStatus.REFUNDED,
+            notes: description,
+            createdBy: actorUserId,
           },
         });
 
         return {
           wallet: updatedWallet,
           transaction,
+          payment: { ...payment, status: PaymentStatus.REFUNDED },
+          order: updatedOrder,
         };
       });
     } catch (err) {

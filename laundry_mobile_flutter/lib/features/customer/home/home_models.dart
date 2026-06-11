@@ -83,45 +83,6 @@ class _CheckoutData {
   final String outletId;
 }
 
-enum _OrderStatus { running, done }
-
-extension _OrderStatusX on _OrderStatus {
-  String get label => this == _OrderStatus.running ? 'Berjalan' : 'Selesai';
-}
-
-/// Satu order pada tab Order (hari ini / riwayat) + halaman detail order.
-class _OrderItem {
-  const _OrderItem({
-    required this.orderNo,
-    required this.machineName,
-    required this.machineType,
-    required this.capacity,
-    required this.estimasi,
-    required this.locationName,
-    required this.price,
-    required this.methodLabel,
-    required this.date,
-    required this.status,
-    this.schedule = '',
-    this.remainingLabel,
-    this.finishLabel,
-  });
-
-  final String orderNo;
-  final String machineName;
-  final _MachineType machineType;
-  final String capacity;
-  final String estimasi;
-  final String locationName;
-  final int price;
-  final String methodLabel;
-  final String date;
-  final _OrderStatus status;
-  final String schedule; // mis. '11:00 s/d 11:30'
-  final String? remainingLabel; // mis. '5 Menit lagi' (status berjalan)
-  final String? finishLabel; // mis. 'Selesai 11:30' (status berjalan)
-}
-
 const _idMonths = [
   '',
   'Januari',

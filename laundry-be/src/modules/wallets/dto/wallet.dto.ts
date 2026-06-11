@@ -1,4 +1,10 @@
-import { IsNumber, IsString, IsOptional, Min } from 'class-validator';
+import {
+  IsNumber,
+  IsString,
+  IsOptional,
+  Min,
+  MinLength,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class TopupWalletDto {
@@ -39,18 +45,29 @@ export class RefundWalletDto {
   @IsString()
   orderId: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    required: false,
+    description: 'Legacy field; refund amount is derived from the paid payment',
+  })
   @IsNumber()
-  @Min(0)
-  amount: number;
-
-  @ApiProperty({ required: false })
-  @IsString()
   @IsOptional()
-  description?: string;
+  @Min(0)
+  amount?: number;
+
+  @ApiProperty({ description: 'Alasan refund dari customer' })
+  @IsString()
+  @MinLength(3)
+  description: string;
 
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
   idempotencyKey?: string;
+}
+
+export class AdminRefundWalletDto {
+  @ApiProperty({ description: 'Alasan refund oleh admin' })
+  @IsString()
+  @MinLength(3)
+  description: string;
 }

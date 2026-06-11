@@ -8,16 +8,18 @@ class AuthService {
 
   final ApiClient _apiClient;
 
+  int _moneyToInt(Object? value) {
+    if (value is num) return value.round();
+    return double.tryParse(value?.toString() ?? '')?.round() ?? 0;
+  }
+
   Future<LoginResult> login({
     required String identifier,
     required String password,
   }) async {
     final payload = await _apiClient.post(
       '/auth/login',
-      body: jsonEncode({
-        'identifier': identifier,
-        'password': password,
-      }),
+      body: jsonEncode({'identifier': identifier, 'password': password}),
     );
 
     // Respons /auth/login tidak menyertakan profil customer; hydrate via
@@ -157,7 +159,7 @@ class AuthService {
       headers: {'Authorization': 'Bearer $accessToken'},
     );
     final map = payload as Map<String, dynamic>;
-    return (map['balance'] as num?)?.round() ?? 0;
+    return _moneyToInt(map['balance']);
   }
 
   /// Bayar order memakai saldo wallet. Mengembalikan saldo terbaru.
@@ -177,8 +179,9 @@ class AuthService {
         'idempotencyKey': ?idempotencyKey,
       }),
     );
-    final wallet = (payload as Map<String, dynamic>)['wallet'] as Map<String, dynamic>?;
-    return (wallet?['balance'] as num?)?.round() ?? 0;
+    final wallet =
+        (payload as Map<String, dynamic>)['wallet'] as Map<String, dynamic>?;
+    return _moneyToInt(wallet?['balance']);
   }
 
   /// Top up saldo wallet. Mengembalikan saldo terbaru.
@@ -191,13 +194,11 @@ class AuthService {
     final payload = await _apiClient.post(
       '/wallets/customer/$customerId/topup',
       headers: {'Authorization': 'Bearer $accessToken'},
-      body: jsonEncode({
-        'amount': amount,
-        'idempotencyKey': ?idempotencyKey,
-      }),
+      body: jsonEncode({'amount': amount, 'idempotencyKey': ?idempotencyKey}),
     );
-    final wallet = (payload as Map<String, dynamic>)['wallet'] as Map<String, dynamic>?;
-    return (wallet?['balance'] as num?)?.round() ?? 0;
+    final wallet =
+        (payload as Map<String, dynamic>)['wallet'] as Map<String, dynamic>?;
+    return _moneyToInt(wallet?['balance']);
   }
 
   Future<AuthTokens> refresh(String refreshToken) async {
@@ -239,11 +240,7 @@ class AuthService {
     await _apiClient.patch(
       '/users/$userId',
       headers: {'Authorization': 'Bearer $accessToken'},
-      body: jsonEncode({
-        'name': name,
-        'email': email,
-        'phone': phone,
-      }),
+      body: jsonEncode({'name': name, 'email': email, 'phone': phone}),
     );
 
     return getMe(accessToken);

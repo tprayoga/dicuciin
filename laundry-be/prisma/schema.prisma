@@ -467,6 +467,17 @@ model Kiosk {
   location      String?
   status        String    @default("ACTIVE")
   lastHeartbeat DateTime?
+  enrollmentCodeHash      String?
+  enrollmentCodeExpiresAt DateTime?
+  deviceTokenHash         String?    @unique
+  deviceId                String?
+  enrolledAt              DateTime?
+  tokenRevokedAt          DateTime?
+  scheduleEnabled         Boolean   @default(false)
+  scheduleDays            String    @default("1,2,3,4,5,6,7")
+  scheduleOpenTime        String?
+  scheduleCloseTime       String?
+  timezone                String    @default("Asia/Jakarta")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

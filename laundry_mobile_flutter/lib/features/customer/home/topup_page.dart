@@ -26,6 +26,8 @@ class _TopUpPageState extends State<_TopUpPage> {
 
   @override
   Widget build(BuildContext context) {
+    final wallet = context.watch<WalletController>();
+
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
@@ -62,15 +64,20 @@ class _TopUpPageState extends State<_TopUpPage> {
                         const SizedBox(width: 12),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            Text(
+                          children: [
+                            const Text(
                               'Saldo saat ini',
-                              style: TextStyle(color: Colors.white70, fontSize: 12),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Rp100.000',
                               style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              wallet.loadingBalance
+                                  ? 'Memuat saldo...'
+                                  : _rupiah(wallet.balance),
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 20,
                                 fontWeight: FontWeight.w700,
@@ -108,7 +115,9 @@ class _TopUpPageState extends State<_TopUpPage> {
                           duration: const Duration(milliseconds: 150),
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
-                            color: selected ? AppColors.tintBlueAlt : Colors.white,
+                            color: selected
+                                ? AppColors.tintBlueAlt
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color: selected ? _primary : _line,
@@ -229,9 +238,15 @@ class _TopUpPageState extends State<_TopUpPage> {
                 navigator.pop(); // kembali ke home
                 messenger.showSnackBar(
                   SnackBar(
-                    content: Text('Top up ${_rupiah(nominal)} berhasil diproses'),
+                    content: Text(
+                      'Top up ${_rupiah(nominal)} berhasil diproses',
+                    ),
                     backgroundColor: AppColors.success,
                   ),
+                );
+              } on ApiException catch (error) {
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Top up gagal: ${error.message}')),
                 );
               } catch (_) {
                 messenger.showSnackBar(

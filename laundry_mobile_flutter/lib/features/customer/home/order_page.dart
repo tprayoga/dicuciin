@@ -10,75 +10,116 @@ class _OrderPage extends StatefulWidget {
 class _OrderPageState extends State<_OrderPage> {
   int _tab = 0;
 
-  // Mock data — nanti dari backend. Kosongkan list untuk lihat empty state.
-  final List<_OrderItem> _todayOrders = [
-    _OrderItem(
-      orderNo: '#ORD0001',
-      machineName: 'Mesin Cuci #01',
-      machineType: _MachineType.washer,
-      capacity: '8 KG',
-      estimasi: '30 Menit',
-      locationName: 'Laundry Smart Sudirman',
-      price: 20000,
-      methodLabel: 'QRIS',
-      date: _formatDateId(DateTime.now()),
-      status: _OrderStatus.running,
-      schedule: '11:00 s/d 11:30',
-      remainingLabel: '5 Menit lagi',
-      finishLabel: 'Selesai 11:30',
-    ),
-  ];
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
-  final List<_OrderItem> _historyOrders = [
-    _OrderItem(
-      orderNo: '#ORD0001',
-      machineName: 'Mesin Cuci #01',
-      machineType: _MachineType.washer,
-      capacity: '8 KG',
-      estimasi: '30 Menit',
-      locationName: 'Laundry Smart Sudirman',
-      price: 20000,
-      methodLabel: 'QRIS',
-      date: '10 Apr 2026',
-      status: _OrderStatus.done,
-      schedule: '11:00 s/d 11:30',
-    ),
-    _OrderItem(
-      orderNo: '#ORD0002',
-      machineName: 'Mesin Pengering #02',
-      machineType: _MachineType.dryer,
-      capacity: '10 KG',
-      estimasi: '25 Menit',
-      locationName: 'Laundry Smart Kemang',
-      price: 18000,
-      methodLabel: 'Virtual Account Bank BCA',
-      date: '08 Apr 2026',
-      status: _OrderStatus.done,
-      schedule: '14:00 s/d 14:25',
-    ),
-    _OrderItem(
-      orderNo: '#ORD0003',
-      machineName: 'Mesin Cuci #03',
-      machineType: _MachineType.washer,
-      capacity: '12 KG',
-      estimasi: '40 Menit',
-      locationName: 'Laundry Smart Menteng',
-      price: 25000,
-      methodLabel: 'Saldo',
-      date: '02 Apr 2026',
-      status: _OrderStatus.done,
-      schedule: '09:00 s/d 09:40',
-    ),
-  ];
+  Future<void> _refresh() async {
+    final auth = context.read<AuthController>();
+    final user = auth.user;
+    final token = auth.accessToken;
+    if (user == null || token == null) return;
 
-  void _openDetail(_OrderItem item) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => _OrderDetailPage(order: item)),
+    await context.read<CustomerController>().refreshOrdersAndBookings(
+      user: user,
+      accessToken: token,
+    );
+  }
+
+  Future<void> _requestRefund(OrderSummary order) async {
+    final reasonController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Ajukan Refund'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${order.orderNumber} senilai '
+              '${_formatRupiah(order.totalAmount.round())} akan dikembalikan '
+              'ke saldo wallet.',
+              style: const TextStyle(color: _textMuted, height: 1.4),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: reasonController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Alasan refund',
+                hintText: 'Contoh: salah memilih layanan',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Refund'),
+          ),
+        ],
+      ),
+    );
+    final reason = reasonController.text.trim();
+    reasonController.dispose();
+    if (confirmed != true || !mounted) return;
+    if (reason.length < 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Alasan refund minimal 3 karakter.')),
+      );
+      return;
+    }
+
+    final auth = context.read<AuthController>();
+    final user = auth.user;
+    final token = auth.accessToken;
+    if (user == null || token == null) return;
+
+    final controller = context.read<CustomerController>();
+    final balance = await controller.refundOrder(
+      user: user,
+      accessToken: token,
+      orderId: order.id,
+      reason: reason,
+    );
+    if (!mounted) return;
+    if (balance == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(controller.errorMessage ?? 'Refund gagal diproses.'),
+        ),
+      );
+      return;
+    }
+
+    await context.read<WalletController>().loadBalance();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Refund berhasil. Saldo sekarang ${_formatRupiah(balance)}.',
+        ),
+        backgroundColor: AppColors.success,
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final controller = context.watch<CustomerController>();
+    final now = DateTime.now();
+    final todayOrders = controller.orders
+        .where((order) => _isSameDay(order.orderDate.toLocal(), now))
+        .toList();
+    final historyOrders = controller.orders
+        .where((order) => !_isSameDay(order.orderDate.toLocal(), now))
+        .toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -111,62 +152,287 @@ class _OrderPageState extends State<_OrderPage> {
             ),
           ),
         ),
-        Expanded(child: _tab == 0 ? _buildToday() : _buildHistory()),
+        Expanded(
+          child: _tab == 0
+              ? _buildToday(controller.activeBookings, todayOrders)
+              : _buildHistory(historyOrders),
+        ),
       ],
     );
   }
 
-  // ── Tab: Order Hari ini ────────────────────────────────────────
-  Widget _buildToday() {
-    if (_todayOrders.isEmpty) {
+  Widget _buildToday(List<MachineBooking> bookings, List<OrderSummary> orders) {
+    if (bookings.isEmpty && orders.isEmpty) {
       return _emptyState(
         icon: Icons.local_laundry_service_outlined,
-        message: 'Belum ada order hari ini',
+        message: 'Belum ada booking atau order hari ini',
       );
     }
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-      physics: const ClampingScrollPhysics(),
-      itemCount: _todayOrders.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 14),
-      itemBuilder: (_, i) => _OrderActiveCard(
-        order: _todayOrders[i],
-        onDetail: () => _openDetail(_todayOrders[i]),
+
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          if (bookings.isNotEmpty) ...[
+            const _OrderSectionTitle(title: 'Booking Aktif'),
+            const SizedBox(height: 10),
+            ...bookings.map(
+              (booking) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _BookingOrderCard(booking: booking),
+              ),
+            ),
+          ],
+          if (orders.isNotEmpty) ...[
+            const _OrderSectionTitle(title: 'Order Hari Ini'),
+            const SizedBox(height: 10),
+            ...orders.map(
+              (order) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _BackendOrderCard(
+                  order: order,
+                  onRefund: () => _requestRefund(order),
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
 
-  // ── Tab: Riwayat Order ─────────────────────────────────────────
-  Widget _buildHistory() {
-    if (_historyOrders.isEmpty) {
+  Widget _buildHistory(List<OrderSummary> orders) {
+    if (orders.isEmpty) {
       return _emptyState(
         icon: Icons.history,
         message: 'Belum ada riwayat order',
       );
     }
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-      physics: const ClampingScrollPhysics(),
-      itemCount: _historyOrders.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 14),
-      itemBuilder: (_, i) => _OrderHistoryCard(
-        order: _historyOrders[i],
-        onDetail: () => _openDetail(_historyOrders[i]),
+
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: orders.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
+        itemBuilder: (_, index) {
+          final order = orders[index];
+          return _BackendOrderCard(
+            order: order,
+            onRefund: () => _requestRefund(order),
+          );
+        },
       ),
     );
   }
 
   Widget _emptyState({required IconData icon, required String message}) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         children: [
-          Icon(icon, size: 64, color: AppColors.textMutedLight),
+          SizedBox(
+            height: 420,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 64, color: AppColors.textMutedLight),
+                  const SizedBox(height: 12),
+                  Text(
+                    message,
+                    style: const TextStyle(fontSize: 15, color: _textMuted),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OrderSectionTitle extends StatelessWidget {
+  const _OrderSectionTitle({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+        color: _textDark,
+      ),
+    );
+  }
+}
+
+class _BackendOrderCard extends StatelessWidget {
+  const _BackendOrderCard({required this.order, required this.onRefund});
+
+  final OrderSummary order;
+  final VoidCallback onRefund;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  order.orderNumber,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: _textDark,
+                  ),
+                ),
+              ),
+              _statusDot(
+                _statusLabel(order.status),
+                _statusColor(order.status),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
           Text(
-            message,
-            style: const TextStyle(fontSize: 15, color: _textMuted),
+            order.serviceName,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: _textDark,
+            ),
           ),
+          const SizedBox(height: 8),
+          _DetailRow(left: 'Outlet', right: order.outletName),
+          _DetailRow(
+            left: 'Tanggal',
+            right: _formatDateId(order.orderDate.toLocal()),
+          ),
+          _DetailRow(
+            left: 'Total',
+            right: _formatRupiah(order.totalAmount.round()),
+            greenRight: true,
+          ),
+          if (order.status == 'PAID') ...[
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: context.watch<CustomerController>().isRefundingOrder
+                    ? null
+                    : onRefund,
+                icon: const Icon(Icons.currency_exchange),
+                label: const Text('Refund ke Saldo'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.error,
+                  side: const BorderSide(color: AppColors.error),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _statusLabel(String status) => switch (status) {
+    'DRAFT' => 'Menunggu Pembayaran',
+    'PAID' => 'Dibayar',
+    'RECEIVED' => 'Diterima',
+    'WASHING' => 'Dicuci',
+    'DRYING' => 'Dikeringkan',
+    'IRONING' => 'Disetrika',
+    'PACKING' => 'Dikemas',
+    'READY_PICKUP' => 'Siap Diambil',
+    'OUT_FOR_DELIVERY' => 'Diantar',
+    'COMPLETED' => 'Selesai',
+    'CANCELLED' => 'Dibatalkan',
+    'REFUNDED' => 'Direfund',
+    _ => status,
+  };
+
+  static Color _statusColor(String status) => switch (status) {
+    'COMPLETED' => AppColors.success,
+    'CANCELLED' => AppColors.error,
+    'REFUNDED' => AppColors.success,
+    'DRAFT' => AppColors.warning,
+    _ => _primary,
+  };
+}
+
+class _BookingOrderCard extends StatelessWidget {
+  const _BookingOrderCard({required this.booking});
+
+  final MachineBooking booking;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheduled = booking.scheduledAt?.toLocal();
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.tintBlueAlt,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _primary.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  booking.bookingCode,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: _textDark,
+                  ),
+                ),
+              ),
+              _statusDot(
+                booking.status == 'IN_USE' ? 'Sedang Dipakai' : 'Dibooking',
+                booking.status == 'IN_USE'
+                    ? AppColors.success
+                    : AppColors.warning,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            booking.deviceName ?? booking.deviceCode ?? 'Mesin Laundry',
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: _textDark,
+            ),
+          ),
+          if (scheduled != null) ...[
+            const SizedBox(height: 8),
+            _DetailRow(
+              left: 'Jadwal',
+              right:
+                  '${_formatDateId(scheduled)}, ${scheduled.hour.toString().padLeft(2, '0')}:${scheduled.minute.toString().padLeft(2, '0')}',
+            ),
+          ],
         ],
       ),
     );

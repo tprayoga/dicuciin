@@ -8,7 +8,7 @@ import 'models/customer_models.dart';
 
 class CustomerController extends ChangeNotifier {
   CustomerController({required CustomerService customerService})
-      : _customerService = customerService;
+    : _customerService = customerService;
 
   final CustomerService _customerService;
 
@@ -36,9 +36,7 @@ class CustomerController extends ChangeNotifier {
     if (customerId != _loadedForCustomerId || token != _loadedToken) {
       _loadedForCustomerId = customerId;
       _loadedToken = token;
-      Future.microtask(
-        () => loadDashboard(user: user, accessToken: token),
-      );
+      Future.microtask(() => loadDashboard(user: user, accessToken: token));
     }
   }
 
@@ -46,9 +44,11 @@ class CustomerController extends ChangeNotifier {
   bool _isSubmittingOrder = false;
   bool _isUploadingPaymentProof = false;
   bool _isCancellingOrder = false;
+  bool _isRefundingOrder = false;
   String? _errorMessage;
   WalletData? _wallet;
   List<OrderSummary> _orders = const [];
+  List<MachineBooking> _activeBookings = const [];
   List<PromoSummary> _promos = const [];
   List<AppBanner> _carouselBanners = const [];
   List<AppBanner> _popupBanners = const [];
@@ -59,9 +59,11 @@ class CustomerController extends ChangeNotifier {
   bool get isSubmittingOrder => _isSubmittingOrder;
   bool get isUploadingPaymentProof => _isUploadingPaymentProof;
   bool get isCancellingOrder => _isCancellingOrder;
+  bool get isRefundingOrder => _isRefundingOrder;
   String? get errorMessage => _errorMessage;
   WalletData? get wallet => _wallet;
   List<OrderSummary> get orders => _orders;
+  List<MachineBooking> get activeBookings => _activeBookings;
   List<PromoSummary> get promos => _promos;
   List<AppBanner> get carouselBanners => _carouselBanners;
 
@@ -74,7 +76,10 @@ class CustomerController extends ChangeNotifier {
 
   MemberStats get stats => _stats ?? MemberStats.empty();
 
-  Future<void> loadDashboard({required AppUser user, required String accessToken}) async {
+  Future<void> loadDashboard({
+    required AppUser user,
+    required String accessToken,
+  }) async {
     final customerId = user.customer?.id;
     if (customerId == null) {
       _errorMessage = 'Akun ini belum terhubung ke profil customer.';
@@ -88,21 +93,46 @@ class CustomerController extends ChangeNotifier {
 
     // Tiap bagian dimuat mandiri: kegagalan satu endpoint (mis. server belum
     // ter-restart untuk fitur baru) tidak mengosongkan bagian lain.
-    final walletF = _guard(() => _customerService.getWallet(
-        customerId: customerId, accessToken: accessToken));
-    final ordersF = _guard(() => _customerService.getOrders(
-        customerId: customerId, accessToken: accessToken));
-    final promosF =
-        _guard(() => _customerService.getPromos(accessToken: accessToken));
-    final carouselF = _guard(() => _customerService.getBanners(
-        accessToken: accessToken, placement: 'HOME_CAROUSEL'));
-    final popupF = _guard(() => _customerService.getBanners(
-        accessToken: accessToken, placement: 'HOME_POPUP'));
-    final statsF = _guard(() => _customerService.getMemberStats(
-        customerId: customerId, accessToken: accessToken));
+    final walletF = _guard(
+      () => _customerService.getWallet(
+        customerId: customerId,
+        accessToken: accessToken,
+      ),
+    );
+    final ordersF = _guard(
+      () => _customerService.getOrders(
+        customerId: customerId,
+        accessToken: accessToken,
+      ),
+    );
+    final bookingsF = _guard(
+      () => _customerService.getActiveBookings(accessToken: accessToken),
+    );
+    final promosF = _guard(
+      () => _customerService.getPromos(accessToken: accessToken),
+    );
+    final carouselF = _guard(
+      () => _customerService.getBanners(
+        accessToken: accessToken,
+        placement: 'HOME_CAROUSEL',
+      ),
+    );
+    final popupF = _guard(
+      () => _customerService.getBanners(
+        accessToken: accessToken,
+        placement: 'HOME_POPUP',
+      ),
+    );
+    final statsF = _guard(
+      () => _customerService.getMemberStats(
+        customerId: customerId,
+        accessToken: accessToken,
+      ),
+    );
 
     _wallet = await walletF ?? _wallet;
     _orders = await ordersF ?? _orders;
+    _activeBookings = await bookingsF ?? _activeBookings;
     _promos = await promosF ?? _promos;
     _carouselBanners = await carouselF ?? _carouselBanners;
     _popupBanners = await popupF ?? _popupBanners;
@@ -172,12 +202,18 @@ class CustomerController extends ChangeNotifier {
     required String accessToken,
     required String deviceCode,
     String? scheduledAt,
-  }) {
-    return _customerService.reserveBooking(
+  }) async {
+    final booking = await _customerService.reserveBooking(
       accessToken: accessToken,
       deviceCode: deviceCode,
       scheduledAt: scheduledAt,
     );
+    _activeBookings = [
+      booking,
+      ..._activeBookings.where((item) => item.id != booking.id),
+    ];
+    notifyListeners();
+    return booking;
   }
 
   /// Daftar mesin nyata + keramaian sebuah outlet.
@@ -209,11 +245,39 @@ class CustomerController extends ChangeNotifier {
   Future<void> cancelBooking({
     required String accessToken,
     required String bookingId,
-  }) {
-    return _customerService.cancelBooking(
+  }) async {
+    await _customerService.cancelBooking(
       accessToken: accessToken,
       bookingId: bookingId,
     );
+    _activeBookings = _activeBookings
+        .where((booking) => booking.id != bookingId)
+        .toList();
+    notifyListeners();
+  }
+
+  Future<void> refreshOrdersAndBookings({
+    required AppUser user,
+    required String accessToken,
+  }) async {
+    final customerId = user.customer?.id;
+    if (customerId == null) return;
+
+    final results = await Future.wait([
+      _guard(
+        () => _customerService.getOrders(
+          customerId: customerId,
+          accessToken: accessToken,
+        ),
+      ),
+      _guard(
+        () => _customerService.getActiveBookings(accessToken: accessToken),
+      ),
+    ]);
+
+    _orders = (results[0] as List<OrderSummary>?) ?? _orders;
+    _activeBookings = (results[1] as List<MachineBooking>?) ?? _activeBookings;
+    notifyListeners();
   }
 
   /// Buat tagihan QRIS/VA via gateway untuk order.
@@ -323,6 +387,7 @@ class CustomerController extends ChangeNotifier {
     _errorMessage = null;
     _wallet = null;
     _orders = const [];
+    _activeBookings = const [];
     _promos = const [];
     _carouselBanners = const [];
     _popupBanners = const [];
@@ -424,6 +489,44 @@ class CustomerController extends ChangeNotifier {
       return null;
     } finally {
       _isCancellingOrder = false;
+      notifyListeners();
+    }
+  }
+
+  Future<int?> refundOrder({
+    required AppUser user,
+    required String accessToken,
+    required String orderId,
+    required String reason,
+  }) async {
+    final customerId = user.customer?.id;
+    if (customerId == null) {
+      _errorMessage = 'Akun ini belum terhubung ke profil customer.';
+      notifyListeners();
+      return null;
+    }
+
+    _isRefundingOrder = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final balance = await _customerService.refundOrderToWallet(
+        accessToken: accessToken,
+        customerId: customerId,
+        orderId: orderId,
+        reason: reason,
+      );
+      await refreshOrdersAndBookings(user: user, accessToken: accessToken);
+      return balance;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      return null;
+    } catch (_) {
+      _errorMessage = 'Refund gagal diproses.';
+      return null;
+    } finally {
+      _isRefundingOrder = false;
       notifyListeners();
     }
   }
