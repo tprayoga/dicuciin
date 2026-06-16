@@ -65,13 +65,18 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          const Text(
-            'dicuciin',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.2,
+          Image.asset(
+            'assets/branding/logo-putih.png',
+            height: 50,
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => const Text(
+              'dicuciin',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.2,
+              ),
             ),
           ),
           const SizedBox(height: 14),

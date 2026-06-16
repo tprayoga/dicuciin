@@ -38,6 +38,7 @@ dependencies:
   provider: ^6.1.5
   flutter_secure_storage: ^10.3.1
   web: ^1.1.1
+  google_fonts: ^8.1.0
 
 dev_dependencies:
   flutter_test:
@@ -60,6 +61,10 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/branding/
+    - assets/mockups/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -15,9 +15,13 @@ class _LocationDetailPageState extends State<_LocationDetailPage> {
   String? _machineError;
   List<_MachineData> _washerMachines = const [];
   List<_MachineData> _dryerMachines = const [];
+  int _serviceCount = 0;
 
   String get _locationName => widget.outlet.name;
-  int get _availableCount => _washerMachines.length + _dryerMachines.length;
+  int get _totalMachines => _washerMachines.length + _dryerMachines.length;
+  int get _availableCount => [..._washerMachines, ..._dryerMachines]
+      .where((m) => m.status == _MachineStatus.available)
+      .length;
 
   @override
   void initState() {
@@ -228,7 +232,7 @@ class _LocationDetailPageState extends State<_LocationDetailPage> {
                           child: _infoTile(
                             icon: Icons.local_laundry_service_outlined,
                             title: 'Mesin Aktif',
-                            value: '$availableMachineCount Unit',
+                            value: '$_totalMachines Unit',
                           ),
                         ),
                         Container(width: 1, height: 36, color: _line),
@@ -236,7 +240,7 @@ class _LocationDetailPageState extends State<_LocationDetailPage> {
                           child: _infoTile(
                             icon: Icons.local_laundry_service_outlined,
                             title: 'Layanan',
-                            value: '$availableMachineCount Pilihan',
+                            value: '$_serviceCount Pilihan',
                           ),
                         ),
                         Container(width: 1, height: 36, color: _line),
@@ -373,28 +377,37 @@ class _LocationDetailPageState extends State<_LocationDetailPage> {
     }
 
     try {
-      final prices = await context.read<CustomerController>().getServicePrices(
-            accessToken: token,
-            outletId: widget.outlet.id,
-          );
+      final ctrl = context.read<CustomerController>();
+      // Mesin nyata (status asli) + daftar tarif layanan (untuk harga checkout).
+      final results = await Future.wait([
+        ctrl.getOutletMachines(accessToken: token, outletId: widget.outlet.id),
+        ctrl.getServicePrices(accessToken: token, outletId: widget.outlet.id),
+      ]);
       if (!mounted) return;
+      final outletMachines = results[0] as OutletMachines;
+      final prices = results[1] as List<ServicePriceOption>;
 
       final washers = <_MachineData>[];
       final dryers = <_MachineData>[];
-      for (final p in prices) {
-        final type = _machineTypeOf(p.machineType);
+      for (final m in outletMachines.machines) {
+        final type = m.isWasher ? _MachineType.washer : _MachineType.dryer;
+        // Tarif/kapasitas/estimasi diambil dari layanan yang cocok tipe mesin.
+        final svc = _serviceForType(type, prices);
         final machine = _MachineData(
-          name: p.serviceName,
-          status: _MachineStatus.available,
+          name: m.name,
+          status: _statusFromApi(m.status),
           type: type,
-          capacity: p.capacityKg != null
-              ? '${p.capacityKg!.toStringAsFixed(0)} KG'
+          capacity: svc?.capacityKg != null
+              ? '${svc!.capacityKg!.toStringAsFixed(0)} KG'
               : '—',
-          estimasi:
-              p.estimateMinutes != null ? '${p.estimateMinutes} Menit' : '—',
-          price: p.price.round(),
-          serviceId: p.serviceId,
-          outletId: p.outletId.isNotEmpty ? p.outletId : widget.outlet.id,
+          estimasi: svc?.estimateMinutes != null
+              ? '${svc!.estimateMinutes} Menit'
+              : '—',
+          price: svc?.price.round() ?? 0,
+          serviceId: svc?.serviceId ?? '',
+          outletId: (svc != null && svc.outletId.isNotEmpty)
+              ? svc.outletId
+              : widget.outlet.id,
         );
         (type == _MachineType.dryer ? dryers : washers).add(machine);
       }
@@ -402,16 +415,44 @@ class _LocationDetailPageState extends State<_LocationDetailPage> {
       setState(() {
         _washerMachines = washers;
         _dryerMachines = dryers;
+        _serviceCount = prices.length;
         _isMachineLoading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isMachineLoading = false;
+        _machineError = e.message;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _isMachineLoading = false;
-        _machineError = 'Gagal memuat layanan. Coba lagi.';
+        _machineError = 'Gagal memuat mesin. Coba lagi.';
       });
     }
   }
+
+  /// Layanan (tarif) yang dipakai untuk sebuah tipe mesin (cuci/pengering),
+  /// dipilih dari daftar tarif outlet. Fallback ke layanan pertama bila tak ada
+  /// yang cocok persis.
+  ServicePriceOption? _serviceForType(
+    _MachineType type,
+    List<ServicePriceOption> prices,
+  ) {
+    if (prices.isEmpty) return null;
+    final matches =
+        prices.where((p) => _machineTypeOf(p.machineType) == type).toList();
+    return (matches.isNotEmpty ? matches : prices).first;
+  }
+
+  /// Petakan status mesin dari API ke status tampilan kartu.
+  _MachineStatus _statusFromApi(String status) => switch (status) {
+        'AVAILABLE' => _MachineStatus.available,
+        'IN_USE' => _MachineStatus.inUse,
+        'RESERVED' => _MachineStatus.inUse,
+        _ => _MachineStatus.maintenance, // OFFLINE / tak dikenal
+      };
 
   /// Klasifikasi tipe mesin dari `machineType` katalog Service.
   /// Hanya yang murni pengering masuk tab Pengering; sisanya (cuci, cuci+kering,
@@ -487,7 +528,9 @@ class _LocationDetailPageState extends State<_LocationDetailPage> {
             final machine = machines[index];
             return _MachineCard(
               machine: machine,
-              onUse: machine.status == _MachineStatus.available
+              onUse:
+                  (machine.status == _MachineStatus.available &&
+                      machine.serviceId.isNotEmpty)
                   ? () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -501,8 +544,15 @@ class _LocationDetailPageState extends State<_LocationDetailPage> {
                       );
                     }
                   : null,
+              // Mesin sedang dipakai → arahkan ke alur booking nyata (reserve
+              // mesin yang tersedia untuk slot waktu).
               onBook: machine.status == _MachineStatus.inUse
-                  ? () => _showBookingSheet(machine)
+                  ? () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            _BookingMachinesPage(outlet: widget.outlet),
+                      ),
+                    )
                   : null,
             );
           },
@@ -666,48 +716,4 @@ class _LocationDetailPageState extends State<_LocationDetailPage> {
     );
   }
 
-  Future<void> _showBookingSheet(_MachineData machine) async {
-    final slot = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
-      ),
-      builder: (_) => _BookingSheet(machineName: machine.name),
-    );
-    if (slot == null || !mounted) return;
-    await _showBookingConfirmation(machine.name, slot);
-  }
-
-  Future<void> _showBookingConfirmation(String machineName, String slot) {
-    return showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: AppColors.success),
-            SizedBox(width: 10),
-            Text(
-              'Antrian Dibooking',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-            ),
-          ],
-        ),
-        content: Text(
-          'Kamu masuk antrian $machineName untuk slot $slot. '
-          'Kami beri tahu saat mesin siap digunakan.',
-          style: const TextStyle(fontSize: 14, color: _textMuted, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Mengerti'),
-          ),
-        ],
-      ),
-    );
-  }
 }

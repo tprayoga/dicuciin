@@ -170,7 +170,7 @@ onMounted(load)
   <div class="space-y-4">
     <div class="dc-page-card p-4 flex items-center justify-between gap-3">
       <div class="flex items-center gap-3">
-        <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0f6ee9] flex items-center justify-center">
+        <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0360da] flex items-center justify-center">
           <UIcon name="i-heroicons-users" class="text-xl" />
         </div>
         <div>
@@ -182,7 +182,7 @@ onMounted(load)
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <p class="text-lg">Total: <span class="text-[#0f6ee9] font-semibold">{{ filteredUsers.length }} Staff</span></p>
+      <p class="text-lg">Total: <span class="text-[#0360da] font-semibold">{{ filteredUsers.length }} Staff</span></p>
       <div class="flex flex-wrap gap-2">
         <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari nama staff" class="w-[280px] dc-input-like" />
         <USelect v-model="selectedOutletFilter" :items="outletFilterItems" class="w-[170px] dc-input-like" />
@@ -192,7 +192,7 @@ onMounted(load)
     <div class="dc-page-card p-4 overflow-x-auto">
       <table class="w-full min-w-[900px] text-sm">
         <thead>
-          <tr class="bg-[#0b3a77] text-white text-left">
+          <tr class="bg-[#0349a8] text-white text-left">
             <th class="px-3 py-3 font-semibold">NAMA</th>
             <th class="px-3 py-3 font-semibold">POSISI</th>
             <th class="px-3 py-3 font-semibold">OUTLET/CABANG</th>

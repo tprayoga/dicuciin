@@ -39,9 +39,22 @@ describe('KiosksService enrollment', () => {
       },
     };
     const ordersService = { create: jest.fn() };
+    const bookingsService = { listOutletMachines: jest.fn() };
+    const paymentsService = {
+      createKioskGatewayPayment: jest.fn(),
+      getStatus: jest.fn(),
+      simulatePaid: jest.fn(),
+    };
+    const config = { get: jest.fn().mockReturnValue('development') };
     return {
       prisma,
-      service: new KiosksService(prisma as any, ordersService as any),
+      service: new KiosksService(
+        prisma as any,
+        ordersService as any,
+        bookingsService as any,
+        paymentsService as any,
+        config as any,
+      ),
     };
   }
 

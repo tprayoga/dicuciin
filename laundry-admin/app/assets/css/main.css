@@ -3,12 +3,15 @@
 @import "@nuxt/ui";
 
 :root {
+  /* Palet resmi Di.Cuciin (Brand Book V01): water blue, orange, turquoise. */
   --dc-bg: #f2f5fa;
   --dc-card: #ffffff;
   --dc-border: #cfd9ea;
-  --dc-primary: #0f6ee9;
-  --dc-primary-dark: #0b3a77;
-  --dc-text: #1a2237;
+  --dc-primary: #0360da; /* water blue */
+  --dc-primary-dark: #0349a8;
+  --dc-accent: #fd6a01; /* orange */
+  --dc-turquoise: #05dcf3;
+  --dc-text: #272526; /* brand black */
   --dc-muted: #6f809f;
   --dc-success: #19984d;
   --dc-danger: #da2d14;

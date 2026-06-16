@@ -86,7 +86,7 @@ watch([month, selectedOutlet], () => {
 <template>
   <div class="space-y-4">
     <div class="dc-page-card p-4 flex items-center gap-3">
-      <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0f6ee9] flex items-center justify-center">
+      <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0360da] flex items-center justify-center">
         <UIcon name="i-heroicons-chart-bar-square" class="text-xl" />
       </div>
       <div>
@@ -105,25 +105,25 @@ watch([month, selectedOutlet], () => {
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div class="dc-page-card p-4">
-        <p class="text-xs font-semibold text-[#1a2237]">PENDAPATAN BULAN INI</p>
+        <p class="text-xs font-semibold text-[#272526]">PENDAPATAN BULAN INI</p>
         <p class="text-[38px] font-bold text-[#19984d] mt-2">Rp {{ totalRevenue.toLocaleString('id-ID') }}</p>
         <p class="text-sm text-[#6f809f] mt-2">Dari semua pembayaran terkonfirmasi</p>
       </div>
       <div class="dc-page-card p-4">
-        <p class="text-xs font-semibold text-[#1a2237]">BEBAN OPERASIONAL</p>
+        <p class="text-xs font-semibold text-[#272526]">BEBAN OPERASIONAL</p>
         <p class="text-[38px] font-bold text-[#da2d14] mt-2">Rp {{ operationalCost.toLocaleString('id-ID') }}</p>
         <p class="text-sm text-[#6f809f] mt-2">Estimasi beban operasional dari pendapatan berjalan</p>
       </div>
       <div class="dc-page-card p-4">
-        <p class="text-xs font-semibold text-[#1a2237]">LABA BERSIH (ESTIMASI)</p>
-        <p class="text-[38px] font-bold text-[#0f6ee9] mt-2">Rp {{ estimatedProfit.toLocaleString('id-ID') }}</p>
+        <p class="text-xs font-semibold text-[#272526]">LABA BERSIH (ESTIMASI)</p>
+        <p class="text-[38px] font-bold text-[#0360da] mt-2">Rp {{ estimatedProfit.toLocaleString('id-ID') }}</p>
         <p class="text-sm text-[#6f809f] mt-2">Sudah dihitung setelah beban operasional</p>
       </div>
     </div>
 
     <div class="dc-page-card p-4">
       <div class="flex items-center justify-between gap-2 mb-3">
-        <h3 class="text-[22px] font-semibold text-[#1a2237]">Omzet vs Laba 30 Hari</h3>
+        <h3 class="text-[22px] font-semibold text-[#272526]">Omzet vs Laba 30 Hari</h3>
         <p class="text-sm text-[#6f809f]">Pendapatan = pembayaran terkonfirmasi, Laba = pendapatan - Beban Operasional</p>
       </div>
 
@@ -134,7 +134,7 @@ watch([month, selectedOutlet], () => {
       <div v-else class="overflow-x-auto">
         <table class="w-full min-w-[700px] text-sm">
           <thead>
-            <tr class="bg-[#0b3a77] text-white text-left">
+            <tr class="bg-[#0349a8] text-white text-left">
               <th class="px-3 py-2 font-semibold">Tanggal</th>
               <th class="px-3 py-2 font-semibold">Pendapatan</th>
               <th class="px-3 py-2 font-semibold">Laba Bersih</th>

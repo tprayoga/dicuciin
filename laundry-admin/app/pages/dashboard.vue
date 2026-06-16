@@ -139,21 +139,21 @@ const summaryCards = computed(() => [
     title: 'JUMLAH OUTLET/CABANG',
     value: `${stats.value.totalOutlets} Cabang`,
     caption: 'Total jumlah outlet/cabang yang sudah anda buat',
-    valueClass: 'text-[#1a2237]',
+    valueClass: 'text-[#272526]',
   },
   {
     icon: 'i-heroicons-computer-desktop',
     title: 'JUMLAH MESIN',
     value: `${stats.value.totalMachines} Mesin`,
     caption: 'Total jumlah mesin cuci (washer) dan mesin pengering (Dryer)',
-    valueClass: 'text-[#1a2237]',
+    valueClass: 'text-[#272526]',
   },
   {
     icon: 'i-heroicons-users',
     title: 'JUMLAH STAFF',
     value: `${stats.value.totalStaff} Orang`,
     caption: 'Total jumlah staff di beberapa outlet/cabang laundry',
-    valueClass: 'text-[#1a2237]',
+    valueClass: 'text-[#272526]',
   },
 ])
 
@@ -165,10 +165,10 @@ onMounted(loadDashboard)
     <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
       <div v-for="card in summaryCards" :key="card.title" class="dc-page-card p-4">
         <div class="flex items-center gap-3 mb-2">
-          <div class="h-8 w-8 rounded-xl bg-[#dce9f8] text-[#0f6ee9] flex items-center justify-center">
+          <div class="h-8 w-8 rounded-xl bg-[#dce9f8] text-[#0360da] flex items-center justify-center">
             <UIcon :name="card.icon" class="text-base" />
           </div>
-          <p class="text-xs font-semibold text-[#1a2237]">{{ card.title }}</p>
+          <p class="text-xs font-semibold text-[#272526]">{{ card.title }}</p>
         </div>
         <p class="text-[38px] font-bold" :class="card.valueClass">{{ card.value }}</p>
         <p class="text-xs text-[#6f809f] mt-2">{{ card.caption }}</p>
@@ -177,7 +177,7 @@ onMounted(loadDashboard)
 
     <div class="dc-page-card p-4">
       <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <h3 class="text-[22px] font-semibold text-[#1a2237]">Omzet vs Laba 30 Hari</h3>
+        <h3 class="text-[22px] font-semibold text-[#272526]">Omzet vs Laba 30 Hari</h3>
         <p class="text-sm text-[#6f809f]">Pendapatan = pembayaran terkonfirmasi, Laba = pendapatan - Beban Operasional</p>
       </div>
       <div v-if="loading" class="h-[260px] rounded-xl border border-[#d7e0ee] flex items-center justify-center text-sm text-[#6f809f]">
@@ -314,7 +314,7 @@ onMounted(loadDashboard)
     </div>
 
     <div class="dc-page-card p-4">
-      <h3 class="text-[22px] font-semibold text-[#1a2237] mb-4">Riwayat Transaksi hari ini</h3>
+      <h3 class="text-[22px] font-semibold text-[#272526] mb-4">Riwayat Transaksi hari ini</h3>
 
       <div v-if="loading" class="text-sm text-[#6f809f]">Memuat data...</div>
 
@@ -327,15 +327,15 @@ onMounted(loadDashboard)
           class="grid grid-cols-1 xl:grid-cols-12 gap-2 py-3 border-t border-[#d7e0ee] first:border-t-0"
         >
           <div class="xl:col-span-3">
-            <p class="text-lg font-semibold text-[#1a2237]">Order #{{ order.orderNumber }}</p>
+            <p class="text-lg font-semibold text-[#272526]">Order #{{ order.orderNumber }}</p>
             <p class="text-sm text-[#4f607f]">{{ order.items?.[0]?.serviceName || '-' }}</p>
           </div>
           <div class="xl:col-span-3">
-            <p class="text-base font-semibold text-[#1a2237]">{{ order.items?.[0]?.serviceName || '-' }}</p>
+            <p class="text-base font-semibold text-[#272526]">{{ order.items?.[0]?.serviceName || '-' }}</p>
             <p class="text-sm text-[#4f607f]">{{ new Date(order.orderDate).toLocaleString('id-ID') }}</p>
           </div>
           <div class="xl:col-span-4">
-            <p class="text-base font-semibold text-[#1a2237]">Outlet {{ order.outlet?.name || '-' }}</p>
+            <p class="text-base font-semibold text-[#272526]">Outlet {{ order.outlet?.name || '-' }}</p>
             <p class="text-sm text-[#4f607f]">{{ order.status }}</p>
           </div>
           <div class="xl:col-span-2 text-right">

@@ -65,7 +65,7 @@ onMounted(load)
   <div class="space-y-4">
     <div class="dc-page-card p-4 flex items-center justify-between gap-3">
       <div class="flex items-center gap-3">
-        <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0f6ee9] flex items-center justify-center">
+        <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0360da] flex items-center justify-center">
           <UIcon name="i-heroicons-star" class="text-xl" />
         </div>
         <div>
@@ -121,7 +121,7 @@ onMounted(load)
           <div class="min-w-0">
             <div class="flex items-center gap-2">
               <span class="text-[#FFB400]">{{ '★'.repeat(r.rating) }}<span class="text-[#d7e0ee]">{{ '★'.repeat(5 - r.rating) }}</span></span>
-              <span class="dc-pill" :class="r.source === 'KIOSK' ? 'bg-[#fde8d6] text-[#b5701a]' : 'bg-[#dce9f8] text-[#0f6ee9]'">{{ r.source }}</span>
+              <span class="dc-pill" :class="r.source === 'KIOSK' ? 'bg-[#fde8d6] text-[#b5701a]' : 'bg-[#dce9f8] text-[#0360da]'">{{ r.source }}</span>
             </div>
             <p class="text-sm text-[#111d35] mt-2">{{ r.comment || '(Tanpa komentar)' }}</p>
             <p class="text-xs text-[#6f809f] mt-2">

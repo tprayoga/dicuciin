@@ -6,10 +6,14 @@ import {
   ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateKioskDto, UpdateKioskDto } from './dto/kiosk.dto';
 import { OrdersService } from '../orders/orders.service';
 import { CreateOrderDto } from '../orders/dto/order.dto';
+import { BookingsService } from '../bookings/bookings.service';
+import { PaymentsService } from '../payments/payments.service';
+import { CreateGatewayPaymentDto } from '../payments/dto/payment.dto';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -17,6 +21,9 @@ export class KiosksService {
   constructor(
     private prisma: PrismaService,
     private ordersService: OrdersService,
+    private bookingsService: BookingsService,
+    private paymentsService: PaymentsService,
+    private config: ConfigService,
   ) {}
 
   async create(createKioskDto: CreateKioskDto) {
@@ -299,6 +306,45 @@ export class KiosksService {
       sourcePlatform: 'KIOSK',
       notes: dto.notes || `Order dibuat dari ${kiosk.kioskCode}`,
     });
+  }
+
+  /** Daftar mesin (cuci/pengering) di outlet kiosk + status ketersediaan. */
+  async deviceMachines(deviceToken: string) {
+    const kiosk = await this.authenticateDevice(deviceToken);
+    return this.bookingsService.listOutletMachines(kiosk.outletId);
+  }
+
+  /** Buat tagihan QRIS/VA untuk order kiosk (tamu). Order wajib milik kiosk ini. */
+  async createDevicePayment(deviceToken: string, dto: CreateGatewayPaymentDto) {
+    const kiosk = await this.authenticateDevice(deviceToken);
+    await this.assertOrderOwnedByKiosk(dto.orderId, kiosk.id);
+    return this.paymentsService.createKioskGatewayPayment(dto.orderId, dto);
+  }
+
+  /** Status pembayaran untuk polling dari kiosk. */
+  async devicePaymentStatus(deviceToken: string, paymentNumber: string) {
+    await this.authenticateDevice(deviceToken);
+    return this.paymentsService.getStatus(paymentNumber);
+  }
+
+  /** Dev-only: simulasikan pembayaran kiosk berhasil (mock gateway). */
+  async simulateDevicePayment(deviceToken: string, paymentNumber: string) {
+    await this.authenticateDevice(deviceToken);
+    if (this.config.get<string>('APP_ENV', 'development') === 'production') {
+      throw new ForbiddenException('Tidak tersedia di produksi');
+    }
+    return this.paymentsService.simulatePaid(paymentNumber);
+  }
+
+  private async assertOrderOwnedByKiosk(orderId: string, kioskId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { kioskId: true },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.kioskId !== kioskId) {
+      throw new ForbiddenException('Order bukan milik kiosk ini');
+    }
   }
 
   async endSession(sessionId: string) {

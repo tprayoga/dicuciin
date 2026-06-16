@@ -41,17 +41,20 @@ async function login() {
 
 <template>
   <div class="w-full max-w-[380px] rounded-xl bg-white p-5 border border-[#d4dff0]">
+    <div class="flex justify-center mb-5">
+      <img src="/brand/logo_full_color_transparent.png" alt="Di.Cuciin" class="h-12 w-auto" />
+    </div>
     <div class="flex border-b border-[#d4dff0] mb-6">
       <button
         class="flex-1 py-2 text-sm font-medium flex items-center justify-center gap-2"
-        :class="activeTab === 'OWNER' ? 'text-[#0f6ee9] border-b-2 border-[#0f6ee9]' : 'text-[#6f809f]'"
+        :class="activeTab === 'OWNER' ? 'text-[#0360da] border-b-2 border-[#0360da]' : 'text-[#6f809f]'"
         @click="activeTab = 'OWNER'"
       >
         <UIcon name="i-heroicons-building-office" /> Owner
       </button>
       <button
         class="flex-1 py-2 text-sm font-medium flex items-center justify-center gap-2"
-        :class="activeTab === 'STAFF' ? 'text-[#0f6ee9] border-b-2 border-[#0f6ee9]' : 'text-[#6f809f]'"
+        :class="activeTab === 'STAFF' ? 'text-[#0360da] border-b-2 border-[#0360da]' : 'text-[#6f809f]'"
         @click="activeTab = 'STAFF'"
       >
         <UIcon name="i-heroicons-user" /> Staff
@@ -60,7 +63,7 @@ async function login() {
 
     <div class="flex items-center gap-3 mb-6">
       <div class="h-12 w-12 rounded-xl bg-[#dce9f8] flex items-center justify-center">
-        <UIcon name="i-heroicons-building-office" class="text-[#0f6ee9] text-xl" />
+        <UIcon name="i-heroicons-building-office" class="text-[#0360da] text-xl" />
       </div>
       <div>
         <h1 class="text-[32px] font-bold text-[#111d35]">{{ activeTab === 'OWNER' ? 'Owner Login' : 'Staff Login' }}</h1>
@@ -89,7 +92,7 @@ async function login() {
         </UInput>
       </UFormField>
 
-      <p class="text-right text-sm text-[#0f6ee9]">Lupa Password?</p>
+      <p class="text-right text-sm text-[#0360da]">Lupa Password?</p>
 
       <UAlert
         v-if="error"
@@ -101,7 +104,7 @@ async function login() {
 
       <UButton
         type="submit"
-        class="w-full justify-center rounded-xl !bg-[#0f6ee9] hover:!bg-[#0b56b7]"
+        class="w-full justify-center rounded-xl !bg-[#0360da] hover:!bg-[#0b56b7]"
         :loading="loading"
         :disabled="loading"
       >

@@ -65,6 +65,8 @@ class ServicePrice {
     required this.price,
     required this.unit,
     required this.category,
+    this.machineType,
+    this.capacityKg,
     this.estimateMinutes,
   });
 
@@ -73,7 +75,12 @@ class ServicePrice {
   final double price;
   final String unit;
   final String category;
+  final String? machineType;
+  final double? capacityKg;
   final int? estimateMinutes;
+
+  /// True bila layanan ini untuk mesin pengering (berdasarkan machineType).
+  bool get isDryer => (machineType ?? '').toUpperCase().contains('DRY');
 
   factory ServicePrice.fromJson(Map<String, dynamic> json) {
     final service =
@@ -84,21 +91,119 @@ class ServicePrice {
       price: _money(json['price']),
       unit: (json['unit'] as String?) ?? 'item',
       category: (service['serviceType'] as String?) ?? 'LAUNDRY',
+      machineType: service['machineType'] as String?,
+      capacityKg: (service['capacityKg'] as num?)?.toDouble(),
       estimateMinutes: (service['estimateMinutes'] as num?)?.toInt(),
     );
   }
 }
 
-class CartLine {
-  const CartLine({required this.service, required this.quantity});
+/// Sebuah mesin (cuci/pengering) di outlet kiosk + status ketersediaannya.
+class Machine {
+  const Machine({
+    required this.deviceId,
+    required this.deviceCode,
+    required this.name,
+    required this.type,
+    required this.status,
+    required this.bookable,
+  });
 
-  final ServicePrice service;
-  final int quantity;
+  final String deviceId;
+  final String deviceCode;
+  final String name;
+  final String type; // WASHING_MACHINE / DRYER_MACHINE
+  final String status; // AVAILABLE / RESERVED / IN_USE / OFFLINE
+  final bool bookable;
 
-  double get subtotal => service.price * quantity;
+  bool get isWasher => type.toUpperCase().contains('WASH');
 
-  CartLine copyWith({int? quantity}) =>
-      CartLine(service: service, quantity: quantity ?? this.quantity);
+  factory Machine.fromJson(Map<String, dynamic> json) => Machine(
+    deviceId: (json['deviceId'] as String?) ?? '',
+    deviceCode: (json['deviceCode'] as String?) ?? '',
+    name: (json['name'] as String?) ?? 'Mesin',
+    type: (json['type'] as String?) ?? 'WASHING_MACHINE',
+    status: (json['status'] as String?) ?? 'OFFLINE',
+    bookable: json['bookable'] == true,
+  );
+}
+
+/// Ringkasan keramaian mesin sebuah outlet.
+class Occupancy {
+  const Occupancy({
+    required this.total,
+    required this.available,
+    required this.level,
+    required this.remark,
+  });
+
+  final int total;
+  final int available;
+  final String level; // none/low/medium/high/full
+  final String remark;
+
+  factory Occupancy.fromJson(Map<String, dynamic> json) => Occupancy(
+    total: (json['total'] as num?)?.toInt() ?? 0,
+    available: (json['available'] as num?)?.toInt() ?? 0,
+    level: (json['level'] as String?) ?? 'none',
+    remark: (json['remark'] as String?) ?? '-',
+  );
+}
+
+/// Daftar mesin outlet + ringkasan keramaian.
+class OutletMachines {
+  const OutletMachines({required this.machines, this.occupancy});
+
+  final List<Machine> machines;
+  final Occupancy? occupancy;
+
+  factory OutletMachines.fromJson(Map<String, dynamic> json) {
+    final list = json['machines'] as List<dynamic>? ?? const [];
+    final occ = json['occupancy'] as Map<String, dynamic>?;
+    return OutletMachines(
+      machines: list
+          .whereType<Map<String, dynamic>>()
+          .map(Machine.fromJson)
+          .toList(),
+      occupancy: occ == null ? null : Occupancy.fromJson(occ),
+    );
+  }
+}
+
+/// Tagihan pembayaran (QRIS/VA) untuk order kiosk.
+class KioskPayment {
+  const KioskPayment({
+    required this.paymentNumber,
+    required this.method,
+    required this.amount,
+    required this.status,
+    this.qrString,
+    this.vaNumber,
+    this.bank,
+    this.expiresAt,
+  });
+
+  final String paymentNumber;
+  final String method; // QRIS / TRANSFER
+  final double amount;
+  final String status; // PENDING / PAID / FAILED / EXPIRED
+  final String? qrString;
+  final String? vaNumber;
+  final String? bank;
+  final String? expiresAt;
+
+  bool get isPaid => status == 'PAID';
+
+  factory KioskPayment.fromJson(Map<String, dynamic> json) => KioskPayment(
+    paymentNumber: (json['paymentNumber'] as String?) ?? '-',
+    method: (json['method'] as String?) ?? 'QRIS',
+    amount: _money(json['amount']),
+    status: (json['status'] as String?) ?? 'PENDING',
+    qrString: json['qrString'] as String?,
+    vaNumber: json['vaNumber'] as String?,
+    bank: json['bank'] as String?,
+    expiresAt: json['expiresAt'] as String?,
+  );
 }
 
 class CreatedOrder {

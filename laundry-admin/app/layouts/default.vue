@@ -39,21 +39,21 @@ async function logout() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#f2f5fa] text-[#1a2237]">
+  <div class="min-h-screen bg-[#f2f5fa] text-[#272526]">
     <header class="h-16 border-b border-[#d5deeb] bg-white px-5 flex items-center justify-between">
-      <div class="text-[32px] leading-none font-bold text-[#0f6ee9] tracking-tight">dicuciin</div>
+      <img src="/brand/logo_full_color_transparent.png" alt="Di.Cuciin" class="h-9 w-auto" />
       <div class="flex items-center gap-5">
-        <UButton icon="i-heroicons-bell" variant="ghost" color="neutral" class="!text-[#1a2237]" />
+        <UButton icon="i-heroicons-bell" variant="ghost" color="neutral" class="!text-[#272526]" />
         <ClientOnly>
           <div class="flex items-center gap-3">
-            <div class="h-8 w-8 rounded-full bg-[#0b4a97] text-white text-xs font-semibold flex items-center justify-center">
+            <div class="h-8 w-8 rounded-full bg-[#0349a8] text-white text-xs font-semibold flex items-center justify-center">
               {{ initials(authStore.user?.name) }}
             </div>
             <p class="text-sm font-medium">{{ authStore.user?.role === 'OWNER' ? 'Owner' : (authStore.user?.role || 'Owner') }}</p>
           </div>
           <template #fallback>
             <div class="flex items-center gap-3">
-              <div class="h-8 w-8 rounded-full bg-[#0b4a97] text-white text-xs font-semibold flex items-center justify-center">OW</div>
+              <div class="h-8 w-8 rounded-full bg-[#0349a8] text-white text-xs font-semibold flex items-center justify-center">OW</div>
               <p class="text-sm font-medium">Owner</p>
             </div>
           </template>
@@ -69,7 +69,7 @@ async function logout() {
             :key="item.to + item.label"
             :to="item.to"
             class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors"
-            :class="isActive(item.to) ? 'text-[#0f6ee9] bg-[#edf4ff]' : 'text-[#5f7294] hover:bg-[#f2f6fc]'"
+            :class="isActive(item.to) ? 'text-[#0360da] bg-[#edf4ff]' : 'text-[#5f7294] hover:bg-[#f2f6fc]'"
           >
             <UIcon :name="item.icon" class="text-[20px]" />
             <span>{{ item.label }}</span>

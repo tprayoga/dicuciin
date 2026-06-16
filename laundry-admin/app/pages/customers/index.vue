@@ -205,7 +205,7 @@ onMounted(load)
   <div class="space-y-4">
     <div class="dc-page-card p-4 flex items-center justify-between gap-3">
       <div class="flex items-center gap-3">
-        <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0f6ee9] flex items-center justify-center">
+        <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0360da] flex items-center justify-center">
           <UIcon name="i-heroicons-user-group" class="text-xl" />
         </div>
         <div>
@@ -247,7 +247,7 @@ onMounted(load)
     <div class="dc-page-card p-4 overflow-x-auto">
       <table class="w-full min-w-[1000px] text-sm">
         <thead>
-          <tr class="bg-[#0b3a77] text-white text-left">
+          <tr class="bg-[#0349a8] text-white text-left">
             <th class="px-3 py-3 font-semibold">ID MEMBER</th>
             <th class="px-3 py-3 font-semibold">NAMA</th>
             <th class="px-3 py-3 font-semibold">NOMOR TELEPON</th>
@@ -365,7 +365,7 @@ onMounted(load)
           </div>
 
           <div>
-            <h4 class="font-semibold text-[#1a2237] mb-2">Alamat</h4>
+            <h4 class="font-semibold text-[#272526] mb-2">Alamat</h4>
             <div v-if="!selectedCustomer.addresses?.length" class="text-sm text-[#6f809f]">Belum ada alamat tersimpan.</div>
             <div v-else class="space-y-2">
               <div
@@ -373,7 +373,7 @@ onMounted(load)
                 :key="addr.id"
                 class="rounded-lg border border-[#d7e0ee] p-3 text-sm"
               >
-                <p class="font-medium">{{ addr.label }} <span v-if="addr.isDefault" class="text-xs text-[#0f6ee9]">(Utama)</span></p>
+                <p class="font-medium">{{ addr.label }} <span v-if="addr.isDefault" class="text-xs text-[#0360da]">(Utama)</span></p>
                 <p class="text-[#4f607f]">{{ addr.recipientName }} - {{ addr.phone }}</p>
                 <p class="text-[#4f607f]">{{ addr.address }}, {{ addr.city }}, {{ addr.province }} {{ addr.postalCode || '' }}</p>
               </div>
@@ -381,7 +381,7 @@ onMounted(load)
           </div>
 
           <div>
-            <h4 class="font-semibold text-[#1a2237] mb-2">5 Transaksi Terakhir</h4>
+            <h4 class="font-semibold text-[#272526] mb-2">5 Transaksi Terakhir</h4>
             <div v-if="!selectedOrders.length" class="text-sm text-[#6f809f]">Belum ada transaksi.</div>
             <div v-else class="space-y-2">
               <div

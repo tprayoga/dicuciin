@@ -272,7 +272,7 @@ onMounted(() => load())
   <div class="space-y-4">
     <div class="dc-page-card p-4 flex items-center justify-between gap-3">
       <div class="flex items-center gap-3">
-        <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0f6ee9] flex items-center justify-center">
+        <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0360da] flex items-center justify-center">
           <UIcon name="i-heroicons-building-storefront" class="text-xl" />
         </div>
         <div>
@@ -284,7 +284,7 @@ onMounted(() => load())
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <p class="text-lg">Total: <span class="text-[#0f6ee9] font-semibold">{{ filteredOutlets.length }} Outlet/ Cabang</span></p>
+      <p class="text-lg">Total: <span class="text-[#0360da] font-semibold">{{ filteredOutlets.length }} Outlet/ Cabang</span></p>
       <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari nama outlet" class="w-full max-w-xs dc-input-like" />
     </div>
 
@@ -298,7 +298,7 @@ onMounted(() => load())
           :style="{ backgroundImage: `url(${outlet.imageUrl})` }"
         />
         <div class="flex items-start justify-between mb-4">
-          <div class="h-12 w-12 rounded-xl bg-[#dce9f8] text-[#0f6ee9] flex items-center justify-center">
+          <div class="h-12 w-12 rounded-xl bg-[#dce9f8] text-[#0360da] flex items-center justify-center">
             <UIcon name="i-heroicons-building-storefront" class="text-2xl" />
           </div>
           <div class="flex gap-1">
@@ -314,15 +314,15 @@ onMounted(() => load())
         <div class="mt-3 pt-3 border-t border-[#d7e0ee] grid grid-cols-3 gap-2">
           <div>
             <p class="text-sm text-[#6f809f]">Staff Cabang</p>
-            <p class="font-semibold text-[#1a2237]">-</p>
+            <p class="font-semibold text-[#272526]">-</p>
           </div>
           <div>
             <p class="text-sm text-[#6f809f]">Total Mesin</p>
-            <p class="font-semibold text-[#1a2237]">-</p>
+            <p class="font-semibold text-[#272526]">-</p>
           </div>
           <div>
             <p class="text-sm text-[#6f809f]">Kiosk</p>
-            <p class="font-semibold text-[#1a2237]">{{ outletKiosks(outlet.id).length }}</p>
+            <p class="font-semibold text-[#272526]">{{ outletKiosks(outlet.id).length }}</p>
           </div>
         </div>
         <UButton
@@ -466,7 +466,7 @@ onMounted(() => load())
               class="mt-4 rounded-xl border border-[#9fc1ef] bg-[#e8f1ff] p-4 text-center"
             >
               <p class="text-xs font-semibold tracking-wide text-[#4f607f]">KODE ENROLLMENT</p>
-              <p class="my-2 text-4xl font-black tracking-[0.3em] text-[#0b4a97]">
+              <p class="my-2 text-4xl font-black tracking-[0.3em] text-[#0349a8]">
                 {{ enrollmentCode.code }}
               </p>
               <p class="text-xs text-[#6f809f]">
@@ -497,7 +497,7 @@ onMounted(() => load())
                 :key="kiosk.id"
                 class="flex items-center gap-3 rounded-xl border border-[#d7e0ee] p-3"
               >
-                <div class="h-10 w-10 rounded-xl bg-[#e8f1ff] text-[#0f6ee9] flex items-center justify-center">
+                <div class="h-10 w-10 rounded-xl bg-[#e8f1ff] text-[#0360da] flex items-center justify-center">
                   <UIcon name="i-heroicons-device-tablet" class="text-xl" />
                 </div>
                 <div class="min-w-0 flex-1">

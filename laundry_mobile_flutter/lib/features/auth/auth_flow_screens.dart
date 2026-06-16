@@ -120,7 +120,7 @@ class WelcomeScreen extends StatelessWidget {
                     child: Column(
                       children: [
                         Image.asset(
-                          'assets/branding/logo_dicuciin.png',
+                          'assets/branding/logo-putih.png',
                           height: 44,
                           fit: BoxFit.contain,
                           errorBuilder: (_, _, _) => const Text(

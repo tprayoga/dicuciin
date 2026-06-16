@@ -29,7 +29,7 @@ onMounted(load)
 <template>
   <div class="space-y-4">
     <div class="dc-page-card p-4 flex items-center gap-3">
-      <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0f6ee9] flex items-center justify-center">
+      <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0360da] flex items-center justify-center">
         <UIcon name="i-heroicons-trophy" class="text-xl" />
       </div>
       <div>

@@ -23,6 +23,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
 import { Public } from '../../common/decorators/public.decorator';
 import { CreateOrderDto } from '../orders/dto/order.dto';
+import { CreateGatewayPaymentDto } from '../payments/dto/payment.dto';
 
 class StartSessionDto {
   @ApiProperty({ required: false })
@@ -104,6 +105,52 @@ export class KiosksController {
     return this.kiosksService.createDeviceOrder(
       this.deviceToken(authorization),
       dto,
+    );
+  }
+
+  @Public()
+  @Get('device/machines')
+  @ApiOperation({ summary: 'List machines + availability for the kiosk outlet' })
+  async deviceMachines(@Headers('authorization') authorization?: string) {
+    return this.kiosksService.deviceMachines(this.deviceToken(authorization));
+  }
+
+  @Public()
+  @Post('device/payments')
+  @ApiOperation({ summary: 'Create a QRIS/VA charge for a kiosk order' })
+  async createDevicePayment(
+    @Body() dto: CreateGatewayPaymentDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.kiosksService.createDevicePayment(
+      this.deviceToken(authorization),
+      dto,
+    );
+  }
+
+  @Public()
+  @Get('device/payments/:paymentNumber/status')
+  @ApiOperation({ summary: 'Poll payment status for a kiosk order' })
+  async devicePaymentStatus(
+    @Param('paymentNumber') paymentNumber: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.kiosksService.devicePaymentStatus(
+      this.deviceToken(authorization),
+      paymentNumber,
+    );
+  }
+
+  @Public()
+  @Post('device/payments/:paymentNumber/simulate')
+  @ApiOperation({ summary: '[DEV] Simulate a successful kiosk payment' })
+  async simulateDevicePayment(
+    @Param('paymentNumber') paymentNumber: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.kiosksService.simulateDevicePayment(
+      this.deviceToken(authorization),
+      paymentNumber,
     );
   }
 

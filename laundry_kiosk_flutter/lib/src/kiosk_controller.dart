@@ -11,8 +11,9 @@ enum KioskStage {
   enrollment,
   closed,
   welcome,
-  ordering,
-  review,
+  machines,
+  checkout,
+  payment,
   success,
 }
 
@@ -29,12 +30,22 @@ class KioskController extends ChangeNotifier {
   KioskTerminal? terminal;
   String? sessionId;
   List<ServicePrice> services = const [];
-  final Map<String, CartLine> cart = {};
-  CreatedOrder? createdOrder;
-  Timer? _heartbeatTimer;
 
-  int get itemCount => cart.values.fold(0, (sum, line) => sum + line.quantity);
-  double get total => cart.values.fold(0, (sum, line) => sum + line.subtotal);
+  // ── State alur pesan mesin → checkout → bayar ──────────────────────
+  List<Machine> machines = const [];
+  Occupancy? occupancy;
+  bool machinesLoading = false;
+  Machine? selectedMachine;
+  ServicePrice? selectedService;
+  String? appliedPromo;
+  CreatedOrder? createdOrder;
+  KioskPayment? payment;
+  Timer? _heartbeatTimer;
+  Timer? _paymentTimer;
+
+  /// Total tagihan setelah order dibuat (kalau ada), kalau belum pakai harga layanan.
+  double get total =>
+      createdOrder?.total ?? selectedService?.price ?? 0;
 
   Future<void> initialize() async {
     deviceToken = await _storage.readToken();
@@ -111,52 +122,90 @@ class KioskController extends ChangeNotifier {
         .toList();
   }
 
-  void add(ServicePrice service) {
-    final existing = cart[service.serviceId];
-    cart[service.serviceId] = CartLine(
-      service: service,
-      quantity: (existing?.quantity ?? 0) + 1,
-    );
+  /// Mulai alur pesan: buka daftar mesin outlet ini.
+  Future<void> startOrder() async {
+    _resetOrderState();
+    stage = KioskStage.machines;
     notifyListeners();
+    await loadMachines();
   }
 
-  void decrease(ServicePrice service) {
-    final existing = cart[service.serviceId];
-    if (existing == null) return;
-    if (existing.quantity <= 1) {
-      cart.remove(service.serviceId);
-    } else {
-      cart[service.serviceId] = existing.copyWith(
-        quantity: existing.quantity - 1,
+  Future<void> loadMachines() async {
+    machinesLoading = true;
+    error = null;
+    notifyListeners();
+    try {
+      final payload = await _api.get(
+        '/kiosks/device/machines',
+        token: deviceToken,
       );
+      final data = OutletMachines.fromJson(payload as Map<String, dynamic>);
+      machines = data.machines;
+      occupancy = data.occupancy;
+    } on ApiException catch (exception) {
+      error = exception.message;
+    } catch (_) {
+      error = 'Gagal memuat mesin. Coba lagi.';
+    } finally {
+      machinesLoading = false;
+      notifyListeners();
     }
-    notifyListeners();
   }
 
-  void startOrder() {
-    cart.clear();
+  /// Pilih mesin lalu lanjut ke checkout. Layanan & harga diturunkan dari tipe
+  /// mesin (cuci/pengering) berdasarkan daftar harga layanan outlet.
+  void selectMachine(Machine machine) {
+    if (!machine.bookable) return;
+    final service = serviceFor(machine);
+    if (service == null) {
+      error = 'Belum ada tarif layanan untuk mesin ini.';
+      notifyListeners();
+      return;
+    }
+    selectedMachine = machine;
+    selectedService = service;
+    appliedPromo = null;
     createdOrder = null;
+    payment = null;
     error = null;
-    stage = KioskStage.ordering;
+    stage = KioskStage.checkout;
     notifyListeners();
   }
 
-  void reviewOrder() {
-    if (cart.isEmpty) return;
-    stage = KioskStage.review;
-    notifyListeners();
+  /// Layanan (+ tarif) yang dipakai untuk sebuah mesin, berdasarkan tipenya.
+  ServicePrice? serviceFor(Machine machine) {
+    if (services.isEmpty) return null;
+    final wantDryer = !machine.isWasher;
+    final match = services
+        .where((service) => service.isDryer == wantDryer)
+        .toList();
+    return (match.isNotEmpty ? match : services).first;
   }
 
-  void backToMenu() {
+  void backToMachines() {
     error = null;
-    stage = KioskStage.ordering;
+    stage = KioskStage.machines;
     notifyListeners();
   }
 
-  Future<void> submitOrder() async {
-    if (cart.isEmpty || terminal == null) return;
+  void backToCheckout() {
+    _paymentTimer?.cancel();
+    error = null;
+    stage = KioskStage.checkout;
+    notifyListeners();
+  }
+
+  /// Buat order tamu untuk mesin terpilih lalu buka tagihan QRIS/VA.
+  Future<void> submitCheckout({
+    String? promoCode,
+    String method = 'QRIS',
+    String? bank,
+  }) async {
+    if (selectedService == null || selectedMachine == null || terminal == null) {
+      return;
+    }
     await _run(() async {
-      final payload =
+      final orderPayload =
           await _api.post(
                 '/kiosks/device/orders',
                 token: deviceToken,
@@ -164,28 +213,95 @@ class KioskController extends ChangeNotifier {
                   'outletId': terminal!.outlet.id,
                   'kioskId': terminal!.id,
                   'sourcePlatform': 'KIOSK',
-                  'items': cart.values
-                      .map(
-                        (line) => {
-                          'serviceId': line.service.serviceId,
-                          'quantity': line.quantity,
-                        },
-                      )
-                      .toList(),
+                  'items': [
+                    {'serviceId': selectedService!.serviceId, 'quantity': 1},
+                  ],
+                  if (promoCode != null && promoCode.trim().isNotEmpty)
+                    'promoCode': promoCode.trim(),
+                  'notes':
+                      'Mesin ${selectedMachine!.name} (${selectedMachine!.deviceCode})',
                 },
               )
               as Map<String, dynamic>;
-      createdOrder = CreatedOrder.fromJson(payload);
-      stage = KioskStage.success;
+      createdOrder = CreatedOrder.fromJson(orderPayload);
+      appliedPromo = promoCode?.trim().isNotEmpty == true
+          ? promoCode!.trim()
+          : null;
+
+      final paymentPayload =
+          await _api.post(
+                '/kiosks/device/payments',
+                token: deviceToken,
+                body: {
+                  'orderId': createdOrder!.id,
+                  'method': method,
+                  'bank': ?bank,
+                },
+              )
+              as Map<String, dynamic>;
+      payment = KioskPayment.fromJson(paymentPayload);
+      stage = KioskStage.payment;
+      _startPaymentPolling();
     });
   }
 
+  void _startPaymentPolling() {
+    _paymentTimer?.cancel();
+    _paymentTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _checkPayment(),
+    );
+  }
+
+  Future<void> _checkPayment() async {
+    if (payment == null) return;
+    try {
+      final payload = await _api.get(
+        '/kiosks/device/payments/${payment!.paymentNumber}/status',
+        token: deviceToken,
+      );
+      payment = KioskPayment.fromJson(payload as Map<String, dynamic>);
+      if (payment!.isPaid) {
+        _paymentTimer?.cancel();
+        stage = KioskStage.success;
+      }
+      notifyListeners();
+    } catch (_) {
+      // Abaikan error polling sesaat; percobaan berikutnya akan mengulang.
+    }
+  }
+
+  /// Dev-only: paksa pembayaran sukses (untuk pengujian tanpa gateway nyata).
+  Future<void> simulatePayment() async {
+    if (payment == null) return;
+    try {
+      await _api.post(
+        '/kiosks/device/payments/${payment!.paymentNumber}/simulate',
+        token: deviceToken,
+      );
+      await _checkPayment();
+    } on ApiException catch (exception) {
+      error = exception.message;
+      notifyListeners();
+    }
+  }
+
   void newOrder() {
-    cart.clear();
-    createdOrder = null;
-    error = null;
+    _resetOrderState();
     stage = KioskStage.welcome;
     notifyListeners();
+  }
+
+  void _resetOrderState() {
+    _paymentTimer?.cancel();
+    machines = const [];
+    occupancy = null;
+    selectedMachine = null;
+    selectedService = null;
+    appliedPromo = null;
+    createdOrder = null;
+    payment = null;
+    error = null;
   }
 
   Future<void> clearEnrollment() async {
@@ -195,7 +311,7 @@ class KioskController extends ChangeNotifier {
     deviceToken = null;
     terminal = null;
     services = const [];
-    cart.clear();
+    _resetOrderState();
     stage = KioskStage.enrollment;
     notifyListeners();
   }
@@ -217,7 +333,7 @@ class KioskController extends ChangeNotifier {
       final isOpen = schedule['isOpen'] == true;
       if (!isOpen && stage != KioskStage.closed) {
         await _endRuntimeSession();
-        cart.clear();
+        _resetOrderState();
         stage = KioskStage.closed;
         notifyListeners();
       } else if (isOpen && stage == KioskStage.closed) {
@@ -286,6 +402,7 @@ class KioskController extends ChangeNotifier {
   @override
   void dispose() {
     _heartbeatTimer?.cancel();
+    _paymentTimer?.cancel();
     super.dispose();
   }
 }

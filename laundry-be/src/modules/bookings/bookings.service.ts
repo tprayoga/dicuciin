@@ -103,10 +103,10 @@ export class BookingsService {
       },
       include: bookingInclude,
     });
-    await this.prisma.iotDevice.update({
-      where: { id: deviceId },
-      data: { status: 'RESERVED' },
-    });
+    // Status RESERVED diturunkan dari booking aktif (lihat effectiveStatus), BUKAN
+    // dari flag device — agar reservasi yang kedaluwarsa otomatis melepas mesin.
+    // Menyetel iotDevice.status='RESERVED' di sini membuat mesin "nyangkut"
+    // terpakai selamanya bila reservasi expired tanpa complete/cancel.
     return booking;
   }
 
@@ -315,15 +315,17 @@ export class BookingsService {
 
   /**
    * Status efektif sebuah mesin: booking aktif diprioritaskan (IN_USE/RESERVED),
-   * lalu fallback ke status perangkat tersimpan (OFFLINE/IN_USE/RESERVED), sisanya
-   * AVAILABLE.
+   * lalu fallback ke status fisik perangkat (OFFLINE/IN_USE), sisanya AVAILABLE.
    */
   private effectiveStatus(deviceStatus: string, bs?: BookingStatus): string {
+    // Booking aktif (query sudah mengecualikan yang expired) = sumber kebenaran
+    // untuk RESERVED/IN_USE-via-reservasi.
     if (bs === BookingStatus.IN_USE) return 'IN_USE';
     if (bs === BookingStatus.RESERVED) return 'RESERVED';
+    // Status fisik perangkat: OFFLINE (mati) atau IN_USE (mesin benar2 berjalan).
+    // 'RESERVED' sengaja TIDAK dibaca dari device agar flag lama tak nyangkut.
     if (deviceStatus === 'OFFLINE') return 'OFFLINE';
     if (deviceStatus === 'IN_USE') return 'IN_USE';
-    if (deviceStatus === 'RESERVED') return 'RESERVED';
     return 'AVAILABLE';
   }
 

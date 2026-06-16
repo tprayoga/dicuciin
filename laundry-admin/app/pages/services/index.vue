@@ -132,7 +132,7 @@ onMounted(() => load())
   <div class="space-y-4">
     <div class="dc-page-card p-4 flex items-center justify-between gap-3">
       <div class="flex items-center gap-3">
-        <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0f6ee9] flex items-center justify-center">
+        <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0360da] flex items-center justify-center">
           <UIcon name="i-heroicons-wrench-screwdriver" class="text-xl" />
         </div>
         <div>
@@ -144,7 +144,7 @@ onMounted(() => load())
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <p class="text-lg">Total: <span class="text-[#0f6ee9] font-semibold">{{ filteredServices.length }} Layanan</span></p>
+      <p class="text-lg">Total: <span class="text-[#0360da] font-semibold">{{ filteredServices.length }} Layanan</span></p>
       <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari Layanan" class="w-full max-w-xs dc-input-like" />
     </div>
 
@@ -154,7 +154,7 @@ onMounted(() => load())
       <div v-for="service in filteredServices" :key="service.id" class="dc-page-card p-4">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-3">
-            <div class="h-12 w-12 rounded-xl bg-[#dce9f8] text-[#0f6ee9] flex items-center justify-center">
+            <div class="h-12 w-12 rounded-xl bg-[#dce9f8] text-[#0360da] flex items-center justify-center">
               <UIcon name="i-heroicons-wrench-screwdriver" class="text-2xl" />
             </div>
             <span class="dc-pill-success" :class="!service.isActive ? '!bg-[#f2f4f8] !text-[#6f809f]' : ''">{{ service.isActive ? 'Aktif' : 'Nonaktif' }}</span>

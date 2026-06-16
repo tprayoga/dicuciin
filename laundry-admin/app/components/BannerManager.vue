@@ -252,25 +252,25 @@ onMounted(load)
     <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       <div v-for="banner in banners" :key="banner.id" class="dc-page-card overflow-hidden">
         <div
-          class="h-[150px] border-b border-[#d7e0ee] flex items-center justify-center text-[#0f6ee9] font-semibold bg-gradient-to-r from-[#dce9f8] to-[#f3f7ff] bg-cover bg-center"
+          class="h-[150px] border-b border-[#d7e0ee] flex items-center justify-center text-[#0360da] font-semibold bg-gradient-to-r from-[#dce9f8] to-[#f3f7ff] bg-cover bg-center"
           :style="banner.imageUrl ? { backgroundImage: `url(${banner.imageUrl})` } : undefined"
         >
           <span v-if="!banner.imageUrl">Tanpa Gambar</span>
         </div>
         <div class="p-4">
           <div class="flex items-center gap-2">
-            <span class="dc-pill" :class="banner.placement === 'HOME_POPUP' ? 'bg-[#fde8d6] text-[#b5701a]' : 'bg-[#dce9f8] text-[#0f6ee9]'">
+            <span class="dc-pill" :class="banner.placement === 'HOME_POPUP' ? 'bg-[#fde8d6] text-[#b5701a]' : 'bg-[#dce9f8] text-[#0360da]'">
               {{ placementLabel(banner.placement) }}
             </span>
             <span class="text-xs text-[#6f809f]">Urutan {{ banner.sortOrder }}</span>
           </div>
           <h3 class="text-lg font-semibold text-[#111d35] mt-2">{{ banner.title }}</h3>
           <p v-if="banner.promo" class="text-xs mt-1">
-            <span class="inline-flex items-center gap-1 text-[#0f6ee9] font-semibold">
+            <span class="inline-flex items-center gap-1 text-[#0360da] font-semibold">
               <UIcon name="i-heroicons-ticket" /> Promo {{ banner.promo.code }}
             </span>
           </p>
-          <p v-else-if="banner.linkUrl" class="text-xs text-[#0f6ee9] mt-1 truncate">{{ banner.linkUrl }}</p>
+          <p v-else-if="banner.linkUrl" class="text-xs text-[#0360da] mt-1 truncate">{{ banner.linkUrl }}</p>
           <p class="text-sm text-[#6f809f] mt-1">{{ periodLabel(banner) }}</p>
 
           <div class="mt-4 flex items-center justify-between">

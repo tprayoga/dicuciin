@@ -8,13 +8,19 @@ class AppColors {
   AppColors._();
 
   // ── Brand / Primary ─────────────────────────────────────────────
-  static const Color primary = Color(0xFF1A73E8);
-  static const Color primaryDark = Color(0xFF0B4A93);
-  static const Color primaryAccent = Color(0xFF29CC5F);
+  // Palet resmi Di.Cuciin (Brand Book V01): water blue, orange, turquoise.
+  static const Color primary = Color(0xFF0360DA); // water blue
+  static const Color primaryDark = Color(0xFF0349A8);
+  static const Color primaryAccent = Color(0xFFFD6A01); // orange (aksen brand)
+
+  // ── Aksen brand ─────────────────────────────────────────────────
+  static const Color brandOrange = Color(0xFFFD6A01);
+  static const Color brandTurquoise = Color(0xFF05DCF3);
+  static const Color brandCream = Color(0xFFFFFFFA); // "natural"
 
   // ── Teks ────────────────────────────────────────────────────────
-  static const Color textDark = Color(0xFF131722);
-  static const Color textStrong = Color(0xFF101828);
+  static const Color textDark = Color(0xFF272526); // brand black
+  static const Color textStrong = Color(0xFF272526);
   static const Color textMuted = Color(0xFF667A9E);
   static const Color textMutedLight = Color(0xFF90A1BE);
 

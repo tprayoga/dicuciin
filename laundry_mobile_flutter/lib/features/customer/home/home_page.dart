@@ -144,17 +144,16 @@ class _HomePageState extends State<_HomePage> {
                     // Gambar mesin kanan
                     Positioned(
                       right: 0,
-                      top: 0,
+                      top: 50,
                       bottom: 0,
-                      width: 140,
+                      width: screenWidth * 0.5,
                       child: ClipRRect(
                         borderRadius: const BorderRadius.only(
                           bottomLeft: Radius.circular(60),
                           bottomRight: Radius.circular(28),
                         ),
                         child: Image.asset(
-                          'assets/mockups/location_cover.png',
-                          fit: BoxFit.cover,
+                          'assets/branding/illustration_laundry.png',
                           alignment: Alignment.centerLeft,
                           errorBuilder: (_, _, _) =>
                               Container(color: AppColors.primaryDark),
@@ -162,25 +161,25 @@ class _HomePageState extends State<_HomePage> {
                       ),
                     ),
                     // Gradient agar teks tetap terbaca di atas gambar
-                    Positioned(
-                      right: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: 160,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                            colors: [
-                              _blue,
-                              _blue.withValues(alpha: 0),
-                            ],
-                            stops: const [0.0, 0.5],
-                          ),
-                        ),
-                      ),
-                    ),
+                    // Positioned(
+                    //   right: 0,
+                    //   top: 0,
+                    //   bottom: 0,
+                    //   width: 160,
+                    //   child: DecoratedBox(
+                    //     decoration: BoxDecoration(
+                    //       gradient: LinearGradient(
+                    //         begin: Alignment.centerLeft,
+                    //         end: Alignment.centerRight,
+                    //         colors: [
+                    //           _blue,
+                    //           _blue.withValues(alpha: 0),
+                    //         ],
+                    //         stops: const [0.0, 0.5],
+                    //       ),
+                    //     ),
+                    //   ),
+                    // ),
                     // Teks kiri
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 14, 150, 16),
@@ -246,19 +245,19 @@ class _HomePageState extends State<_HomePage> {
                           children: [
                             const SizedBox(width: 40),
                             const Spacer(),
-                            Image.asset(
-                              'assets/branding/logo-putih.png',
-                              height: 26,
-                              fit: BoxFit.contain,
-                              errorBuilder: (_, _, _) => const Text(
-                                'dicuciin',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
+                            // Image.asset(
+                            //   'assets/branding/logo-putih.png',
+                            //   height: 26,
+                            //   fit: BoxFit.contain,
+                            //   errorBuilder: (_, _, _) => const Text(
+                            //     'dicuciin',
+                            //     style: TextStyle(
+                            //       color: Colors.white,
+                            //       fontSize: 20,
+                            //       fontWeight: FontWeight.w700,
+                            //     ),
+                            //   ),
+                            // ),
                             const Spacer(),
                             GestureDetector(
                               onTap: () => _showContactSheet(context),
