@@ -209,3 +209,58 @@ ebd1ab3 F4 · f84db93 seed · 65678e0 · fbc62b7 · 854d912 · 9d1ad01`.
 - Kiosk Flutter: analyzer, widget test, dan web build berhasil.
 - Endpoint enrollment telah diverifikasi aktif setelah migration dan restart backend:
   `/api/v1/kiosks/:id/enrollment-code`.
+
+---
+
+## 🎯 Cetak Biru Loyalty & Retensi (2026-06-16, konsep owner)
+
+> Perluasan dari keputusan awal (baris 16 "tanpa poin/tier") — owner kini ingin program
+> loyalty/retensi penuh. Dokumen ini = peta arsitektur + urutan bangun, **belum** dikerjakan
+> kecuali yang ditandai. Mulai dari: **selesaikan refactor promo dulu**, lalu Voucher engine.
+
+### Daftar program & objektif
+| # | Program | Objektif utama | Sekunder | Mekanisme inti |
+|---|---------|------|------|------|
+| 1 | Promo (kode publik) | Revenue | Retention | diskon di checkout |
+| 2 | Cashback | Retention | Frequency | balik point/saldo per transaksi |
+| 3 | Top Up | Retention | Frequency | bonus saldo saat isi ulang |
+| 4 | Loyalty Point | Acquisition | Activation | point per transaksi → tukar voucher/undian/barang |
+| 5 | Long Time No See | Retention | Frequency | voucher setelah lama tak transaksi |
+| 6 | Referral | Acquisition | Frequency | voucher utk perujuk &/atau yang dirujuk |
+| 7 | Birthday Reward | Retention | Revenue | voucher saat ulang tahun |
+| 8 | Anniversary | Retention | Revenue | voucher saat 1 tahun jadi member |
+| 9 | Happy Hour | Frequency | Revenue | harga mesin berubah di hari/jam tertentu |
+| 10 | Membership Tier | Retention | Revenue | naik tier dari *earned spending* → benefit |
+
+### Wawasan arsitektur: 3 primitive + lapisan pemicu
+Bukan 10 fitur terpisah. 6 dari 10 program ujungnya "menerbitkan voucher". Sistem terurai jadi:
+
+**Primitive (mesin inti):**
+- **A. Voucher** — benefit milik 1 customer (diskon/gratis cuci/cashback). Beda dari Promo
+  (kode publik yang diketik siapa saja). Keduanya berujung memberi diskon di checkout →
+  **satukan lapisan kalkulasi** (lanjutan `evaluatePromo`). Sudah ada modal: `PromoUsage`.
+- **B. Loyalty Point** — saldo point + buku besar (earn cashback, redeem ke voucher/undian/
+  barang). Pola mirip `Wallet`/`WalletTransaction`.
+- **C. Membership Tier** — status turunan dari *earned spending*/jumlah transaksi (top-up
+  TIDAK dihitung = unearned). Tier: Silver(baru) → Gold(rutin) → Platinum(loyal) → Diamond(VIP).
+  Tier mengatur besar benefit (voucher bulanan, multiplier cashback, voucher khusus tier).
+
+**Pemicu (menerbitkan ke primitive di atas):**
+- Birthday / Anniversary / Long-Time-No-See → cron harian cek tanggal → terbitkan voucher
+  (`Customer.birthDate` & `createdAt` sudah ada).
+- Referral → voucher saat yang dirujuk daftar/transaksi pertama (butuh model Referral).
+- Top Up bonus & Cashback → hook saat transaksi sukses → tambah saldo/point.
+- Tier benefits → voucher bulanan + multiplier cashback + voucher khusus tier.
+- **Happy Hour** → jalur berbeda: pricing dinamis harga mesin per hari/jam (bukan voucher).
+
+### Urutan bangun
+1. **Refactor Promo** (in progress) — `evaluatePromo` sumber kebenaran tunggal; pakai bersama
+   `/promos/validate` + order flow; tegakkan minTransaction/maxUsagePerCustomer/applicable
+   services+outlets; pemakaian dicatat **saat PAID** (helper `commitUsage` di `settlePaid`
+   gateway + wallet-pay); kolom `Order.promoId`; diskon service-specific dihitung dari subtotal
+   item yang cocok; `UpdatePromoDto` penuh.
+2. **Fase A — Voucher engine** (+ unifikasi pakai `evaluatePromo`). Membuka ~6 program.
+3. **Fase B — Loyalty Point** (ledger + earn cashback + redeem).
+4. **Fase C — Membership Tier** (earned spending → tier → benefit).
+5. **Fase D — Pemicu otomatis** (Birthday, Anniversary, LTNS, Referral via cron/hook).
+6. **Fase E — Happy Hour** (dynamic machine pricing, independen).

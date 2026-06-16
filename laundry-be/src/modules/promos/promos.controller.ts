@@ -1,7 +1,25 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  Query,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
 import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { IsString, IsNumber } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsArray,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { PromosService } from './promos.service';
 import { CreatePromoDto, UpdatePromoDto } from './dto/promo.dto';
@@ -10,18 +28,47 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
 
+class ValidatePromoItemDto {
+  @ApiProperty({ required: false, description: 'ID layanan item' })
+  @IsString()
+  @IsOptional()
+  serviceId?: string;
+
+  @ApiProperty({ description: 'Subtotal item' })
+  @IsNumber()
+  subtotal: number;
+}
+
 class ValidatePromoDto {
   @ApiProperty()
   @IsString()
   code: string;
 
-  @ApiProperty()
-  @IsString()
-  customerId: string;
+  @ApiProperty({
+    required: false,
+    description: 'Item pesanan (untuk promo terbatas layanan). Lebih akurat.',
+    type: [ValidatePromoItemDto],
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ValidatePromoItemDto)
+  @IsOptional()
+  items?: ValidatePromoItemDto[];
 
-  @ApiProperty()
+  @ApiProperty({ required: false, description: 'Fallback bila items tidak dikirim' })
   @IsNumber()
-  orderAmount: number;
+  @IsOptional()
+  orderAmount?: number;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  outletId?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  deliveryFee?: number;
 }
 
 @ApiTags('Promos')
@@ -71,7 +118,12 @@ export class PromosController {
 
   @Post('validate')
   @ApiOperation({ summary: 'Validate promo code' })
-  async validate(@Body() dto: ValidatePromoDto) {
-    return this.promosService.validatePromo(dto.code, dto.customerId, dto.orderAmount);
+  async validate(@Body() dto: ValidatePromoDto, @Request() req: any) {
+    return this.promosService.validatePromo(req.user?.userId, dto.code, {
+      items: dto.items,
+      orderAmount: dto.orderAmount,
+      outletId: dto.outletId,
+      deliveryFee: dto.deliveryFee,
+    });
   }
 }

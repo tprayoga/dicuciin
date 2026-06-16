@@ -97,6 +97,11 @@ export class UpdatePromoDto {
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
+  code?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
   name?: string;
 
   @ApiProperty({ required: false })
@@ -108,6 +113,22 @@ export class UpdatePromoDto {
   @IsString()
   @IsOptional()
   bannerUrl?: string;
+
+  @ApiProperty({ required: false, enum: PromoType })
+  @IsEnum(PromoType)
+  @IsOptional()
+  promoType?: PromoType;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  value?: number;
+
+  @ApiProperty({ required: false })
+  @IsDateString()
+  @IsOptional()
+  startDate?: string;
 
   @ApiProperty({ required: false })
   @IsDateString()
@@ -123,4 +144,10 @@ export class UpdatePromoDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiProperty({ required: false, type: CreatePromoRuleDto })
+  @ValidateNested()
+  @Type(() => CreatePromoRuleDto)
+  @IsOptional()
+  rule?: CreatePromoRuleDto;
 }

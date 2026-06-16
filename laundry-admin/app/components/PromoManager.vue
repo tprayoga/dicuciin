@@ -148,9 +148,13 @@ async function save() {
   try {
     if (editTarget.value) {
       await api.patch(`/promos/${editTarget.value.id}`, {
+        code: form.code,
         name: form.name,
         description: form.description || undefined,
         bannerUrl: form.bannerUrl || undefined,
+        promoType: form.promoType,
+        value: Number(form.value),
+        startDate: new Date(form.startDate).toISOString(),
         endDate: new Date(form.endDate).toISOString(),
         quota: form.quota,
         isActive: form.isActive,
@@ -210,7 +214,7 @@ onMounted(load)
     <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       <div v-for="promo in filteredPromos" :key="promo.id" class="dc-page-card overflow-hidden">
         <div
-          class="h-[150px] border-b border-[#d7e0ee] flex items-center justify-center text-[#0f6ee9] font-semibold bg-gradient-to-r from-[#dce9f8] to-[#f3f7ff] bg-cover bg-center"
+          class="h-[150px] border-b border-[#d7e0ee] flex items-center justify-center text-[#0360da] font-semibold bg-gradient-to-r from-[#dce9f8] to-[#f3f7ff] bg-cover bg-center"
           :style="promo.bannerUrl ? { backgroundImage: `url(${promo.bannerUrl})` } : undefined"
         >
           <span v-if="!promo.bannerUrl">Banner Promo</span>
@@ -218,7 +222,7 @@ onMounted(load)
         <div class="p-4">
           <h3 class="text-2xl font-semibold text-[#111d35]">{{ promo.name }}</h3>
           <p class="text-sm text-[#6f809f] mt-1">{{ promo.description || 'Deskripsi singkat promo' }}</p>
-          <p class="text-sm text-[#0f6ee9] mt-2">{{ promoPeriod(promo) }}</p>
+          <p class="text-sm text-[#0360da] mt-2">{{ promoPeriod(promo) }}</p>
 
           <div class="mt-4 flex items-center justify-between">
             <span class="dc-pill-success" :class="!promo.isActive ? '!bg-[#f2f4f8] !text-[#6f809f]' : ''">{{ promo.isActive ? 'Aktif' : 'Nonaktif' }}</span>
@@ -255,16 +259,16 @@ onMounted(load)
 
           <div class="grid md:grid-cols-2 gap-4">
             <UFormField label="Kategori Promo">
-              <USelect v-model="form.promoType" :items="promoTypeItems" class="w-full" :disabled="!!editTarget" />
+              <USelect v-model="form.promoType" :items="promoTypeItems" class="w-full" />
             </UFormField>
             <UFormField label="Kode Promo">
-              <UInput v-model="form.code" placeholder="Buat kode promo" class="w-full" required :disabled="!!editTarget" />
+              <UInput v-model="form.code" placeholder="Buat kode promo" class="w-full" required />
             </UFormField>
           </div>
 
           <div class="grid md:grid-cols-2 gap-4">
             <UFormField label="Nilai Promo">
-              <UInput v-model.number="form.value" type="number" min="0" placeholder="Masukkan nominal" class="w-full" :disabled="!!editTarget || form.promoType === 'FREE_DELIVERY'">
+              <UInput v-model.number="form.value" type="number" min="0" placeholder="Masukkan nominal" class="w-full" :disabled="form.promoType === 'FREE_DELIVERY'">
                 <template v-if="valueSuffix" #trailing>
                   <span class="text-xs text-[#6f809f]">{{ valueSuffix }}</span>
                 </template>
@@ -278,7 +282,7 @@ onMounted(load)
 
           <div class="grid md:grid-cols-2 gap-4">
             <UFormField label="Periode Mulai">
-              <UInput v-model="form.startDate" type="date" class="w-full" required :disabled="!!editTarget" />
+              <UInput v-model="form.startDate" type="date" class="w-full" required />
             </UFormField>
             <UFormField label="Periode Selesai">
               <UInput v-model="form.endDate" type="date" class="w-full" required />

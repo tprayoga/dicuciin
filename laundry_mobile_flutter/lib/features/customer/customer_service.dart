@@ -244,17 +244,26 @@ class CustomerService {
 
   Future<PromoValidation> validatePromo({
     required String accessToken,
-    required String customerId,
     required String code,
     required int orderAmount,
+    String? serviceId,
+    String? outletId,
   }) async {
+    // Kirim item agar promo terbatas layanan dihitung akurat (preview = hasil).
+    // customerId diturunkan server dari token (tak dikirim dari klien).
     final payload = await _apiClient.post(
       '/promos/validate',
       headers: {'Authorization': 'Bearer $accessToken'},
       body: jsonEncode({
         'code': code,
-        'customerId': customerId,
         'orderAmount': orderAmount,
+        'items': [
+          {
+            if (serviceId != null && serviceId.isNotEmpty) 'serviceId': serviceId,
+            'subtotal': orderAmount,
+          },
+        ],
+        if (outletId != null && outletId.isNotEmpty) 'outletId': outletId,
       }),
     );
     return PromoValidation.fromJson(payload as Map<String, dynamic>);

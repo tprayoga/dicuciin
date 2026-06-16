@@ -4,10 +4,14 @@ import { CreateOrderDto, UpdateOrderStatusDto, CancelOrderDto } from './dto/orde
 import { OrderStatus, UserRole, Prisma } from '@prisma/client';
 import { generateDailySequence } from '../../common/utils/sequence.util';
 import { toNum } from '../../common/utils/money.util';
+import { PromosService } from '../promos/promos.service';
 
 @Injectable()
 export class OrdersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private promosService: PromosService,
+  ) {}
 
   /**
    * Margin laba bersih default (80% dari revenue).
@@ -87,50 +91,38 @@ export class OrdersService {
       });
     }
 
-    let discountAmount = new Prisma.Decimal(0);
-    let promoId: string | null = null;
-    let promoQuota: number | null = null;
-
-    if (promoCode) {
-      const promo = await this.prisma.promo.findUnique({
-        where: { code: promoCode },
-        include: { rules: true },
-      });
-
-      if (promo && promo.isActive) {
-        const now = new Date();
-        if (now >= promo.startDate && now <= promo.endDate) {
-          if (!promo.quota || promo.usedCount < promo.quota) {
-            if (promo.promoType === 'PERCENTAGE') {
-              discountAmount = subtotal.mul(promo.value).div(100);
-            } else if (promo.promoType === 'FIXED_AMOUNT') {
-              discountAmount = new Prisma.Decimal(promo.value);
-            }
-
-            const rule = promo.rules[0];
-            if (rule?.maxDiscount && discountAmount.gt(rule.maxDiscount)) {
-              discountAmount = new Prisma.Decimal(rule.maxDiscount);
-            }
-
-            promoId = promo.id;
-            promoQuota = promo.quota;
-          }
-        }
-      }
-    }
-
-    const totalAmount = subtotal.minus(discountAmount).plus(deliveryFee);
-
-    // Buat order + naikkan kuota promo dalam SATU transaksi. Kuota dinaikkan
-    // secara bersyarat (updateMany guard usedCount < quota) → race-safe: dua order
-    // bersamaan tak bisa menembus kuota. Bila kuota habis di titik ini, transaksi
-    // di-rollback (order batal) dan customer dapat error.
+    // Validasi + kalkulasi promo lewat sumber kebenaran TUNGGAL (PromosService).
+    // Promo invalid → error jelas (bukan diam-diam tanpa diskon). Pemakaian promo
+    // (PromoUsage + usedCount + cashback) BARU dicatat saat order dibayar
+    // (commitUsage di jalur pembayaran), bukan di sini.
     const order = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.order.create({
+      let discountAmount = new Prisma.Decimal(0);
+      let promoId: string | null = null;
+
+      if (promoCode) {
+        const result = await this.promosService.evaluatePromo({
+          code: promoCode,
+          customerId,
+          items: orderItems.map((it) => ({
+            serviceId: it.serviceId,
+            subtotal: it.subtotal,
+          })),
+          outletId,
+          deliveryFee,
+          tx,
+        });
+        discountAmount = result.discount;
+        promoId = result.promo.id;
+      }
+
+      const totalAmount = subtotal.minus(discountAmount).plus(deliveryFee);
+
+      return tx.order.create({
         data: {
           orderNumber,
           customerId,
           outletId,
+          promoId,
           ...orderData,
           subtotal,
           discountAmount,
@@ -147,17 +139,6 @@ export class OrdersService {
               createdBy,
             },
           },
-          ...(promoId && customerId
-            ? {
-                promoUsages: {
-                  create: {
-                    promoId,
-                    customerId,
-                    discount: discountAmount,
-                  },
-                },
-              }
-            : {}),
         },
         include: {
           items: true,
@@ -165,21 +146,6 @@ export class OrdersService {
           customer: true,
         },
       });
-
-      if (promoId) {
-        const bumped = await tx.promo.updateMany({
-          where:
-            promoQuota != null
-              ? { id: promoId, usedCount: { lt: promoQuota } }
-              : { id: promoId },
-          data: { usedCount: { increment: 1 } },
-        });
-        if (bumped.count === 0) {
-          throw new BadRequestException('Kuota promo sudah habis');
-        }
-      }
-
-      return created;
     });
 
     return order;

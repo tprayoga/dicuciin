@@ -274,6 +274,7 @@ model Order {
   outletId          String
   kioskId           String?
   staffUserId       String?
+  promoId           String?
   sourcePlatform    String
   orderDate         DateTime    @default(now())
   status            OrderStatus @default(DRAFT)
@@ -294,6 +295,7 @@ model Order {
   outlet             Outlet              @relation(fields: [outletId], references: [id])
   kiosk              Kiosk?              @relation(fields: [kioskId], references: [id], onDelete: SetNull)
   staff              User?               @relation("StaffOrders", fields: [staffUserId], references: [id], onDelete: SetNull)
+  promo              Promo?              @relation(fields: [promoId], references: [id], onDelete: SetNull)
   items              OrderItem[]
   statusLogs         OrderStatusLog[]
   payments           Payment[]
@@ -307,6 +309,7 @@ model Order {
   @@index([staffUserId])
   @@index([status])
   @@index([orderDate])
+  @@index([promoId])
   @@map("orders")
 }
 
@@ -418,6 +421,7 @@ model Promo {
   rules   PromoRule[]
   usages  PromoUsage[]
   banners AppBanner[]
+  orders  Order[]
 
   @@index([code])
   @@index([startDate, endDate])

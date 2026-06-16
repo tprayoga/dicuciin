@@ -21,10 +21,14 @@ import {
   UserRole,
   Prisma,
 } from '@prisma/client';
+import { PromosService } from '../promos/promos.service';
 
 @Injectable()
 export class WalletsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private promosService: PromosService,
+  ) {}
 
   /**
    * Akun customer lama dapat belum memiliki row wallet. Buat wallet saldo nol
@@ -274,6 +278,9 @@ export class WalletsService {
             createdBy: customerId,
           },
         });
+
+        // Pemakaian promo dicatat saat order benar-benar dibayar.
+        await this.promosService.commitUsage(tx, orderId);
 
         return {
           wallet: refreshed,

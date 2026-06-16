@@ -349,16 +349,18 @@ class CustomerController extends ChangeNotifier {
     required String accessToken,
     required String code,
     required int orderAmount,
+    String? serviceId,
+    String? outletId,
   }) {
-    final customerId = user.customer?.id;
-    if (customerId == null) {
+    if (user.customer?.id == null) {
       throw StateError('Akun belum terhubung ke profil customer.');
     }
     return _customerService.validatePromo(
       accessToken: accessToken,
-      customerId: customerId,
       code: code,
       orderAmount: orderAmount,
+      serviceId: serviceId,
+      outletId: outletId,
     );
   }
 

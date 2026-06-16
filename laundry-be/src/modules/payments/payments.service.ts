@@ -14,12 +14,14 @@ import {
   PaymentGateway,
 } from './gateway/payment-gateway.interface';
 import { CreateGatewayPaymentDto, PaymentWebhookDto } from './dto/payment.dto';
+import { PromosService } from '../promos/promos.service';
 
 @Injectable()
 export class PaymentsService {
   constructor(
     private prisma: PrismaService,
     @Inject(PAYMENT_GATEWAY) private gateway: PaymentGateway,
+    private promosService: PromosService,
   ) {}
 
   /** Buat tagihan QRIS/VA untuk sebuah order via gateway (status awal PENDING). */
@@ -34,6 +36,30 @@ export class PaymentsService {
     if (order.customer && order.customer.userId !== userId) {
       throw new UnauthorizedException('Order bukan milik Anda');
     }
+
+    return this.issueChargeForOrder(order, dto);
+  }
+
+  /**
+   * Buat tagihan QRIS/VA untuk order kiosk (tamu, tanpa customer). Dipakai oleh
+   * KiosksService setelah memvalidasi order milik kiosk yang ber-enroll.
+   */
+  async createKioskGatewayPayment(orderId: string, dto: CreateGatewayPaymentDto) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.sourcePlatform !== 'KIOSK') {
+      throw new UnauthorizedException('Order ini bukan dari kiosk');
+    }
+    return this.issueChargeForOrder(order, dto);
+  }
+
+  /** Inti pembuatan tagihan gateway (idempoten) untuk sebuah order. */
+  private async issueChargeForOrder(
+    order: { id: string; orderNumber: string; status: OrderStatus; totalAmount: Prisma.Decimal },
+    dto: CreateGatewayPaymentDto,
+  ) {
     if (order.status === OrderStatus.PAID) {
       throw new ConflictException('Order sudah dibayar');
     }
@@ -158,6 +184,9 @@ export class PaymentsService {
             createdBy: order.customerId ?? undefined,
           },
         });
+
+        // Pemakaian promo dicatat saat order benar-benar dibayar.
+        await this.promosService.commitUsage(tx, order.id);
       }
     });
   }

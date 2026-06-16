@@ -497,6 +497,8 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
             accessToken: token,
             code: code,
             orderAmount: widget.data.price,
+            serviceId: widget.data.serviceId,
+            outletId: widget.data.outletId,
           );
       if (!mounted) return;
       if (!result.isValid || result.discount <= 0) {

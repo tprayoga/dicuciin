@@ -9,6 +9,7 @@ import {
 import { Prisma, OrderStatus, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { WalletsService } from './wallets.service';
+import { PromosService } from '../promos/promos.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 jest.mock('bcrypt');
@@ -48,7 +49,11 @@ describe('WalletsService', () => {
       $transaction: jest.fn((cb: any) => cb(tx)),
     };
     const moduleRef = await Test.createTestingModule({
-      providers: [WalletsService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        WalletsService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: PromosService, useValue: { commitUsage: jest.fn() } },
+      ],
     }).compile();
     service = moduleRef.get(WalletsService);
   });
