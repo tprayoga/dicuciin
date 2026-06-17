@@ -41,6 +41,7 @@ class KioskController extends ChangeNotifier {
   PricingQuote? quote;
   CreatedOrder? createdOrder;
   KioskPayment? payment;
+  String? completedPaymentMethod;
   Timer? _heartbeatTimer;
   Timer? _paymentTimer;
 
@@ -169,6 +170,7 @@ class KioskController extends ChangeNotifier {
     quote = null;
     createdOrder = null;
     payment = null;
+    completedPaymentMethod = null;
     error = null;
     stage = KioskStage.checkout;
     notifyListeners();
@@ -237,6 +239,7 @@ class KioskController extends ChangeNotifier {
   /// Buat order tamu untuk mesin terpilih lalu buka tagihan QRIS/VA.
   Future<void> submitCheckout({
     String? promoCode,
+    String? customerLookup,
     String method = 'QRIS',
     String? bank,
   }) async {
@@ -259,6 +262,8 @@ class KioskController extends ChangeNotifier {
                   ],
                   if (promoCode != null && promoCode.trim().isNotEmpty)
                     'promoCode': promoCode.trim(),
+                  if (customerLookup != null && customerLookup.trim().isNotEmpty)
+                    'customerLookup': customerLookup.trim(),
                   'notes':
                       'Mesin ${selectedMachine!.name} (${selectedMachine!.deviceCode})',
                 },
@@ -283,6 +288,53 @@ class KioskController extends ChangeNotifier {
       payment = KioskPayment.fromJson(paymentPayload);
       stage = KioskStage.payment;
       _startPaymentPolling();
+    });
+  }
+
+  Future<void> submitWalletCheckout({
+    required String customerLookup,
+    String? voucherCode,
+  }) async {
+    if (selectedService == null ||
+        selectedMachine == null ||
+        terminal == null) {
+      return;
+    }
+    if (customerLookup.trim().isEmpty) {
+      error = 'No HP atau kode member wajib diisi untuk pembayaran wallet.';
+      notifyListeners();
+      return;
+    }
+    await _run(() async {
+      final payload =
+          await _api.post(
+                '/kiosks/device/checkout',
+                token: deviceToken,
+                body: {
+                  'customerLookup': customerLookup.trim(),
+                  'items': [
+                    {
+                      'serviceId': selectedService!.serviceId,
+                      'quantity': 1,
+                      'machineType': selectedMachine!.isWasher
+                          ? 'WASHER'
+                          : 'DRYER',
+                      'notes':
+                          'Mesin ${selectedMachine!.name} (${selectedMachine!.deviceCode})',
+                    },
+                  ],
+                  if (voucherCode != null && voucherCode.trim().isNotEmpty)
+                    'voucherCode': voucherCode.trim(),
+                },
+              )
+              as Map<String, dynamic>;
+      createdOrder = CreatedOrder.fromCheckout(payload);
+      payment = null;
+      completedPaymentMethod = 'Wallet';
+      appliedPromo = voucherCode?.trim().isNotEmpty == true
+          ? voucherCode!.trim()
+          : null;
+      stage = KioskStage.success;
     });
   }
 
@@ -343,6 +395,7 @@ class KioskController extends ChangeNotifier {
     createdOrder = null;
     quote = null;
     payment = null;
+    completedPaymentMethod = null;
     error = null;
   }
 

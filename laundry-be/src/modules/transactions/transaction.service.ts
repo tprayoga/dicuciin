@@ -126,6 +126,7 @@ export class TransactionService {
       items: orderItems.map((it) => ({
         serviceId: it.serviceId,
         machineType: it.machineType,
+        quantity: it.quantity,
         subtotal: it.subtotal,
       })),
       voucherCode: input.voucherCode,
@@ -152,6 +153,7 @@ export class TransactionService {
       items: orderItems.map((it) => ({
         serviceId: it.serviceId,
         machineType: it.machineType,
+        quantity: it.quantity,
         subtotal: it.subtotal,
       })),
       voucherCode: input.voucherCode,
@@ -194,7 +196,7 @@ export class TransactionService {
             deliveryFee,
             totalAmount,
             status: OrderStatus.DRAFT,
-            items: { create: orderItems },
+            items: { create: orderItems.map(({ machineType, ...item }) => item) },
             statusLogs: {
               create: { status: OrderStatus.DRAFT, notes: 'Order created', createdBy: input.staffUserId },
             },
@@ -241,6 +243,28 @@ export class TransactionService {
         });
 
         // --- Settle loyalty (semua dalam transaksi yang sama) ---
+        if (pricing.happyHourRules?.length) {
+          await this.campaignService.consumeHappyHourQuota(
+            tx,
+            pricing.happyHourRules.map((rule) => ({
+              ruleId: rule.ruleId,
+              quantity: rule.quantity,
+            })),
+          );
+        }
+
+        if (pricing.b2bPricingRules?.length) {
+          await (tx as any).b2BPricingRuleUsage.createMany({
+            data: pricing.b2bPricingRules.map((rule) => ({
+              orderId: order.id,
+              ruleId: rule.ruleId,
+              partnerId: input.partnerId,
+              discountAmount: new Prisma.Decimal(rule.discountAmount),
+            })),
+            skipDuplicates: true,
+          });
+        }
+
         if (pricing.voucherId) {
           await this.voucherService.redeem(tx, {
             userVoucherId: pricing.voucherId,

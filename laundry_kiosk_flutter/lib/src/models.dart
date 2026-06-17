@@ -225,6 +225,16 @@ class CreatedOrder {
     total: _money(json['totalAmount']),
     status: (json['status'] as String?) ?? '-',
   );
+
+  factory CreatedOrder.fromCheckout(Map<String, dynamic> json) {
+    final breakdown = json['breakdown'] as Map<String, dynamic>? ?? const {};
+    return CreatedOrder(
+      id: (json['orderId'] as String?) ?? '',
+      orderNumber: (json['orderNumber'] as String?) ?? '-',
+      total: _money(breakdown['finalAmount']),
+      status: (json['status'] as String?) ?? '-',
+    );
+  }
 }
 
 class PricingQuote {

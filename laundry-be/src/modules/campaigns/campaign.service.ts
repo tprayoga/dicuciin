@@ -320,6 +320,77 @@ export class CampaignService {
     });
   }
 
+  async listReferrals(filters: { status?: ReferralStatus; search?: string } = {}) {
+    const referrals = await this.prisma.referral.findMany({
+      where: filters.status ? { status: filters.status } : {},
+      include: { campaign: true },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+
+    const customerIds = Array.from(
+      new Set(
+        referrals
+          .flatMap((referral) => [
+            referral.referrerCustomerId,
+            referral.refereeCustomerId,
+          ])
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+    const customers = await this.prisma.customer.findMany({
+      where: { id: { in: customerIds } },
+      include: { user: true },
+    });
+    const customerMap = new Map(customers.map((customer) => [customer.id, customer]));
+    const rows = referrals.map((referral) => {
+      const referrer = customerMap.get(referral.referrerCustomerId);
+      const referee = referral.refereeCustomerId
+        ? customerMap.get(referral.refereeCustomerId)
+        : null;
+      return {
+        id: referral.id,
+        referralCode: referral.referralCode,
+        status: referral.status,
+        campaignId: referral.campaignId,
+        campaignName: referral.campaign?.name ?? null,
+        referrer: referrer
+          ? {
+              id: referrer.id,
+              memberCode: referrer.memberCode,
+              name: referrer.user.name,
+              phone: referrer.user.phone,
+            }
+          : null,
+        referee: referee
+          ? {
+              id: referee.id,
+              memberCode: referee.memberCode,
+              name: referee.user.name,
+              phone: referee.user.phone,
+            }
+          : null,
+        qualifiedAt: referral.qualifiedAt,
+        rewardedAt: referral.rewardedAt,
+        createdAt: referral.createdAt,
+      };
+    });
+
+    const keyword = filters.search?.trim().toLowerCase();
+    if (!keyword) return rows;
+    return rows.filter((row) =>
+      [
+        row.referralCode,
+        row.status,
+        row.campaignName,
+        row.referrer?.name,
+        row.referrer?.phone,
+        row.referee?.name,
+        row.referee?.phone,
+      ].some((value) => String(value ?? '').toLowerCase().includes(keyword)),
+    );
+  }
+
   /**
    * Dipanggil saat referee melakukan transaksi PERTAMA yang sukses (dalam
    * transaksi checkout). Reward TIDAK diberikan hanya karena daftar. Idempoten
@@ -559,7 +630,12 @@ export class CampaignService {
    * Cari rule happy hour aktif untuk konteks tertentu (prioritas tertinggi).
    * `at` default now. Cocok bila hari & jam masuk rentang.
    */
-  async findActiveHappyHourRule(ctx: { outletId?: string; serviceId?: string; at?: Date }) {
+  async findActiveHappyHourRule(ctx: {
+    outletId?: string;
+    serviceId?: string;
+    machineType?: string;
+    at?: Date;
+  }) {
     const at = ctx.at ?? new Date();
     const day = at.getDay() === 0 ? 7 : at.getDay(); // 1=Senin..7=Minggu
     const hhmm = at.toTimeString().slice(0, 5);
@@ -568,7 +644,10 @@ export class CampaignService {
       where: {
         isActive: true,
         OR: [{ outletId: ctx.outletId ?? undefined }, { outletId: null }],
-        AND: [{ OR: [{ serviceId: ctx.serviceId ?? undefined }, { serviceId: null }] }],
+        AND: [
+          { OR: [{ serviceId: ctx.serviceId ?? undefined }, { serviceId: null }] },
+          { OR: [{ machineType: ctx.machineType ?? undefined }, { machineType: null }] },
+        ],
       },
       orderBy: { priority: 'desc' },
     });
@@ -580,8 +659,27 @@ export class CampaignService {
         const timeOk = hhmm >= r.startTime && hhmm <= r.endTime;
         const dateOk =
           (!r.startDate || at >= r.startDate) && (!r.endDate || at <= r.endDate);
-        return dayOk && timeOk && dateOk;
+        const quotaOk = r.quota == null || r.usedQuota < r.quota;
+        return dayOk && timeOk && dateOk && quotaOk;
       }) ?? null
     );
+  }
+
+  async consumeHappyHourQuota(
+    tx: PrismaTx,
+    usages: { ruleId: string; quantity?: number }[],
+  ) {
+    for (const usage of usages) {
+      const quantity = usage.quantity ?? 1;
+      const updated = await tx.$executeRaw`
+        UPDATE "happy_hour_rules"
+        SET "usedQuota" = "usedQuota" + ${quantity}
+        WHERE "id" = ${usage.ruleId}
+          AND ("quota" IS NULL OR "usedQuota" + ${quantity} <= "quota")
+      `;
+      if (Number(updated) === 0) {
+        throw new ConflictException('Quota happy hour sudah habis');
+      }
+    }
   }
 }

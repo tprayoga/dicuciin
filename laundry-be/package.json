@@ -22,6 +22,9 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "seed:promo-loyalty": "ts-node scripts/seed-promo-loyalty-smoke.ts",
+    "test:smoke:promo-loyalty": "ts-node scripts/smoke-promo-loyalty.ts",
+    "backfill:b2b-pricing-usages": "ts-node scripts/backfill-b2b-pricing-usages.ts",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down"
   },

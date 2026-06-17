@@ -16,7 +16,12 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { IsString, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { KiosksService } from './kiosks.service';
-import { CreateKioskDto, EnrollKioskDto, UpdateKioskDto } from './dto/kiosk.dto';
+import {
+  CreateKioskDto,
+  EnrollKioskDto,
+  KioskCheckoutDto,
+  UpdateKioskDto,
+} from './dto/kiosk.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -103,6 +108,19 @@ export class KiosksController {
     @Headers('authorization') authorization?: string,
   ) {
     return this.kiosksService.createDeviceOrder(
+      this.deviceToken(authorization),
+      dto,
+    );
+  }
+
+  @Public()
+  @Post('device/checkout')
+  @ApiOperation({ summary: 'Checkout wallet kiosk via Promotion/Loyalty engine' })
+  async checkoutDeviceOrder(
+    @Body() dto: KioskCheckoutDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.kiosksService.checkoutDeviceOrder(
       this.deviceToken(authorization),
       dto,
     );

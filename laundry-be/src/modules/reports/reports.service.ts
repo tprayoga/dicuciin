@@ -163,6 +163,7 @@ export class ReportsService {
       voucherByStatus,
       campaignLogs,
       walletLedgers,
+      b2bPricingRuleAgg,
     ] = await Promise.all([
       this.prisma.userVoucher.count({ where: { issuedAt: dateWhere } }),
       this.prisma.voucherRedemption.count({
@@ -210,7 +211,24 @@ export class ReportsService {
         take: 100,
         include: { wallet: { include: { customer: { include: { user: true } }, partner: true } }, order: true },
       }),
+      (this.prisma as any).b2BPricingRuleUsage.groupBy({
+        by: ['ruleId'],
+        where: { createdAt: dateWhere },
+        _count: { _all: true },
+        _sum: { discountAmount: true },
+      }),
     ]);
+
+    const b2bPricingRules =
+      b2bPricingRuleAgg.length > 0
+        ? await (this.prisma as any).b2BPricingRule.findMany({
+            where: { id: { in: b2bPricingRuleAgg.map((item: any) => item.ruleId) } },
+            include: { partner: true, outlet: true, service: true },
+          })
+        : [];
+    const b2bRuleMap = new Map<string, any>(
+      b2bPricingRules.map((rule: any) => [rule.id, rule]),
+    );
 
     return {
       month: month ?? start.toISOString().slice(0, 7),
@@ -229,6 +247,20 @@ export class ReportsService {
         status: item.status,
         count: item._count,
       })),
+      b2bPricingImpact: b2bPricingRuleAgg.map((item: any) => {
+        const rule = b2bRuleMap.get(item.ruleId);
+        return {
+          ruleId: item.ruleId,
+          ruleName: rule?.name ?? '-',
+          partnerName: rule?.partner?.companyName ?? null,
+          tier: rule?.tier ?? null,
+          outletName: rule?.outlet?.name ?? null,
+          serviceName: rule?.service?.name ?? null,
+          machineType: rule?.machineType ?? null,
+          usageCount: item._count._all,
+          discountAmount: toNum(item._sum.discountAmount),
+        };
+      }),
       campaignLogs,
       walletLedgers,
     };

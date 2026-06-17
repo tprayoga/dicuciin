@@ -8,12 +8,13 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { CreateKioskDto, UpdateKioskDto } from './dto/kiosk.dto';
+import { CreateKioskDto, KioskCheckoutDto, UpdateKioskDto } from './dto/kiosk.dto';
 import { OrdersService } from '../orders/orders.service';
 import { CreateOrderDto } from '../orders/dto/order.dto';
 import { BookingsService } from '../bookings/bookings.service';
 import { PaymentsService } from '../payments/payments.service';
 import { CreateGatewayPaymentDto } from '../payments/dto/payment.dto';
+import { TransactionService } from '../transactions/transaction.service';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -23,6 +24,7 @@ export class KiosksService {
     private ordersService: OrdersService,
     private bookingsService: BookingsService,
     private paymentsService: PaymentsService,
+    private transactionService: TransactionService,
     private config: ConfigService,
   ) {}
 
@@ -298,14 +300,55 @@ export class KiosksService {
     if (!schedule.isOpen) {
       throw new ForbiddenException('Kiosk berada di luar jadwal operasional');
     }
+    const { customerLookup, ...orderDto } = dto;
+    const customerId = dto.customerId ?? await this.resolveCustomerLookup(customerLookup);
     return this.ordersService.create({
-      ...dto,
+      ...orderDto,
+      customerId,
       outletId: kiosk.outletId,
       kioskId: kiosk.id,
       staffUserId: undefined,
       sourcePlatform: 'KIOSK',
       notes: dto.notes || `Order dibuat dari ${kiosk.kioskCode}`,
     });
+  }
+
+  async checkoutDeviceOrder(deviceToken: string, dto: KioskCheckoutDto) {
+    const kiosk = await this.authenticateDevice(deviceToken);
+    const schedule = this.scheduleState(kiosk);
+    if (!schedule.isOpen) {
+      throw new ForbiddenException('Kiosk berada di luar jadwal operasional');
+    }
+    const customerId = dto.customerId ?? await this.resolveCustomerLookup(dto.customerLookup);
+    return this.transactionService.checkout({
+      customerId,
+      partnerId: dto.partnerId,
+      outletId: kiosk.outletId,
+      kioskId: kiosk.id,
+      sourcePlatform: 'KIOSK',
+      items: dto.items,
+      voucherCode: dto.voucherCode,
+      promoCode: dto.promoCode,
+    });
+  }
+
+  private async resolveCustomerLookup(customerLookup?: string) {
+    const keyword = customerLookup?.trim();
+    if (!keyword) return undefined;
+    const customer = await this.prisma.customer.findFirst({
+      where: {
+        OR: [
+          { memberCode: keyword },
+          { user: { phone: keyword } },
+          { user: { email: keyword } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!customer) {
+      throw new NotFoundException('Customer kiosk tidak ditemukan');
+    }
+    return customer.id;
   }
 
   /** Daftar mesin (cuci/pengering) di outlet kiosk + status ketersediaan. */

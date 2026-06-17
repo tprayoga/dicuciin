@@ -26,7 +26,13 @@ const statusFilter = ref('ALL')
 const month = ref(new Date().toISOString().slice(0, 7))
 const errorMessage = ref('')
 
-const dashboard = ref<any>({ dashboard: {}, voucherByStatus: [], campaignLogs: [], walletLedgers: [] })
+const dashboard = ref<any>({
+  dashboard: {},
+  voucherByStatus: [],
+  campaignLogs: [],
+  walletLedgers: [],
+  b2bPricingImpact: [],
+})
 const templates = ref<any[]>([])
 const issuedVouchers = ref<any[]>([])
 const redemptions = ref<any[]>([])
@@ -184,6 +190,7 @@ const happyHourForm = reactive({
   adjustmentType: 'PERCENTAGE_OFF',
   value: 10,
   quota: 0,
+  allowVoucherStack: true,
   priority: 0,
   startDate: '',
   endDate: '',
@@ -582,7 +589,8 @@ function openHappyHour(item?: any) {
     endTime: item.endTime,
     adjustmentType: item.adjustmentType,
     value: item.value,
-    quota: 0,
+    quota: item.quota ?? 0,
+    allowVoucherStack: item.allowVoucherStack ?? true,
     priority: item.priority ?? 0,
     startDate: item.startDate?.slice(0, 10) || '',
     endDate: item.endDate?.slice(0, 10) || '',
@@ -598,6 +606,7 @@ function openHappyHour(item?: any) {
     adjustmentType: 'PERCENTAGE_OFF',
     value: 10,
     quota: 0,
+    allowVoucherStack: true,
     priority: 0,
     startDate: '',
     endDate: '',
@@ -619,6 +628,8 @@ async function saveHappyHour() {
     startDate: happyHourForm.startDate || undefined,
     endDate: happyHourForm.endDate || undefined,
     value: Number(happyHourForm.value),
+    quota: happyHourForm.quota ? Number(happyHourForm.quota) : undefined,
+    allowVoucherStack: happyHourForm.allowVoucherStack,
     priority: Number(happyHourForm.priority),
   }
   try {
@@ -933,18 +944,26 @@ onMounted(loadData)
             <thead class="bg-[#0349a8] text-white text-left"><tr><th class="p-2">Nama</th><th class="p-2">Outlet</th><th class="p-2">Machine/Service</th><th class="p-2">Hari</th><th class="p-2">Jam</th><th class="p-2">Discount</th><th class="p-2">Quota</th><th class="p-2">Status</th><th class="p-2">Aksi</th></tr></thead>
             <tbody>
               <tr v-if="filteredHappyHour.length === 0"><td colspan="9" class="p-4 text-center text-[#6f809f]">Belum ada happy hour.</td></tr>
-              <tr v-for="item in filteredHappyHour" :key="item.id" class="border-b border-[#e1e8f2]"><td class="p-2 font-semibold">{{ item.name }}</td><td class="p-2">{{ item.outlet?.name || 'Semua outlet' }}</td><td class="p-2">{{ item.service?.name || item.machineType || 'Semua mesin' }}</td><td class="p-2">{{ item.daysOfWeek }}</td><td class="p-2">{{ item.startTime }} - {{ item.endTime }}</td><td class="p-2">{{ item.adjustmentType }} {{ item.value }}</td><td class="p-2">TODO API</td><td class="p-2"><UBadge :color="badgeColor(item.isActive) as any" variant="soft" size="xs">{{ item.isActive ? 'ACTIVE' : 'INACTIVE' }}</UBadge></td><td class="p-2"><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="openHappyHour(item)">Edit</UButton></td></tr>
+              <tr v-for="item in filteredHappyHour" :key="item.id" class="border-b border-[#e1e8f2]"><td class="p-2 font-semibold">{{ item.name }}</td><td class="p-2">{{ item.outlet?.name || 'Semua outlet' }}</td><td class="p-2">{{ item.service?.name || item.machineType || 'Semua mesin' }}</td><td class="p-2">{{ item.daysOfWeek }}</td><td class="p-2">{{ item.startTime }} - {{ item.endTime }}</td><td class="p-2">{{ item.adjustmentType }} {{ item.value }}</td><td class="p-2">{{ item.quota ? `${item.usedQuota ?? 0}/${item.quota}` : 'Unlimited' }}</td><td class="p-2"><UBadge :color="badgeColor(item.isActive) as any" variant="soft" size="xs">{{ item.isActive ? 'ACTIVE' : 'INACTIVE' }}</UBadge></td><td class="p-2"><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="openHappyHour(item)">Edit</UButton></td></tr>
             </tbody>
           </table>
         </div>
       </section>
 
       <section v-if="activeTab === 'referral'" class="space-y-4">
-        <UAlert color="warning" variant="soft" title="Referral admin list belum tersedia" description="Backend saat ini sudah mendukung kode referral customer dan apply referral. Endpoint admin untuk daftar seluruh referral masih TODO di API client placeholder." />
         <div class="dc-page-card p-4 overflow-x-auto">
           <table class="w-full min-w-[700px] text-sm">
             <thead class="bg-[#0349a8] text-white text-left"><tr><th class="p-2">Kode</th><th class="p-2">Referrer</th><th class="p-2">Referee</th><th class="p-2">Status</th><th class="p-2">Rewarded At</th></tr></thead>
-            <tbody><tr v-if="referrals.length === 0"><td colspan="5" class="p-4 text-center text-[#6f809f]">Belum ada data referral dari API admin.</td></tr></tbody>
+            <tbody>
+              <tr v-if="referrals.length === 0"><td colspan="5" class="p-4 text-center text-[#6f809f]">Belum ada data referral.</td></tr>
+              <tr v-for="item in referrals" :key="item.id" class="border-b border-[#e1e8f2]">
+                <td class="p-2 font-semibold">{{ item.referralCode }}</td>
+                <td class="p-2">{{ item.referrer?.name || '-' }}<br><span class="text-xs text-[#6f809f]">{{ item.referrer?.phone || item.referrer?.memberCode || '-' }}</span></td>
+                <td class="p-2">{{ item.referee?.name || '-' }}<br><span class="text-xs text-[#6f809f]">{{ item.referee?.phone || item.referee?.memberCode || '-' }}</span></td>
+                <td class="p-2"><UBadge :color="badgeColor(item.status) as any" variant="soft" size="xs">{{ item.status }}</UBadge></td>
+                <td class="p-2">{{ formatDate(item.rewardedAt) }}</td>
+              </tr>
+            </tbody>
           </table>
         </div>
       </section>
@@ -957,6 +976,26 @@ onMounted(loadData)
             <tbody>
               <tr v-if="(dashboard.voucherByStatus || []).length === 0"><td colspan="2" class="p-4 text-center text-[#6f809f]">Belum ada data funnel.</td></tr>
               <tr v-for="item in dashboard.voucherByStatus" :key="item.status" class="border-b border-[#e1e8f2]"><td class="p-2">{{ item.status }}</td><td class="p-2">{{ item.count }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="dc-page-card p-4 overflow-x-auto">
+          <h3 class="text-lg font-semibold mb-3">B2B Pricing Impact</h3>
+          <table class="w-full min-w-[1000px] text-sm">
+            <thead class="bg-[#0349a8] text-white text-left">
+              <tr><th class="p-2">Rule</th><th class="p-2">Partner/Tier</th><th class="p-2">Outlet</th><th class="p-2">Service</th><th class="p-2">Machine</th><th class="p-2">Usage</th><th class="p-2">Discount Impact</th></tr>
+            </thead>
+            <tbody>
+              <tr v-if="(dashboard.b2bPricingImpact || []).length === 0"><td colspan="7" class="p-4 text-center text-[#6f809f]">Belum ada impact special pricing B2B.</td></tr>
+              <tr v-for="item in dashboard.b2bPricingImpact" :key="item.ruleId" class="border-b border-[#e1e8f2]">
+                <td class="p-2 font-semibold">{{ item.ruleName }}</td>
+                <td class="p-2">{{ item.partnerName || item.tier || '-' }}</td>
+                <td class="p-2">{{ item.outletName || 'Semua outlet' }}</td>
+                <td class="p-2">{{ item.serviceName || 'Semua layanan' }}</td>
+                <td class="p-2">{{ item.machineType || 'Semua mesin' }}</td>
+                <td class="p-2">{{ item.usageCount ?? 0 }}</td>
+                <td class="p-2">{{ formatMoney(item.discountAmount) }}</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -1090,7 +1129,8 @@ onMounted(loadData)
             <UFormField label="Start Time"><UInput v-model="happyHourForm.startTime" type="time" class="w-full" /></UFormField>
             <UFormField label="End Time"><UInput v-model="happyHourForm.endTime" type="time" class="w-full" /></UFormField>
             <UFormField label="Value"><UInput v-model.number="happyHourForm.value" type="number" min="0" class="w-full" /></UFormField>
-            <UFormField label="Quota"><UInput v-model.number="happyHourForm.quota" type="number" placeholder="TODO API" disabled class="w-full" /></UFormField>
+            <UFormField label="Quota"><UInput v-model.number="happyHourForm.quota" type="number" min="0" placeholder="0 = unlimited" class="w-full" /></UFormField>
+            <UFormField label="Stack Voucher"><USelect v-model="happyHourForm.allowVoucherStack" :items="[{ label: 'Boleh digabung', value: true }, { label: 'Tidak boleh', value: false }]" class="w-full" /></UFormField>
           </div>
           <div class="flex justify-end"><UButton type="submit" class="dc-btn-primary">Simpan</UButton></div>
         </form>

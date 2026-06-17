@@ -85,11 +85,15 @@ describe('PricingService.calculate', () => {
 
   it('transaksi dengan happy hour (20% off)', async () => {
     campaignService.findActiveHappyHourRule.mockResolvedValue({
+      id: 'hh-1',
       adjustmentType: 'PERCENTAGE_OFF',
       value: new Prisma.Decimal(20),
     });
     const res = await service.calculate({ segment: UserSegment.RETAIL, items });
     expect(res.happyHourDiscount).toBe(10000); // 20% dari 50000
+    expect(res.happyHourRules).toEqual([
+      { ruleId: 'hh-1', quantity: 1, discountAmount: 10000 },
+    ]);
     expect(res.finalAmount).toBe(40000);
   });
 
@@ -124,6 +128,7 @@ describe('PricingService.calculate', () => {
     expect(res.b2bDiscount).toBe(20000);
     expect(res.finalAmount).toBe(30000);
     expect(res.b2bPricingRuleIds).toEqual(['rule-1']);
+    expect(res.b2bPricingRules).toEqual([{ ruleId: 'rule-1', discountAmount: 20000 }]);
     expect(b2bPartnerService.getDiscountRate).not.toHaveBeenCalled();
   });
 
@@ -155,6 +160,7 @@ describe('PricingService.calculate', () => {
 
   it('happy hour tidak bisa digabung dengan voucher jika rule melarang', async () => {
     campaignService.findActiveHappyHourRule.mockResolvedValue({
+      id: 'hh-1',
       adjustmentType: 'PERCENTAGE_OFF',
       value: new Prisma.Decimal(20),
       allowVoucherStack: false,

@@ -15,6 +15,11 @@ import {
 } from './gateway/payment-gateway.interface';
 import { CreateGatewayPaymentDto, PaymentWebhookDto } from './dto/payment.dto';
 import { PromosService } from '../promos/promos.service';
+import { WalletService } from '../wallets/wallet.service';
+import { PointService } from '../points/point.service';
+import { MembershipTierService } from '../memberships/membership-tier.service';
+import { B2BPartnerService } from '../partners/b2b-partner.service';
+import { CampaignService } from '../campaigns/campaign.service';
 
 @Injectable()
 export class PaymentsService {
@@ -22,6 +27,11 @@ export class PaymentsService {
     private prisma: PrismaService,
     @Inject(PAYMENT_GATEWAY) private gateway: PaymentGateway,
     private promosService: PromosService,
+    private walletService: WalletService,
+    private pointService: PointService,
+    private membershipTierService: MembershipTierService,
+    private b2bPartnerService: B2BPartnerService,
+    private campaignService: CampaignService,
   ) {}
 
   /** Buat tagihan QRIS/VA untuk sebuah order via gateway (status awal PENDING). */
@@ -187,8 +197,93 @@ export class PaymentsService {
 
         // Pemakaian promo dicatat saat order benar-benar dibayar.
         await this.promosService.commitUsage(tx, order.id);
+        await this.settlePromotionLoyalty(tx, order);
       }
     });
+  }
+
+  private async settlePromotionLoyalty(
+    tx: Prisma.TransactionClient,
+    order: {
+      id: string;
+      customerId: string | null;
+      partnerId: string | null;
+      totalAmount: Prisma.Decimal;
+      deliveryFee: Prisma.Decimal;
+    },
+  ) {
+    const spendingAmount = Prisma.Decimal.max(
+      new Prisma.Decimal(0),
+      order.totalAmount.minus(order.deliveryFee),
+    );
+
+    if (order.customerId) {
+      const status = await this.membershipTierService.ensureStatus(order.customerId);
+      const benefits = await this.membershipTierService.getBenefits(status.currentTier);
+      const wallet = await this.getOrCreateWalletInTx(tx, { customerId: order.customerId });
+      const pointsToEarn = Math.floor(
+        Math.floor(toNum(spendingAmount) / Number(process.env.LOYALTY_POINT_RATE ?? '1000')) *
+          toNum(benefits.pointMultiplier),
+      );
+      if (pointsToEarn > 0) {
+        await this.pointService.earn({
+          walletId: wallet.id,
+          points: pointsToEarn,
+          orderId: order.id,
+          sourceType: 'ORDER',
+          idempotencyKey: `point-earn-${order.id}`,
+          tx,
+        });
+      }
+      const cashback = spendingAmount
+        .mul(benefits.cashbackRate)
+        .div(100)
+        .toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
+      if (cashback.gt(0)) {
+        await this.walletService.creditCashback({
+          walletId: wallet.id,
+          amount: cashback,
+          orderId: order.id,
+          referenceType: 'TIER_CASHBACK',
+          referenceId: order.id,
+          idempotencyKey: `cashback-tier-${order.id}`,
+          tx,
+        });
+      }
+      await this.membershipTierService.recordSuccessfulTransaction(
+        tx,
+        order.customerId,
+        toNum(spendingAmount),
+      );
+      await this.campaignService.qualifyReferralOnFirstTransaction(
+        tx,
+        order.customerId,
+        order.id,
+      );
+      return;
+    }
+
+    if (order.partnerId) {
+      await this.b2bPartnerService.recordSuccessfulTransaction(
+        tx,
+        order.partnerId,
+        toNum(spendingAmount),
+      );
+    }
+  }
+
+  private async getOrCreateWalletInTx(
+    tx: Prisma.TransactionClient,
+    owner: { customerId?: string; partnerId?: string },
+  ) {
+    const where = owner.customerId
+      ? { customerId: owner.customerId }
+      : { partnerId: owner.partnerId };
+    let wallet = await tx.wallet.findFirst({ where });
+    if (!wallet) {
+      wallet = await tx.wallet.create({ data: where });
+    }
+    return wallet;
   }
 
   private toPaymentView(payment: {

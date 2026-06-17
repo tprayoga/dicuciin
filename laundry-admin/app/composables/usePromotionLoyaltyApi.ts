@@ -18,7 +18,6 @@ export function usePromotionLoyaltyApi() {
 
     b2bSpecialPrices: () => api.get('/b2b-pricing/rules'),
 
-    // TODO: Backend belum expose endpoint admin untuk daftar referral; saat ini hanya apply/code customer.
-    referrals: () => Promise.resolve([]),
+    referrals: () => api.get('/campaigns/referral/admin'),
   }
 }

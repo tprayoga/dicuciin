@@ -752,19 +752,16 @@ Pemilihan rule:
 - `partnerId` dapat dipakai untuk kontrak khusus satu partner; `tier` untuk rule umum tier.
 - `startDate`/`endDate` membatasi active period.
 
-### Residual Risk: B2B Pricing Report Attribution
+### B2B Pricing Report Attribution
 
-Saat ini special pricing B2B sudah masuk ke `discountAmount` order dan ikut terbaca sebagai promo/revenue impact umum. Namun order belum menyimpan relasi eksplisit ke `b2bPricingRuleId`.
+Special pricing B2B masuk ke `discountAmount` order dan juga dicatat di `b2b_pricing_rule_usages`.
 
 Implikasi:
 
 - Report dapat menunjukkan total impact diskon B2B.
-- Report belum bisa memecah impact per special pricing rule.
-
-Mitigasi lanjutan:
-
-- Tambahkan field/log pricing attribution bila finance membutuhkan laporan per rule, misalnya `PricingCalculationLog.breakdown.b2bPricingRuleIds` atau relasi dedicated `OrderB2BPricingRule`.
-- Pastikan report admin memakai sumber attribution tersebut untuk ROI per kontrak partner.
+- Report dapat memecah impact per special pricing rule, partner, outlet, service, dan machine type.
+- Checkout mencatat usage dalam transaksi DB yang sama dengan order/payment settlement.
+- Untuk order historis, jalankan dry-run `npm run backfill:b2b-pricing-usages` di `laundry-be`; tulis data dengan `npm run backfill:b2b-pricing-usages -- --write`.
 
 ### Promotion Rules
 
@@ -949,6 +946,35 @@ Point dipakai melalui:
 - Permission/role: JWT user.
 - Notes: Reward referral baru diberikan setelah transaksi pertama sukses.
 
+### Admin Referral List
+
+- Method: `GET`
+- Path: `/campaigns/referral/admin`
+- Purpose: Menampilkan daftar referral untuk admin panel.
+- Request body: none
+- Query: `status`, `search`.
+- Response body:
+
+```json
+[
+  {
+    "id": "ref-1",
+    "referralCode": "MBR12345",
+    "status": "PENDING",
+    "campaignName": "Referral Juni",
+    "referrer": { "id": "cust-1", "memberCode": "MBR12345", "name": "Ayu", "phone": "0811" },
+    "referee": { "id": "cust-2", "memberCode": "MBR67890", "name": "Bima", "phone": "0822" },
+    "qualifiedAt": null,
+    "rewardedAt": null,
+    "createdAt": "2026-06-17T00:00:00.000Z"
+  }
+]
+```
+
+- Error case: `401`, `403`.
+- Permission/role: `SUPER_ADMIN`, `OWNER`.
+- Notes: Endpoint ini hanya membaca referral; reward tetap idempoten di checkout transaksi pertama.
+
 ### Create Campaign
 
 - Method: `POST`
@@ -1096,6 +1122,9 @@ Point dipakai melalui:
     "endTime": "21:00",
     "adjustmentType": "PERCENTAGE_OFF",
     "value": 20,
+    "quota": 100,
+    "usedQuota": 12,
+    "allowVoucherStack": true,
     "priority": 10,
     "isActive": true
   }
@@ -1125,6 +1154,8 @@ Point dipakai melalui:
   "timezone": "Asia/Jakarta",
   "adjustmentType": "PERCENTAGE_OFF",
   "value": 20,
+  "quota": 100,
+  "allowVoucherStack": false,
   "priority": 10,
   "startDate": "2026-06-01T00:00:00.000Z",
   "endDate": "2026-06-30T23:59:59.000Z",
@@ -1135,7 +1166,7 @@ Point dipakai melalui:
 - Response body: created `HappyHourRule`.
 - Error case: validation error.
 - Permission/role: `SUPER_ADMIN`, `OWNER`.
-- Notes: `adjustmentType`: `PERCENTAGE_OFF`, `FIXED_OFF`, atau `FIXED_PRICE`.
+- Notes: `adjustmentType`: `PERCENTAGE_OFF`, `FIXED_OFF`, atau `FIXED_PRICE`. `quota` kosong berarti unlimited. `allowVoucherStack=false` membuat pricing menolak kombinasi happy hour dengan voucher.
 
 ### Update Happy Hour Rule
 
@@ -1146,7 +1177,7 @@ Point dipakai melalui:
 - Response body: updated `HappyHourRule`.
 - Error case: `404 Happy hour tidak ditemukan`, validation error.
 - Permission/role: `SUPER_ADMIN`, `OWNER`.
-- Notes: Eligibility happy hour dievaluasi oleh PricingService berdasarkan outlet, service, hari, jam, date range, dan priority.
+- Notes: Eligibility happy hour dievaluasi oleh PricingService berdasarkan outlet, service, machine type, hari, jam, date range, priority, dan sisa quota. Quota di-increment secara atomic saat checkout sukses.
 
 ## 10. Pricing Calculation API
 
@@ -1272,6 +1303,51 @@ Untuk B2B:
 - Permission/role: JWT user.
 - Notes: Settlement order: wallet debit bonus lalu main, payment PAID, voucher redemption, promo commit, point earn, cashback tier, tier update, referral qualification. Semua mutasi ditulis ke ledger.
 
+### Kiosk Wallet Checkout
+
+- Method: `POST`
+- Path: `/kiosks/device/checkout`
+- Purpose: Checkout wallet dari kiosk menggunakan Promotion/Loyalty transaction engine.
+- Request body:
+
+```json
+{
+  "customerId": "cust-1",
+  "customerLookup": "08123456789",
+  "items": [
+    { "serviceId": "svc-1", "quantity": 1, "machineType": "WASHER" }
+  ],
+  "voucherCode": "WELCOME10-ABCD1234"
+}
+```
+
+- Response body: sama seperti `/transactions/checkout`.
+- Error case: device token invalid, kiosk di luar jadwal, customer/partner kosong, saldo kurang, voucher invalid, quota happy hour habis.
+- Permission/role: public endpoint dengan Bearer device token kiosk.
+- Notes: `outletId`, `kioskId`, dan `sourcePlatform=KIOSK` dipaksa dari device token, bukan dari body. `customerLookup` dapat berupa nomor HP, email, atau member code sehingga kiosk tidak perlu mengirim ID internal. Endpoint legacy `/kiosks/device/orders` dan `/kiosks/device/payments` tetap tersedia untuk QRIS/VA.
+
+### Kiosk QRIS/VA Loyalty Settlement
+
+- Method: `POST`
+- Path: `/kiosks/device/orders` lalu `/kiosks/device/payments`
+- Purpose: Flow QRIS/VA kiosk tetap membuat order dan charge gateway, tetapi jika body order menyertakan `customerLookup`, webhook payment `PAID` akan settle promo/loyalty.
+- Request body order:
+
+```json
+{
+  "customerLookup": "08123456789",
+  "items": [
+    { "serviceId": "svc-1", "quantity": 1 }
+  ],
+  "promoCode": "PROMO10"
+}
+```
+
+- Response body: order legacy dan payment gateway view.
+- Error case: customer lookup tidak ditemukan, payment gagal/expired, promo invalid.
+- Permission/role: public endpoint dengan Bearer device token kiosk.
+- Notes: Karena pembayaran dilakukan lewat gateway, backend tidak mendebit wallet. Saat webhook PAID, backend mencatat order PAID, promo usage, point earn, tier progress, referral qualification, dan tier cashback secara idempoten.
+
 ### Top Up With Campaign Cashback
 
 - Method: `POST`
@@ -1355,6 +1431,19 @@ Untuk B2B:
     { "status": "USED", "count": 40 }
   ],
   "campaignLogs": [],
+  "b2bPricingImpact": [
+    {
+      "ruleId": "rule-1",
+      "ruleName": "Gold Washer",
+      "partnerName": "PT B2B",
+      "tier": "GOLD_PARTNER",
+      "outletName": "Outlet A",
+      "serviceName": "Wash",
+      "machineType": "WASHER",
+      "usageCount": 2,
+      "discountAmount": 75000
+    }
+  ],
   "walletLedgers": []
 }
 ```

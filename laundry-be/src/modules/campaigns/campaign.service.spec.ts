@@ -18,7 +18,11 @@ describe('CampaignService — idempotency & anti double-execution', () => {
       campaignIssuance: { findUnique: jest.fn(), findFirst: jest.fn(), create: jest.fn().mockResolvedValue({ id: 'iss' }) },
       campaignExecutionLog: { create: jest.fn().mockResolvedValue({}) },
       order: { count: jest.fn() },
-      referral: { findFirst: jest.fn(), update: jest.fn().mockResolvedValue({}) },
+      referral: {
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn().mockResolvedValue({}),
+      },
       wallet: { findUnique: jest.fn(), create: jest.fn() },
     };
     // tx == prisma agar satu permukaan mock.
@@ -227,6 +231,8 @@ describe('CampaignService — idempotency & anti double-execution', () => {
           endTime: '11:00',
           startDate: null,
           endDate: null,
+          quota: null,
+          usedQuota: 0,
         },
         {
           id: 'hh-active',
@@ -237,6 +243,8 @@ describe('CampaignService — idempotency & anti double-execution', () => {
           endTime: '11:00',
           startDate: null,
           endDate: null,
+          quota: null,
+          usedQuota: 0,
         },
       ]),
     };
@@ -252,9 +260,80 @@ describe('CampaignService — idempotency & anti double-execution', () => {
       where: {
         isActive: true,
         OR: [{ outletId: 'out-1' }, { outletId: null }],
-        AND: [{ OR: [{ serviceId: 'svc-1' }, { serviceId: null }] }],
+        AND: [
+          { OR: [{ serviceId: 'svc-1' }, { serviceId: null }] },
+          { OR: [{ machineType: undefined }, { machineType: null }] },
+        ],
       },
       orderBy: { priority: 'desc' },
     });
+  });
+
+  it('happy hour dengan quota habis tidak eligible', async () => {
+    prisma.happyHourRule = {
+      findMany: jest.fn().mockResolvedValue([
+        {
+          id: 'hh-full',
+          outletId: 'out-1',
+          serviceId: 'svc-1',
+          machineType: null,
+          daysOfWeek: '2',
+          startTime: '09:00',
+          endTime: '11:00',
+          startDate: null,
+          endDate: null,
+          quota: 10,
+          usedQuota: 10,
+        },
+      ]),
+    };
+
+    const rule = await service.findActiveHappyHourRule({
+      outletId: 'out-1',
+      serviceId: 'svc-1',
+      at: new Date(2026, 5, 16, 10, 0, 0),
+    });
+
+    expect(rule).toBeNull();
+  });
+
+  it('listReferrals mengembalikan data referrer/referee untuk admin', async () => {
+    prisma.referral.findMany.mockResolvedValue([
+      {
+        id: 'ref-1',
+        referralCode: 'MEM-001',
+        status: 'PENDING',
+        campaignId: 'camp-1',
+        campaign: { name: 'Referral Juni' },
+        referrerCustomerId: 'cust-a',
+        refereeCustomerId: 'cust-b',
+        qualifiedAt: null,
+        rewardedAt: null,
+        createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      },
+    ]);
+    prisma.customer.findMany.mockResolvedValue([
+      {
+        id: 'cust-a',
+        memberCode: 'MEM-001',
+        user: { name: 'Referrer', phone: '0811' },
+      },
+      {
+        id: 'cust-b',
+        memberCode: 'MEM-002',
+        user: { name: 'Referee', phone: '0822' },
+      },
+    ]);
+
+    const rows = await service.listReferrals({ search: 'referee' });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        referralCode: 'MEM-001',
+        referrer: expect.objectContaining({ name: 'Referrer' }),
+        referee: expect.objectContaining({ name: 'Referee' }),
+      }),
+    );
   });
 });

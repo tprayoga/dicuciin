@@ -647,6 +647,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   static const _banks = ['BCA', 'BRI', 'BNI', 'Mandiri', 'BSI', 'CIMB'];
 
   final voucher = TextEditingController();
+  final customerLookup = TextEditingController();
   String method = 'QRIS';
   bool vaExpanded = false;
   String selectedBank = 'BCA';
@@ -654,6 +655,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void dispose() {
     voucher.dispose();
+    customerLookup.dispose();
     super.dispose();
   }
 
@@ -766,6 +768,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     ErrorMessage(controller.error!),
                   ],
                   const SizedBox(height: 22),
+                  const SectionTitle('Customer'),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: customerLookup,
+                    decoration: inputDecoration(
+                      'No HP / kode member untuk wallet',
+                      Icons.person_outline_rounded,
+                    ),
+                  ),
+                  const SizedBox(height: 22),
                   const SectionTitle('Voucher/Kode Promo'),
                   const SizedBox(height: 10),
                   TextField(
@@ -807,6 +819,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           active: method == 'QRIS',
                           onTap: () => setState(() {
                             method = 'QRIS';
+                            vaExpanded = false;
+                          }),
+                        ),
+                        const Divider(height: 1),
+                        PaymentMethodRow(
+                          leading: const Icon(
+                            Icons.account_balance_wallet_outlined,
+                            color: primary,
+                          ),
+                          label: 'Wallet',
+                          active: method == 'WALLET',
+                          onTap: () => setState(() {
+                            method = 'WALLET';
                             vaExpanded = false;
                           }),
                         ),
@@ -908,11 +933,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         onSecondary: controller.backToMachines,
         primaryLabel: 'Lanjut Bayar',
         loading: controller.loading,
-        onPrimary: () => controller.submitCheckout(
-          promoCode: voucher.text,
-          method: method,
-          bank: method == 'VA' ? selectedBank : null,
-        ),
+        onPrimary: () {
+          if (method == 'WALLET') {
+            controller.submitWalletCheckout(
+              customerLookup: customerLookup.text,
+              voucherCode: voucher.text,
+            );
+            return;
+          }
+          controller.submitCheckout(
+            promoCode: voucher.text,
+            customerLookup: customerLookup.text,
+            method: method,
+            bank: method == 'VA' ? selectedBank : null,
+          );
+        },
       ),
     );
   }
@@ -1109,9 +1144,9 @@ class SuccessScreen extends StatelessWidget {
     final service = controller.selectedService;
     final machine = controller.selectedMachine;
     final payment = controller.payment;
-    final methodLabel = payment?.method == 'TRANSFER'
-        ? 'Virtual Account'
-        : 'QRIS';
+    final methodLabel =
+        controller.completedPaymentMethod ??
+        (payment?.method == 'TRANSFER' ? 'Virtual Account' : 'QRIS');
 
     return Scaffold(
       backgroundColor: background,

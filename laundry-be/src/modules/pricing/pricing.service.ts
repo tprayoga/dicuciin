@@ -12,6 +12,7 @@ import { B2BPricingService } from './b2b-pricing.service';
 export interface PricingItem {
   serviceId?: string;
   machineType?: string;
+  quantity?: number;
   subtotal: Prisma.Decimal.Value;
 }
 
@@ -48,6 +49,8 @@ export interface PricingBreakdown {
   pointsToEarn: number;
   cashbackToCredit: number;
   b2bPricingRuleIds?: string[];
+  b2bPricingRules?: { ruleId: string; discountAmount: number }[];
+  happyHourRules?: { ruleId: string; quantity: number; discountAmount: number }[];
   voucherId?: string;
   voucherCode?: string;
   promoId?: string;
@@ -99,7 +102,7 @@ export class PricingService {
 
     // 1) Harga B2B: special pricing meng-override potongan tier partner.
     let b2bDiscount = new Prisma.Decimal(0);
-    const b2bPricingRuleIds = new Set<string>();
+    const b2bPricingRuleDiscounts = new Map<string, Prisma.Decimal>();
     if (input.segment === UserSegment.B2B) {
       for (const item of input.items) {
         const rule = await this.b2bPricingService.findBestRule({
@@ -111,20 +114,22 @@ export class PricingService {
           at: input.at,
         });
         if (!rule) continue;
-        b2bPricingRuleIds.add(rule.id);
-        b2bDiscount = b2bDiscount.plus(
-          this.b2bPricingService.calculateAdjustment(
-            rule,
-            new Prisma.Decimal(item.subtotal),
-          ),
+        const adjustment = this.b2bPricingService.calculateAdjustment(
+          rule,
+          new Prisma.Decimal(item.subtotal),
         );
+        b2bPricingRuleDiscounts.set(
+          rule.id,
+          (b2bPricingRuleDiscounts.get(rule.id) ?? new Prisma.Decimal(0)).plus(adjustment),
+        );
+        b2bDiscount = b2bDiscount.plus(adjustment);
       }
       b2bDiscount = rupiah(b2bDiscount);
     }
     if (
       input.segment === UserSegment.B2B &&
       input.b2bTier &&
-      b2bPricingRuleIds.size === 0
+      b2bPricingRuleDiscounts.size === 0
     ) {
       const rate = await this.b2bPartnerService.getDiscountRate(input.b2bTier);
       b2bDiscount = rupiah(basePrice.mul(rate).div(100));
@@ -132,10 +137,15 @@ export class PricingService {
 
     // 2) Happy hour: penyesuaian per item.
     let happyHourDiscount = new Prisma.Decimal(0);
+    const happyHourRuleDiscounts = new Map<
+      string,
+      { quantity: number; discountAmount: Prisma.Decimal }
+    >();
     for (const item of input.items) {
       const rule = await this.campaignService.findActiveHappyHourRule({
         outletId: input.outletId,
         serviceId: item.serviceId,
+        machineType: item.machineType,
         at: input.at,
       });
       if (!rule) continue;
@@ -153,6 +163,11 @@ export class PricingService {
       } else if (rule.adjustmentType === 'FIXED_PRICE') {
         adj = Prisma.Decimal.max(new Prisma.Decimal(0), sub.minus(rule.value));
       }
+      const current = happyHourRuleDiscounts.get(rule.id);
+      happyHourRuleDiscounts.set(rule.id, {
+        quantity: (current?.quantity ?? 0) + (item.quantity ?? 1),
+        discountAmount: (current?.discountAmount ?? new Prisma.Decimal(0)).plus(adj),
+      });
       happyHourDiscount = happyHourDiscount.plus(adj);
     }
     happyHourDiscount = rupiah(happyHourDiscount);
@@ -229,7 +244,26 @@ export class PricingService {
       pointsToEarn,
       cashbackToCredit: toNum(cashbackToCredit),
       b2bPricingRuleIds:
-        b2bPricingRuleIds.size > 0 ? Array.from(b2bPricingRuleIds) : undefined,
+        b2bPricingRuleDiscounts.size > 0
+          ? Array.from(b2bPricingRuleDiscounts.keys())
+          : undefined,
+      b2bPricingRules:
+        b2bPricingRuleDiscounts.size > 0
+          ? Array.from(b2bPricingRuleDiscounts.entries()).map(
+              ([ruleId, discountAmount]) => ({
+                ruleId,
+                discountAmount: toNum(rupiah(discountAmount)),
+              }),
+            )
+          : undefined,
+      happyHourRules:
+        happyHourRuleDiscounts.size > 0
+          ? Array.from(happyHourRuleDiscounts.entries()).map(([ruleId, usage]) => ({
+              ruleId,
+              quantity: usage.quantity,
+              discountAmount: toNum(rupiah(usage.discountAmount)),
+            }))
+          : undefined,
       voucherId,
       voucherCode,
       promoId,

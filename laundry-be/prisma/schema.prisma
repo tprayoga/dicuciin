@@ -378,6 +378,7 @@ model Order {
   pointLedgers       PointLedger[]
   promoUsages        PromoUsage[]
   voucherRedemption  VoucherRedemption?
+  b2bPricingRuleUsages B2BPricingRuleUsage[]
   review             Review?
 
   @@index([orderNumber])
@@ -992,6 +993,7 @@ model B2BPricingRule {
   partner B2BPartner? @relation(fields: [partnerId], references: [id], onDelete: Cascade)
   outlet  Outlet?     @relation(fields: [outletId], references: [id], onDelete: Cascade)
   service Service?    @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  usages  B2BPricingRuleUsage[]
 
   @@index([partnerId])
   @@index([tier])
@@ -1000,6 +1002,27 @@ model B2BPricingRule {
   @@index([machineType])
   @@index([isActive])
   @@map("b2b_pricing_rules")
+}
+
+/// Attribution pemakaian special pricing B2B per order. Dipakai report untuk
+/// mengukur impact tiap rule/kontrak partner.
+model B2BPricingRuleUsage {
+  id             String   @id @default(uuid())
+  orderId        String
+  ruleId         String
+  partnerId      String?
+  discountAmount Decimal  @db.Decimal(14, 2)
+  createdAt      DateTime @default(now())
+
+  order   Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  rule    B2BPricingRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  partner B2BPartner?    @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+
+  @@unique([orderId, ruleId])
+  @@index([ruleId])
+  @@index([partnerId])
+  @@index([createdAt])
+  @@map("b2b_pricing_rule_usages")
 }
 
 /// Status tier per pemilik (retail/B2B). earnedSpending mengakumulasi transaksi
@@ -1046,6 +1069,7 @@ model B2BPartner {
   userVouchers     UserVoucher[]
   orders           Order[]
   pricingRules     B2BPricingRule[]
+  pricingRuleUsages B2BPricingRuleUsage[]
 
   @@index([partnerCode])
   @@map("b2b_partners")
@@ -1185,6 +1209,9 @@ model HappyHourRule {
   timezone       String    @default("Asia/Jakarta")
   adjustmentType String // PERCENTAGE_OFF | FIXED_OFF | FIXED_PRICE
   value          Decimal   @db.Decimal(14, 2)
+  quota          Int?
+  usedQuota      Int       @default(0)
+  allowVoucherStack Boolean @default(true)
   priority       Int       @default(0)
   startDate      DateTime?
   endDate        DateTime?

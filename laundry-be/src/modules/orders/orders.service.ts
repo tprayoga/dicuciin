@@ -142,7 +142,7 @@ export class OrdersService {
           totalAmount,
           status: OrderStatus.DRAFT,
           items: {
-            create: orderItems,
+            create: orderItems.map(({ machineType, ...item }) => item),
           },
           statusLogs: {
             create: {

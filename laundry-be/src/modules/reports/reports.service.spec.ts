@@ -34,6 +34,28 @@ describe('ReportsService promotion loyalty', () => {
           }),
       },
       campaignExecutionLog: { findMany: jest.fn().mockResolvedValue([]) },
+      b2BPricingRuleUsage: {
+        groupBy: jest.fn().mockResolvedValue([
+          {
+            ruleId: 'rule-1',
+            _count: { _all: 2 },
+            _sum: { discountAmount: new Prisma.Decimal(75000) },
+          },
+        ]),
+      },
+      b2BPricingRule: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'rule-1',
+            name: 'Gold Washer',
+            tier: 'GOLD_PARTNER',
+            machineType: 'WASHER',
+            partner: { companyName: 'PT B2B' },
+            outlet: { name: 'Outlet A' },
+            service: { name: 'Wash' },
+          },
+        ]),
+      },
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -47,5 +69,13 @@ describe('ReportsService promotion loyalty', () => {
     expect(report.dashboard.b2bTransactionCount).toBe(3);
     expect(report.dashboard.b2bTransactionVolume).toBe(300000);
     expect(report.dashboard.voucherBurnRate).toBe(40);
+    expect(report.b2bPricingImpact).toEqual([
+      expect.objectContaining({
+        ruleId: 'rule-1',
+        ruleName: 'Gold Washer',
+        usageCount: 2,
+        discountAmount: 75000,
+      }),
+    ]);
   });
 });

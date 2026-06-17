@@ -4,9 +4,14 @@ import { PaymentsService } from './payments.service';
 import { PAYMENT_GATEWAY } from './gateway/payment-gateway.interface';
 import { MockPaymentGateway } from './gateway/mock-payment-gateway';
 import { PromosModule } from '../promos/promos.module';
+import { WalletsModule } from '../wallets/wallets.module';
+import { PointsModule } from '../points/points.module';
+import { MembershipsModule } from '../memberships/memberships.module';
+import { PartnersModule } from '../partners/partners.module';
+import { CampaignsModule } from '../campaigns/campaigns.module';
 
 @Module({
-  imports: [PromosModule],
+  imports: [PromosModule, WalletsModule, PointsModule, MembershipsModule, PartnersModule, CampaignsModule],
   controllers: [PaymentsController],
   providers: [
     PaymentsService,

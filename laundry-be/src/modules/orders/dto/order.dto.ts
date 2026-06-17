@@ -24,6 +24,11 @@ export class CreateOrderDto {
   @IsOptional()
   customerId?: string;
 
+  @ApiProperty({ required: false, description: 'Nomor HP/email/member code customer untuk kiosk' })
+  @IsString()
+  @IsOptional()
+  customerLookup?: string;
+
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()

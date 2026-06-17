@@ -59,6 +59,17 @@ export class CreateHappyHourRuleDto {
   @IsInt()
   @Min(0)
   @IsOptional()
+  quota?: number;
+
+  @ApiProperty({ required: false })
+  @IsBoolean()
+  @IsOptional()
+  allowVoucherStack?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsInt()
+  @Min(0)
+  @IsOptional()
   priority?: number;
 
   @ApiProperty({ required: false })

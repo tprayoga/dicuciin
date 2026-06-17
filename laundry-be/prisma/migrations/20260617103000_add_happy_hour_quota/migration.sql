@@ -1,0 +1,4 @@
+ALTER TABLE "happy_hour_rules"
+  ADD COLUMN "quota" INTEGER,
+  ADD COLUMN "usedQuota" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN "allowVoucherStack" BOOLEAN NOT NULL DEFAULT true;

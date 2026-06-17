@@ -7,7 +7,10 @@ import {
   IsInt,
   Min,
   Max,
+  IsNumber,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateKioskDto {
@@ -83,4 +86,58 @@ export class EnrollKioskDto {
   @ApiProperty({ description: 'Identitas unik instalasi aplikasi kiosk' })
   @IsString()
   deviceId: string;
+}
+
+export class KioskCheckoutItemDto {
+  @ApiProperty()
+  @IsString()
+  serviceId: string;
+
+  @ApiProperty()
+  @IsNumber()
+  @Min(1)
+  quantity: number;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  machineType?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  notes?: string;
+}
+
+export class KioskCheckoutDto {
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  customerId?: string;
+
+  @ApiProperty({ required: false, description: 'Nomor HP atau member code customer' })
+  @IsString()
+  @IsOptional()
+  customerLookup?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  partnerId?: string;
+
+  @ApiProperty({ type: [KioskCheckoutItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => KioskCheckoutItemDto)
+  items: KioskCheckoutItemDto[];
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  voucherCode?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  promoCode?: string;
 }

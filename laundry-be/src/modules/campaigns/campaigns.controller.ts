@@ -19,7 +19,7 @@ import {
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
+import { ReferralStatus, UserRole } from '@prisma/client';
 
 @ApiTags('Campaigns')
 @ApiBearerAuth()
@@ -40,6 +40,16 @@ export class CampaignsController {
   @ApiOperation({ summary: 'Pakai kode referral (sebelum transaksi pertama)' })
   async applyReferral(@Body() dto: ApplyReferralDto, @Request() req: any) {
     return this.campaignService.applyReferralCodeByUser(dto.code, req.user?.userId);
+  }
+
+  @Get('referral/admin')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER)
+  @ApiOperation({ summary: 'Daftar referral untuk admin' })
+  async adminReferrals(
+    @Query('status') status?: ReferralStatus,
+    @Query('search') search?: string,
+  ) {
+    return this.campaignService.listReferrals({ status, search });
   }
 
   // --- Admin ---

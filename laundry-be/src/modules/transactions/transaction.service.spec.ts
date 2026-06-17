@@ -51,6 +51,7 @@ describe('TransactionService', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       orderStatusLog: { create: jest.fn().mockResolvedValue({}) },
+      b2BPricingRuleUsage: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
     };
     prisma = {
       order: { findUnique: jest.fn() },
@@ -90,6 +91,7 @@ describe('TransactionService', () => {
       campaignService: {
         qualifyReferralOnFirstTransaction: jest.fn(),
         handleTopupCashback: jest.fn(),
+        consumeHappyHourQuota: jest.fn(),
       },
     };
 
@@ -120,6 +122,17 @@ describe('TransactionService', () => {
   it('transaksi normal tanpa promo', async () => {
     const res = await service.checkout(checkoutInput);
     expect(res.status).toBe(OrderStatus.PAID);
+    expect(tx.order.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          items: {
+            create: [
+              expect.not.objectContaining({ machineType: expect.anything() }),
+            ],
+          },
+        }),
+      }),
+    );
     expect(res.breakdown.mainBalanceUsed).toBe(50000);
     expect(res.breakdown.pointEarned).toBe(50);
     expect(mocks.pointService.earn).toHaveBeenCalled();
@@ -153,6 +166,7 @@ describe('TransactionService', () => {
         spendingAmount: 40000,
         finalAmount: 40000,
         pointsToEarn: 40,
+        happyHourRules: [{ ruleId: 'hh-1', quantity: 1, discountAmount: 10000 }],
       }),
     );
     mocks.walletService.payWithWallet.mockResolvedValue({
@@ -166,6 +180,9 @@ describe('TransactionService', () => {
     expect(res.breakdown.bonusBalanceUsed).toBe(5000);
     expect(res.breakdown.mainBalanceUsed).toBe(35000);
     expect(res.breakdown.finalAmount).toBe(40000);
+    expect(mocks.campaignService.consumeHappyHourQuota).toHaveBeenCalledWith(tx, [
+      { ruleId: 'hh-1', quantity: 1 },
+    ]);
   });
 
   it('pembayaran B2B hanya untuk partner ACTIVE dan mencatat transaksi partner', async () => {
@@ -180,6 +197,7 @@ describe('TransactionService', () => {
         b2bDiscount: 5000,
         spendingAmount: 45000,
         finalAmount: 45000,
+        b2bPricingRules: [{ ruleId: 'rule-1', discountAmount: 5000 }],
       }),
     );
     mocks.walletService.payWithWallet.mockResolvedValue({
@@ -206,6 +224,17 @@ describe('TransactionService', () => {
       'p1',
       45000,
     );
+    expect(tx.b2BPricingRuleUsage.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          orderId: 'o1',
+          ruleId: 'rule-1',
+          partnerId: 'p1',
+          discountAmount: new Prisma.Decimal(5000),
+        },
+      ],
+      skipDuplicates: true,
+    });
     expect(mocks.membershipTierService.recordSuccessfulTransaction).not.toHaveBeenCalled();
   });
 
