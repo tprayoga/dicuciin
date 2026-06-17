@@ -26,6 +26,13 @@ import { QueuesModule } from './modules/queues/queues.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { PointsModule } from './modules/points/points.module';
+import { VouchersModule } from './modules/vouchers/vouchers.module';
+import { MembershipsModule } from './modules/memberships/memberships.module';
+import { PartnersModule } from './modules/partners/partners.module';
+import { PricingModule } from './modules/pricing/pricing.module';
+import { CampaignsModule } from './modules/campaigns/campaigns.module';
+import { TransactionsModule } from './modules/transactions/transactions.module';
 
 @Module({
   imports: [
@@ -65,6 +72,14 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     UploadsModule,
     ReportsModule,
     NotificationsModule,
+    // Promotion & Loyalty Engine
+    PointsModule,
+    VouchersModule,
+    MembershipsModule,
+    PartnersModule,
+    PricingModule,
+    CampaignsModule,
+    TransactionsModule,
   ],
   providers: [
     // Throttler pertama → brute-force ditolak sebelum auth/role guard berjalan.

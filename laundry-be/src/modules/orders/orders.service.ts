@@ -33,6 +33,51 @@ export class OrdersService {
     OrderStatus.COMPLETED,
   ];
 
+  /**
+   * Hitung order item + subtotal dari ServicePrice (satu query, hindari N+1).
+   * Dipakai bersama oleh `create` dan alur checkout loyalty (TransactionService).
+   */
+  async priceItems(
+    outletId: string,
+    items: { serviceId: string; quantity: number; notes?: string; machineType?: string }[],
+  ): Promise<{ orderItems: any[]; subtotal: Prisma.Decimal }> {
+    const servicePrices = await this.prisma.servicePrice.findMany({
+      where: {
+        serviceId: { in: items.map((i) => i.serviceId) },
+        outletId,
+        isActive: true,
+      },
+      include: { service: true },
+    });
+    const priceMap = new Map(servicePrices.map((sp) => [sp.serviceId, sp]));
+
+    let subtotal = new Prisma.Decimal(0);
+    const orderItems: any[] = [];
+
+    for (const item of items) {
+      const servicePrice = priceMap.get(item.serviceId);
+      if (!servicePrice) {
+        throw new BadRequestException(`Service price not found for service ${item.serviceId}`);
+      }
+
+      const itemSubtotal = new Prisma.Decimal(servicePrice.price).mul(item.quantity);
+      subtotal = subtotal.plus(itemSubtotal);
+
+      orderItems.push({
+        serviceId: item.serviceId,
+        serviceName: servicePrice.service.name,
+        quantity: item.quantity,
+        unit: servicePrice.unit,
+        pricePerUnit: servicePrice.price,
+        subtotal: itemSubtotal,
+        notes: item.notes,
+        machineType: item.machineType ?? servicePrice.service.machineType,
+      });
+    }
+
+    return { orderItems, subtotal };
+  }
+
   async create(createOrderDto: CreateOrderDto, createdBy?: string) {
     const { items, outletId, customerId, promoCode, deliveryFee = 0, ...orderData } = createOrderDto;
 
@@ -56,40 +101,7 @@ export class OrdersService {
       6,
     );
 
-    // Ambil semua harga layanan dalam satu query (hindari N+1 query di loop).
-    const servicePrices = await this.prisma.servicePrice.findMany({
-      where: {
-        serviceId: { in: items.map((i) => i.serviceId) },
-        outletId,
-        isActive: true,
-      },
-      include: { service: true },
-    });
-    const priceMap = new Map(servicePrices.map((sp) => [sp.serviceId, sp]));
-
-    let subtotal = new Prisma.Decimal(0);
-    const orderItems: any[] = [];
-
-    for (const item of items) {
-      const servicePrice = priceMap.get(item.serviceId);
-
-      if (!servicePrice) {
-        throw new BadRequestException(`Service price not found for service ${item.serviceId}`);
-      }
-
-      const itemSubtotal = new Prisma.Decimal(servicePrice.price).mul(item.quantity);
-      subtotal = subtotal.plus(itemSubtotal);
-
-      orderItems.push({
-        serviceId: item.serviceId,
-        serviceName: servicePrice.service.name,
-        quantity: item.quantity,
-        unit: servicePrice.unit,
-        pricePerUnit: servicePrice.price,
-        subtotal: itemSubtotal,
-        notes: item.notes,
-      });
-    }
+    const { orderItems, subtotal } = await this.priceItems(outletId, items);
 
     // Validasi + kalkulasi promo lewat sumber kebenaran TUNGGAL (PromosService).
     // Promo invalid → error jelas (bukan diam-diam tanpa diskon). Pemakaian promo

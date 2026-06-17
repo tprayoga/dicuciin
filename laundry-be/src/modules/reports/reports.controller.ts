@@ -35,4 +35,11 @@ export class ReportsController {
   ) {
     return this.reportsService.getTopServices(month, outletId);
   }
+
+  @Get('promotion-loyalty')
+  @ApiOperation({ summary: 'Dashboard & laporan Promotion/Loyalty' })
+  @ApiQuery({ name: 'month', required: false, type: String, example: '2026-06' })
+  async getPromotionLoyalty(@Query('month') month?: string) {
+    return this.reportsService.getPromotionLoyalty(month);
+  }
 }

@@ -50,10 +50,12 @@ class CustomerController extends ChangeNotifier {
   List<OrderSummary> _orders = const [];
   List<MachineBooking> _activeBookings = const [];
   List<PromoSummary> _promos = const [];
+  List<UserVoucher> _vouchers = const [];
   List<AppBanner> _carouselBanners = const [];
   List<AppBanner> _popupBanners = const [];
   bool _popupConsumed = false;
   MemberStats? _stats;
+  MembershipStatus? _membershipStatus;
 
   bool get isLoading => _isLoading;
   bool get isSubmittingOrder => _isSubmittingOrder;
@@ -65,6 +67,7 @@ class CustomerController extends ChangeNotifier {
   List<OrderSummary> get orders => _orders;
   List<MachineBooking> get activeBookings => _activeBookings;
   List<PromoSummary> get promos => _promos;
+  List<UserVoucher> get vouchers => _vouchers;
   List<AppBanner> get carouselBanners => _carouselBanners;
 
   /// Banner pop-up yang belum ditampilkan di sesi ini. Setelah diambil sekali,
@@ -75,6 +78,7 @@ class CustomerController extends ChangeNotifier {
   void markPopupShown() => _popupConsumed = true;
 
   MemberStats get stats => _stats ?? MemberStats.empty();
+  MembershipStatus? get membershipStatus => _membershipStatus;
 
   Future<void> loadDashboard({
     required AppUser user,
@@ -111,6 +115,9 @@ class CustomerController extends ChangeNotifier {
     final promosF = _guard(
       () => _customerService.getPromos(accessToken: accessToken),
     );
+    final vouchersF = _guard(
+      () => _customerService.getMyVouchers(accessToken: accessToken),
+    );
     final carouselF = _guard(
       () => _customerService.getBanners(
         accessToken: accessToken,
@@ -129,14 +136,19 @@ class CustomerController extends ChangeNotifier {
         accessToken: accessToken,
       ),
     );
+    final membershipF = _guard(
+      () => _customerService.getMembershipStatus(accessToken: accessToken),
+    );
 
     _wallet = await walletF ?? _wallet;
     _orders = await ordersF ?? _orders;
     _activeBookings = await bookingsF ?? _activeBookings;
     _promos = await promosF ?? _promos;
+    _vouchers = await vouchersF ?? _vouchers;
     _carouselBanners = await carouselF ?? _carouselBanners;
     _popupBanners = await popupF ?? _popupBanners;
     _stats = await statsF ?? _stats;
+    _membershipStatus = await membershipF ?? _membershipStatus;
 
     _isLoading = false;
     notifyListeners();
@@ -364,6 +376,161 @@ class CustomerController extends ChangeNotifier {
     );
   }
 
+  Future<PricingQuote> quotePricing({
+    required AppUser user,
+    required String accessToken,
+    required String outletId,
+    required List<CreateOrderItemInput> items,
+    String? voucherCode,
+    String? promoCode,
+  }) {
+    final customerId = user.customer?.id;
+    final partnerId = user.b2bPartner?.id;
+    if (customerId == null && partnerId == null) {
+      throw StateError('Akun belum terhubung ke profil customer/partner.');
+    }
+    return _customerService.quotePricing(
+      accessToken: accessToken,
+      customerId: customerId ?? '',
+      partnerId: partnerId,
+      outletId: outletId,
+      items: items,
+      voucherCode: voucherCode,
+      promoCode: promoCode,
+    );
+  }
+
+  Future<List<VoucherEligibility>> getVoucherEligibility({
+    required AppUser user,
+    required String accessToken,
+    required String outletId,
+    required List<CreateOrderItemInput> items,
+  }) async {
+    final vouchers = await _customerService.getMyVouchers(
+      accessToken: accessToken,
+    );
+    _vouchers = vouchers;
+    final results = <VoucherEligibility>[];
+    for (final voucher in vouchers) {
+      if (voucher.status != 'ACTIVE') {
+        results.add(
+          VoucherEligibility(
+            voucher: voucher,
+            eligible: false,
+            reason: 'Status voucher ${voucher.status}',
+          ),
+        );
+        continue;
+      }
+      try {
+        final quote = await quotePricing(
+          user: user,
+          accessToken: accessToken,
+          outletId: outletId,
+          items: items,
+          voucherCode: voucher.code,
+        );
+        results.add(
+          VoucherEligibility(voucher: voucher, eligible: true, quote: quote),
+        );
+      } on ApiException catch (e) {
+        results.add(
+          VoucherEligibility(
+            voucher: voucher,
+            eligible: false,
+            reason: e.message,
+          ),
+        );
+      } catch (_) {
+        results.add(
+          VoucherEligibility(
+            voucher: voucher,
+            eligible: false,
+            reason: 'Tidak bisa dipakai untuk transaksi ini',
+          ),
+        );
+      }
+    }
+    notifyListeners();
+    return results;
+  }
+
+  Future<LoyaltyCheckoutResult?> checkoutLoyalty({
+    required AppUser user,
+    required String accessToken,
+    required String outletId,
+    required List<CreateOrderItemInput> items,
+    String? voucherCode,
+  }) async {
+    final customerId = user.customer?.id;
+    final partnerId = user.b2bPartner?.id;
+    if (customerId == null && partnerId == null) {
+      _errorMessage = 'Akun ini belum terhubung ke profil customer/partner.';
+      notifyListeners();
+      return null;
+    }
+
+    _isSubmittingOrder = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final result = await _customerService.checkoutLoyalty(
+        accessToken: accessToken,
+        customerId: customerId ?? '',
+        partnerId: partnerId,
+        outletId: outletId,
+        items: items,
+        voucherCode: voucherCode,
+      );
+      await loadDashboard(user: user, accessToken: accessToken);
+      return result;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      return null;
+    } catch (_) {
+      _errorMessage = 'Pembayaran gagal. Coba lagi.';
+      return null;
+    } finally {
+      _isSubmittingOrder = false;
+      notifyListeners();
+    }
+  }
+
+  Future<UserVoucher?> redeemPointVoucher({
+    required AppUser user,
+    required String accessToken,
+    required String templateId,
+  }) async {
+    final walletId =
+        _wallet?.id ?? user.customer?.wallet?.id ?? user.b2bPartner?.wallet?.id;
+    if (walletId == null || walletId.isEmpty) {
+      _errorMessage = 'Wallet tidak ditemukan.';
+      notifyListeners();
+      return null;
+    }
+    try {
+      final voucher = await _customerService.redeemPointVoucher(
+        accessToken: accessToken,
+        walletId: walletId,
+        templateId: templateId,
+        idempotencyKey:
+            'point-voucher-$walletId-$templateId-${DateTime.now().millisecondsSinceEpoch}',
+      );
+      if (user.customer?.id != null) {
+        await loadDashboard(user: user, accessToken: accessToken);
+      }
+      return voucher;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      notifyListeners();
+      return null;
+    } catch (_) {
+      _errorMessage = 'Gagal menukar poin.';
+      notifyListeners();
+      return null;
+    }
+  }
+
   Future<OrderDetail?> getOrderDetail({
     required String accessToken,
     required String orderId,
@@ -391,10 +558,12 @@ class CustomerController extends ChangeNotifier {
     _orders = const [];
     _activeBookings = const [];
     _promos = const [];
+    _vouchers = const [];
     _carouselBanners = const [];
     _popupBanners = const [];
     _popupConsumed = false;
     _stats = null;
+    _membershipStatus = null;
     notifyListeners();
   }
 

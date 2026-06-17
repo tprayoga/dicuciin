@@ -38,6 +38,7 @@ class KioskController extends ChangeNotifier {
   Machine? selectedMachine;
   ServicePrice? selectedService;
   String? appliedPromo;
+  PricingQuote? quote;
   CreatedOrder? createdOrder;
   KioskPayment? payment;
   Timer? _heartbeatTimer;
@@ -45,7 +46,7 @@ class KioskController extends ChangeNotifier {
 
   /// Total tagihan setelah order dibuat (kalau ada), kalau belum pakai harga layanan.
   double get total =>
-      createdOrder?.total ?? selectedService?.price ?? 0;
+      createdOrder?.total ?? quote?.finalAmount ?? selectedService?.price ?? 0;
 
   Future<void> initialize() async {
     deviceToken = await _storage.readToken();
@@ -165,11 +166,49 @@ class KioskController extends ChangeNotifier {
     selectedMachine = machine;
     selectedService = service;
     appliedPromo = null;
+    quote = null;
     createdOrder = null;
     payment = null;
     error = null;
     stage = KioskStage.checkout;
     notifyListeners();
+    loadQuote();
+  }
+
+  Future<void> loadQuote({String? voucherCode}) async {
+    if (selectedService == null || terminal == null) return;
+    try {
+      final payload =
+          await _api.post(
+                '/pricing/calculate',
+                token: deviceToken,
+                body: {
+                  'outletId': terminal!.outlet.id,
+                  'sourcePlatform': 'KIOSK',
+                  'items': [
+                    {
+                      'serviceId': selectedService!.serviceId,
+                      'quantity': 1,
+                      if (selectedMachine != null)
+                        'machineType': selectedMachine!.isWasher
+                            ? 'WASHER'
+                            : 'DRYER',
+                    },
+                  ],
+                  if (voucherCode != null && voucherCode.trim().isNotEmpty)
+                    'voucherCode': voucherCode.trim(),
+                },
+              )
+              as Map<String, dynamic>;
+      quote = PricingQuote.fromJson(payload);
+      appliedPromo = voucherCode?.trim().isNotEmpty == true
+          ? voucherCode!.trim()
+          : null;
+      notifyListeners();
+    } on ApiException catch (exception) {
+      error = exception.message;
+      notifyListeners();
+    }
   }
 
   /// Layanan (+ tarif) yang dipakai untuk sebuah mesin, berdasarkan tipenya.
@@ -201,7 +240,9 @@ class KioskController extends ChangeNotifier {
     String method = 'QRIS',
     String? bank,
   }) async {
-    if (selectedService == null || selectedMachine == null || terminal == null) {
+    if (selectedService == null ||
+        selectedMachine == null ||
+        terminal == null) {
       return;
     }
     await _run(() async {
@@ -300,6 +341,7 @@ class KioskController extends ChangeNotifier {
     selectedService = null;
     appliedPromo = null;
     createdOrder = null;
+    quote = null;
     payment = null;
     error = null;
   }

@@ -231,6 +231,7 @@ export class AuthService {
       where: { id: userId },
       include: {
         customer: { include: { wallet: true } },
+        b2bPartner: { include: { wallet: true, membershipStatus: true } },
         outletUsers: {
           include: {
             outlet: { select: { id: true, name: true, code: true } },
@@ -241,15 +242,19 @@ export class AuthService {
 
     if (!user) throw new NotFoundException('User not found');
 
-    const { passwordHash: _, customer, ...rest } = user;
+    const { passwordHash: _, customer, b2bPartner, ...rest } = user;
 
     // Jangan bocorkan hash PIN; cukup ekspos flag apakah PIN sudah diset.
     if (customer) {
       const { walletPinHash, ...customerRest } = customer;
-      return { ...rest, customer: { ...customerRest, hasWalletPin: !!walletPinHash } };
+      return {
+        ...rest,
+        customer: { ...customerRest, hasWalletPin: !!walletPinHash },
+        b2bPartner,
+      };
     }
 
-    return { ...rest, customer: null };
+    return { ...rest, customer: null, b2bPartner };
   }
 
   private async generateTokens(userId: string, email: string | null, role: UserRole) {

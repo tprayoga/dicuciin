@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { OrderStatus } from '@prisma/client';
+import { LedgerDirection, OrderStatus, WalletType } from '@prisma/client';
 import { toNum } from '../../common/utils/money.util';
 
 const PAID_STATUSES: OrderStatus[] = [
@@ -133,5 +133,104 @@ export class ReportsService {
       totalQuantity: item._sum.quantity ?? 0,
       totalOrders: item._count._all,
     }));
+  }
+
+  private monthRange(month?: string) {
+    const monthRegex = /^\d{4}-\d{2}$/;
+    if (month && !monthRegex.test(month)) {
+      throw new BadRequestException('Invalid month format. Use YYYY-MM');
+    }
+    const now = new Date();
+    const start = month
+      ? new Date(`${month}-01T00:00:00.000Z`)
+      : new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(start);
+    end.setMonth(end.getMonth() + 1);
+    return { start, end };
+  }
+
+  async getPromotionLoyalty(month?: string) {
+    const { start, end } = this.monthRange(month);
+    const dateWhere = { gte: start, lt: end };
+
+    const [
+      issued,
+      used,
+      bonusIssued,
+      pointAgg,
+      b2bOrders,
+      revenueImpact,
+      voucherByStatus,
+      campaignLogs,
+      walletLedgers,
+    ] = await Promise.all([
+      this.prisma.userVoucher.count({ where: { issuedAt: dateWhere } }),
+      this.prisma.voucherRedemption.count({
+        where: { redeemedAt: dateWhere, status: 'APPLIED' },
+      }),
+      this.prisma.walletLedger.aggregate({
+        where: {
+          createdAt: dateWhere,
+          walletType: WalletType.BONUS_BALANCE,
+          direction: LedgerDirection.CREDIT,
+        },
+        _sum: { amount: true },
+      }),
+      this.prisma.wallet.aggregate({ _sum: { pointBalance: true } }),
+      this.prisma.order.aggregate({
+        where: { partnerId: { not: null }, status: { in: PAID_STATUSES }, orderDate: dateWhere },
+        _count: true,
+        _sum: { totalAmount: true },
+      }),
+      this.prisma.order.aggregate({
+        where: {
+          status: { in: PAID_STATUSES },
+          orderDate: dateWhere,
+          OR: [
+            { discountAmount: { gt: 0 } },
+            { promoId: { not: null } },
+            { voucherRedemption: { isNot: null } },
+          ],
+        },
+        _sum: { discountAmount: true, totalAmount: true },
+      }),
+      this.prisma.userVoucher.groupBy({
+        by: ['status'],
+        where: { issuedAt: dateWhere },
+        _count: true,
+      }),
+      this.prisma.campaignExecutionLog.findMany({
+        where: { runAt: dateWhere },
+        orderBy: { runAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.walletLedger.findMany({
+        where: { createdAt: dateWhere },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        include: { wallet: { include: { customer: { include: { user: true } }, partner: true } }, order: true },
+      }),
+    ]);
+
+    return {
+      month: month ?? start.toISOString().slice(0, 7),
+      dashboard: {
+        totalVoucherIssued: issued,
+        totalVoucherUsed: used,
+        voucherBurnRate: issued > 0 ? Number(((used / issued) * 100).toFixed(2)) : 0,
+        totalBonusBalanceIssued: toNum(bonusIssued._sum.amount),
+        totalOutstandingPoint: pointAgg._sum.pointBalance ?? 0,
+        b2bTransactionVolume: toNum(b2bOrders._sum.totalAmount),
+        b2bTransactionCount: b2bOrders._count,
+        promoRevenueImpact: toNum(revenueImpact._sum.discountAmount),
+        promoDrivenRevenue: toNum(revenueImpact._sum.totalAmount),
+      },
+      voucherByStatus: voucherByStatus.map((item) => ({
+        status: item.status,
+        count: item._count,
+      })),
+      campaignLogs,
+      walletLedgers,
+    };
   }
 }

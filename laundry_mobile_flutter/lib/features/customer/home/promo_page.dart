@@ -6,6 +6,11 @@ class _PromoPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final promos = context.watch<CustomerController>().promos;
+    final vouchers = context.watch<CustomerController>().vouchers;
+    final activeVouchers = vouchers.where((v) => v.status == 'ACTIVE').toList();
+    final inactiveVouchers = vouchers
+        .where((v) => v.status != 'ACTIVE')
+        .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -29,6 +34,32 @@ class _PromoPage extends StatelessWidget {
                 style: TextStyle(fontSize: 14, color: _textMuted, height: 1.4),
               ),
               const SizedBox(height: 20),
+              if (activeVouchers.isNotEmpty) ...[
+                const Text(
+                  'Voucher Bisa Dipakai',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: _textDark,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ...activeVouchers.map(_VoucherCard.new),
+                const SizedBox(height: 16),
+              ],
+              if (inactiveVouchers.isNotEmpty) ...[
+                const Text(
+                  'Voucher Tidak Aktif',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: _textDark,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ...inactiveVouchers.map(_VoucherCard.new),
+                const SizedBox(height: 16),
+              ],
               if (promos.isEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 40),
@@ -49,7 +80,9 @@ class _PromoPage extends StatelessWidget {
                               final user = auth.user;
                               final token = auth.accessToken;
                               if (user != null && token != null) {
-                                context.read<CustomerController>().loadDashboard(
+                                context
+                                    .read<CustomerController>()
+                                    .loadDashboard(
                                       user: user,
                                       accessToken: token,
                                     );
@@ -74,6 +107,72 @@ class _PromoPage extends StatelessWidget {
   }
 }
 
+class _VoucherCard extends StatelessWidget {
+  const _VoucherCard(this.voucher);
+
+  final UserVoucher voucher;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = voucher.status == 'ACTIVE';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: active ? _primary : _line),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.confirmation_number_outlined,
+            color: active ? _primary : _textMuted,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  voucher.templateName,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: _textDark,
+                  ),
+                ),
+                Text(
+                  '${voucher.code} • ${voucher.status}',
+                  style: const TextStyle(fontSize: 12, color: _textMuted),
+                ),
+                if (voucher.expiresAt != null)
+                  Text(
+                    'Berlaku s.d. ${_formatDateId(voucher.expiresAt!)}',
+                    style: const TextStyle(fontSize: 12, color: _textMuted),
+                  ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: active
+                ? () {
+                    Clipboard.setData(ClipboardData(text: voucher.code));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Voucher ${voucher.code} disalin.'),
+                      ),
+                    );
+                  }
+                : null,
+            child: const Text('Salin'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Label periode promo (mis. "Berlaku s.d. 30 Juni 2026").
 String _promoPeriodLabel(PromoSummary promo) =>
     'Berlaku s.d. ${_formatDateId(promo.endDate)}';
@@ -81,17 +180,27 @@ String _promoPeriodLabel(PromoSummary promo) =>
 /// Gambar promo: pakai [url] (network) bila ada, fallback ke aset/placeholder.
 Widget _promoImage(String? url, {BoxFit fit = BoxFit.cover}) {
   Widget placeholder() => Container(
-        color: AppColors.tintBlueAlt,
-        child: const Center(
-          child: Icon(Icons.image_outlined,
-              size: 48, color: AppColors.textMutedLight),
-        ),
-      );
+    color: AppColors.tintBlueAlt,
+    child: const Center(
+      child: Icon(
+        Icons.image_outlined,
+        size: 48,
+        color: AppColors.textMutedLight,
+      ),
+    ),
+  );
   if (url != null && url.trim().isNotEmpty) {
-    return Image.network(url, fit: fit, errorBuilder: (_, _, _) => placeholder());
+    return Image.network(
+      url,
+      fit: fit,
+      errorBuilder: (_, _, _) => placeholder(),
+    );
   }
-  return Image.asset('assets/mockups/promo_banner.png',
-      fit: fit, errorBuilder: (_, _, _) => placeholder());
+  return Image.asset(
+    'assets/mockups/promo_banner.png',
+    fit: fit,
+    errorBuilder: (_, _, _) => placeholder(),
+  );
 }
 
 class _PromoCard extends StatelessWidget {
@@ -146,11 +255,7 @@ class _PromoCard extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              const Icon(
-                Icons.local_offer_outlined,
-                size: 14,
-                color: _primary,
-              ),
+              const Icon(Icons.local_offer_outlined, size: 14, color: _primary),
               const SizedBox(width: 6),
               Text(
                 _promoPeriodLabel(promo),
@@ -201,10 +306,7 @@ class _PromoCard extends StatelessWidget {
                   icon: const Icon(Icons.copy, size: 15),
                   label: const Text(
                     'Salin',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],

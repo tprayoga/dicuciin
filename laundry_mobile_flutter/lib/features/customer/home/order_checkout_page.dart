@@ -9,6 +9,82 @@ class _OrderCheckoutPage extends StatefulWidget {
   State<_OrderCheckoutPage> createState() => _OrderCheckoutPageState();
 }
 
+class _LoyaltySummaryCard extends StatelessWidget {
+  const _LoyaltySummaryCard({required this.data, required this.quote});
+
+  final _CheckoutData data;
+  final PricingQuote? quote;
+
+  @override
+  Widget build(BuildContext context) {
+    final q = quote;
+    final base = q?.basePrice.round() ?? data.price;
+    final happy = q?.happyHourDiscount.round() ?? 0;
+    final voucher = q?.voucherDiscount.round() ?? 0;
+    final b2b = q?.b2bDiscount.round() ?? 0;
+    final total = q?.finalAmount.round() ?? data.price;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  data.machineName,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    color: _textDark,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const _SummaryStatusChip(),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _DetailRow(left: 'Kategori Mesin', right: data.machineType.label),
+          _DetailRow(left: 'Kapasitas', right: data.capacity),
+          _DetailRow(left: 'Estimasi', right: data.estimasi),
+          _DetailRow(left: 'Tanggal', right: data.date),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+          _DetailRow(left: 'Harga Normal', right: _formatRupiah(base)),
+          _DetailRow(
+            left: 'Happy Hour Discount',
+            right: '- ${_formatRupiah(happy)}',
+          ),
+          if (b2b > 0)
+            _DetailRow(left: 'B2B Discount', right: '- ${_formatRupiah(b2b)}'),
+          _DetailRow(
+            left: 'Voucher Discount',
+            right: '- ${_formatRupiah(voucher)}',
+          ),
+          _DetailRow(
+            left: 'Estimasi Point',
+            right: '${q?.pointsToEarn ?? 0} poin',
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+          _DetailRow(
+            left: 'Total Bayar',
+            right: _formatRupiah(total),
+            greenRight: true,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
   static const _banks = [
     'Bank BCA',
@@ -25,11 +101,23 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
   final TextEditingController _voucherController = TextEditingController();
   bool _voucherApplied = false;
   String _appliedVoucherCode = '';
-  int _discount = 0;
+  PricingQuote? _quote;
+  List<VoucherEligibility> _voucherEligibility = const [];
+  bool _quoteLoading = true;
+  bool _voucherLoading = false;
   // Order nyata yang sudah dibuat di backend (dibuat sekali saat bayar).
   // Direset bila voucher berubah agar diskon ikut terhitung ulang.
   CreatedOrder? _createdOrder;
   bool _processing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshQuote();
+      _loadVoucherEligibility();
+    });
+  }
 
   @override
   void dispose() {
@@ -39,7 +127,15 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
 
   bool get _canApplyVoucher => _voucherController.text.trim().isNotEmpty;
 
-  int get _total => (widget.data.price - _discount).clamp(0, widget.data.price);
+  List<CreateOrderItemInput> get _items => [
+    CreateOrderItemInput(
+      serviceId: widget.data.serviceId,
+      quantity: 1,
+      machineType: widget.data.machineType.label.toUpperCase(),
+    ),
+  ];
+
+  int get _total => (_quote?.finalAmount ?? widget.data.price).round();
 
   @override
   Widget build(BuildContext context) {
@@ -53,16 +149,40 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
                 children: [
-                  _CheckoutSummaryCard(
-                    data: widget.data,
-                    discount: _discount,
-                    total: _total,
-                  ),
+                  _LoyaltySummaryCard(data: widget.data, quote: _quote),
+                  if (_quoteLoading) ...[
+                    const SizedBox(height: 8),
+                    const LinearProgressIndicator(minHeight: 3),
+                  ],
                   const SizedBox(height: 18),
                   _sectionTitle(
-                    title: 'Voucher/Kode Promo',
-                    subtitle: 'Masukkan voucher jika kamu punya kode promo.',
+                    title: 'Promo Eligible',
+                    subtitle:
+                        'Harga promo dihitung backend, termasuk happy hour.',
                   ),
+                  const SizedBox(height: 10),
+                  if ((_quote?.happyHourDiscount ?? 0) > 0)
+                    _infoPill(
+                      Icons.schedule,
+                      'Happy hour aktif: hemat ${_formatRupiah(_quote!.happyHourDiscount.round())}',
+                      AppColors.successBg,
+                      AppColors.success,
+                    )
+                  else
+                    _infoPill(
+                      Icons.info_outline,
+                      'Belum ada happy hour untuk mesin dan waktu ini.',
+                      AppColors.tintBlueAlt,
+                      _primary,
+                    ),
+                  const SizedBox(height: 18),
+                  _sectionTitle(
+                    title: 'Voucher Kamu',
+                    subtitle:
+                        'Pilih maksimal 1 voucher. Voucher tidak valid tetap ditampilkan dengan alasan.',
+                  ),
+                  const SizedBox(height: 10),
+                  _voucherList(),
                   const SizedBox(height: 10),
                   Container(
                     padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
@@ -90,12 +210,11 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
                                         _appliedVoucherCode) {
                                   _voucherApplied = false;
                                   _appliedVoucherCode = '';
-                                  _discount = 0;
                                 }
                               });
                             },
                             decoration: const InputDecoration(
-                              hintText: 'Masukkan kode promo',
+                              hintText: 'Atau masukkan kode voucher',
                               hintStyle: TextStyle(
                                 fontSize: 14,
                                 color: _textMuted,
@@ -151,7 +270,7 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
                                 ],
                               )
                             : const Text(
-                                'Voucher akan dihitung saat checkout.',
+                                'Pilih satu voucher atau masukkan kode manual.',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: _textMuted,
@@ -364,6 +483,126 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
     );
   }
 
+  Widget _infoPill(IconData icon, String text, Color bg, Color fg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: fg.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: fg, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: fg,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _voucherList() {
+    if (_voucherLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_voucherEligibility.isEmpty) {
+      return _infoPill(
+        Icons.confirmation_number_outlined,
+        'Belum ada voucher di akun ini.',
+        AppColors.surfaceAlt,
+        _textMuted,
+      );
+    }
+    final eligible = _voucherEligibility.where((v) => v.eligible).toList();
+    final invalid = _voucherEligibility.where((v) => !v.eligible).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (eligible.isNotEmpty) ...[
+          const Text(
+            'Bisa digunakan',
+            style: TextStyle(
+              fontSize: 13,
+              color: _textDark,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...eligible.map((item) => _voucherTile(item)),
+        ],
+        if (invalid.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text(
+            'Tidak bisa digunakan',
+            style: TextStyle(
+              fontSize: 13,
+              color: _textDark,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...invalid.map((item) => _voucherTile(item)),
+        ],
+      ],
+    );
+  }
+
+  Widget _voucherTile(VoucherEligibility item) {
+    final selected =
+        _voucherApplied && _appliedVoucherCode == item.voucher.code;
+    final saving = item.quote?.voucherDiscount.round() ?? 0;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: selected ? _primary : _line),
+      ),
+      child: ListTile(
+        dense: true,
+        onTap: item.eligible
+            ? () => _selectVoucher(item.voucher.code, item.quote)
+            : null,
+        leading: Icon(
+          item.eligible
+              ? Icons.confirmation_number_outlined
+              : Icons.block_outlined,
+          color: item.eligible ? _primary : _textMuted,
+        ),
+        title: Text(
+          item.voucher.templateName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Text(
+          item.eligible
+              ? '${item.voucher.code} • Hemat ${_formatRupiah(saving)}'
+              : '${item.voucher.code} • ${item.reason ?? 'Tidak valid'}',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: selected
+            ? const Icon(Icons.check_circle, color: _primary)
+            : item.eligible
+            ? const Icon(Icons.radio_button_unchecked, color: _textMuted)
+            : null,
+      ),
+    );
+  }
+
   Widget _bottomPayBar() {
     return Container(
       decoration: const BoxDecoration(
@@ -492,37 +731,17 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
     }
 
     try {
-      final result = await context.read<CustomerController>().validatePromo(
-            user: user,
-            accessToken: token,
-            code: code,
-            orderAmount: widget.data.price,
-            serviceId: widget.data.serviceId,
-            outletId: widget.data.outletId,
-          );
+      final result = await context.read<CustomerController>().quotePricing(
+        user: user,
+        accessToken: token,
+        outletId: widget.data.outletId,
+        items: _items,
+        voucherCode: code,
+      );
       if (!mounted) return;
-      if (!result.isValid || result.discount <= 0) {
-        messenger.showSnackBar(
-          SnackBar(content: Text('Kode promo "$code" tidak memberi potongan.')),
-        );
-        return;
-      }
-      setState(() {
-        _voucherApplied = true;
-        _appliedVoucherCode = code;
-        _discount = result.discount.round();
-        _createdOrder = null; // promo berubah → order dibuat ulang
-        _voucherController.text = code;
-        _voucherController.selection = TextSelection.collapsed(
-          offset: _voucherController.text.length,
-        );
-      });
+      _selectVoucher(code, result);
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            'Voucher $code diterapkan, hemat ${_formatRupiah(_discount)}.',
-          ),
-        ),
+        SnackBar(content: Text('Voucher $code diterapkan.')),
       );
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -539,9 +758,71 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
     setState(() {
       _voucherApplied = false;
       _appliedVoucherCode = '';
-      _discount = 0;
       _createdOrder = null; // promo dilepas → order dibuat ulang tanpa diskon
       _voucherController.clear();
+    });
+    _refreshQuote();
+  }
+
+  void _selectVoucher(String code, PricingQuote? quote) {
+    setState(() {
+      _voucherApplied = true;
+      _appliedVoucherCode = code;
+      _quote = quote ?? _quote;
+      _createdOrder = null;
+      _voucherController.text = code;
+      _voucherController.selection = TextSelection.collapsed(
+        offset: _voucherController.text.length,
+      );
+    });
+  }
+
+  Future<void> _refreshQuote() async {
+    final auth = context.read<AuthController>();
+    final user = auth.user;
+    final token = auth.accessToken;
+    if (user == null || token == null || widget.data.serviceId.isEmpty) {
+      setState(() => _quoteLoading = false);
+      return;
+    }
+    setState(() => _quoteLoading = true);
+    try {
+      final quote = await context.read<CustomerController>().quotePricing(
+        user: user,
+        accessToken: token,
+        outletId: widget.data.outletId,
+        items: _items,
+        voucherCode: _voucherApplied ? _appliedVoucherCode : null,
+      );
+      if (!mounted) return;
+      setState(() {
+        _quote = quote;
+      });
+    } catch (_) {
+      if (!mounted) return;
+    } finally {
+      if (mounted) setState(() => _quoteLoading = false);
+    }
+  }
+
+  Future<void> _loadVoucherEligibility() async {
+    final auth = context.read<AuthController>();
+    final user = auth.user;
+    final token = auth.accessToken;
+    if (user == null || token == null || widget.data.serviceId.isEmpty) return;
+    setState(() => _voucherLoading = true);
+    final items = await context
+        .read<CustomerController>()
+        .getVoucherEligibility(
+          user: user,
+          accessToken: token,
+          outletId: widget.data.outletId,
+          items: _items,
+        );
+    if (!mounted) return;
+    setState(() {
+      _voucherEligibility = items;
+      _voucherLoading = false;
     });
   }
 
@@ -574,7 +855,11 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
       accessToken: token,
       outletId: widget.data.outletId,
       items: [
-        CreateOrderItemInput(serviceId: widget.data.serviceId, quantity: 1),
+        CreateOrderItemInput(
+          serviceId: widget.data.serviceId,
+          quantity: 1,
+          machineType: widget.data.machineType.label.toUpperCase(),
+        ),
       ],
       promoCode: _voucherApplied ? _appliedVoucherCode : null,
     );
@@ -620,20 +905,21 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
         ),
       );
       if (create != true || !mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const _WalletPinSettingsPage()),
-      );
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const _WalletPinSettingsPage()));
       return;
     }
 
-    // Buat order dulu agar total final (setelah diskon) dihitung server.
-    final order = await _ensureOrder();
-    if (order == null || !mounted) return;
-    final total = order.totalAmount.round();
+    await _refreshQuote();
+    if (!mounted) return;
+    final total = _total;
 
     if (!wallet.canPay(total)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Saldo tidak cukup. Silakan top up dulu.')),
+        const SnackBar(
+          content: Text('Saldo tidak cukup. Silakan top up dulu.'),
+        ),
       );
       return;
     }
@@ -646,21 +932,26 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
     );
     if (verified != true || !mounted) return;
 
-    final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
-    try {
-      await wallet.payOrder(orderId: order.id, amount: total);
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-      return;
-    } catch (_) {
-      if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final auth = context.read<AuthController>();
+    final customerController = context.read<CustomerController>();
+    final result = await customerController.checkoutLoyalty(
+      user: auth.user!,
+      accessToken: auth.accessToken!,
+      outletId: widget.data.outletId,
+      items: _items,
+      voucherCode: _voucherApplied ? _appliedVoucherCode : null,
+    );
+    if (result == null || !mounted) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Pembayaran gagal. Coba lagi.')),
+        SnackBar(
+          content: Text(customerController.errorMessage ?? 'Pembayaran gagal.'),
+        ),
       );
       return;
     }
+    await wallet.loadBalance();
     if (!mounted) return;
 
     messenger.showSnackBar(
@@ -671,8 +962,9 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
         builder: (_) => _OrderSuccessPage(
           data: widget.data,
           methodLabel: 'Saldo',
-          total: total,
-          orderId: order.id,
+          total: result.breakdown.finalAmount.round(),
+          orderId: result.orderId,
+          result: result,
         ),
       ),
     );
@@ -691,6 +983,21 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
   Future<void> _runPayment() async {
     if (_method == _PaymentMethod.saldo) {
       await _payWithWallet();
+      return;
+    }
+
+    if (_voucherApplied || ((_quote?.happyHourDiscount ?? 0) > 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Voucher dan happy hour loyalty saat ini diproses lewat Saldo.',
+          ),
+        ),
+      );
+      setState(() {
+        _method = _PaymentMethod.saldo;
+        _vaExpanded = false;
+      });
       return;
     }
 

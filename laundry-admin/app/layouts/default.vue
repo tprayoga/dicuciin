@@ -15,6 +15,7 @@ const navItems = [
   { label: 'Transaksi/Order', icon: 'i-heroicons-credit-card', to: '/orders' },
   { label: 'Laporan Keuangan', icon: 'i-heroicons-chart-bar-square', to: '/reports/finance' },
   { label: 'Promo & Banner', icon: 'i-heroicons-megaphone', to: '/marketing' },
+  { label: 'Promotion & Loyalty', icon: 'i-heroicons-gift', to: '/promotion-loyalty' },
   { label: 'Ulasan & Feedback', icon: 'i-heroicons-star', to: '/reviews' },
   { label: 'Kinerja Staff', icon: 'i-heroicons-trophy', to: '/staff-performance' },
 ]

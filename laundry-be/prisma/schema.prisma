@@ -106,6 +106,71 @@ enum BookingStatus {
   EXPIRED
 }
 
+// --- Promotion & Loyalty Engine ---
+
+enum WalletType {
+  MAIN_BALANCE // saldo utama dari top up (refundable; diakui revenue saat dipakai)
+  BONUS_BALANCE // saldo bonus dari cashback/promo (non-withdrawable)
+  POINT_BALANCE // poin loyalty (non-withdrawable, satuan poin)
+}
+
+enum LedgerDirection {
+  CREDIT
+  DEBIT
+}
+
+enum UserSegment {
+  RETAIL
+  B2B
+}
+
+enum VoucherType {
+  FREE_WASH
+  FREE_DRY
+  FREE_WASH_DRY
+  NOMINAL_DISCOUNT
+  PERCENTAGE_DISCOUNT
+  LOTTERY_TICKET
+  TIER_EXCLUSIVE
+  B2B_EXCLUSIVE
+}
+
+enum VoucherStatus {
+  ACTIVE
+  USED
+  EXPIRED
+  CANCELLED
+}
+
+enum MembershipTier {
+  SILVER
+  GOLD
+  PLATINUM
+  DIAMOND
+}
+
+enum B2BPartnerTier {
+  BUSINESS_PARTNER
+  GOLD_PARTNER
+  PLATINUM_PARTNER
+  DIAMOND_PARTNER
+}
+
+enum CampaignType {
+  CASHBACK_TOPUP
+  LONG_TIME_NO_SEE
+  REFERRAL
+  BIRTHDAY_REWARD
+  ANNIVERSARY_REWARD
+  MONTHLY_TIER_BENEFIT
+}
+
+enum ReferralStatus {
+  PENDING // referee terdaftar, belum transaksi pertama
+  REWARDED // transaksi pertama → reward diberikan
+  EXPIRED
+}
+
 // ============================================
 // MODELS
 // ============================================
@@ -130,6 +195,7 @@ model User {
   reviews        Review[]       @relation("StaffReviews")
   staffOrders    Order[]        @relation("StaffOrders")
   kioskSessions  KioskSession[] @relation("StaffKioskSessions")
+  b2bPartner     B2BPartner?
 
   @@index([email])
   @@index([phone])
@@ -149,13 +215,15 @@ model Customer {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  addresses   CustomerAddress[]
-  orders      Order[]
-  wallet      Wallet?
-  promoUsages PromoUsage[]
-  reviews     Review[]
-  bookings    MachineBooking[]
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addresses        CustomerAddress[]
+  orders           Order[]
+  wallet           Wallet?
+  promoUsages      PromoUsage[]
+  reviews          Review[]
+  bookings         MachineBooking[]
+  userVouchers     UserVoucher[]
+  membershipStatus UserMembershipStatus?
 
   @@index([memberCode])
   @@map("customers")
@@ -199,11 +267,13 @@ model Outlet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  outletUsers   OutletUser[]
-  servicePrices ServicePrice[]
-  orders        Order[]
-  kiosks        Kiosk[]
-  iotDevices    IotDevice[]
+  outletUsers    OutletUser[]
+  servicePrices  ServicePrice[]
+  orders         Order[]
+  kiosks         Kiosk[]
+  iotDevices     IotDevice[]
+  happyHourRules HappyHourRule[]
+  b2bPricingRules B2BPricingRule[]
 
   @@index([code])
   @@map("outlets")
@@ -239,8 +309,10 @@ model Service {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  servicePrices ServicePrice[]
-  orderItems    OrderItem[]
+  servicePrices  ServicePrice[]
+  orderItems     OrderItem[]
+  happyHourRules HappyHourRule[]
+  b2bPricingRules B2BPricingRule[]
 
   @@map("services")
 }
@@ -275,6 +347,7 @@ model Order {
   kioskId           String?
   staffUserId       String?
   promoId           String?
+  partnerId         String?
   sourcePlatform    String
   orderDate         DateTime    @default(now())
   status            OrderStatus @default(DRAFT)
@@ -296,11 +369,15 @@ model Order {
   kiosk              Kiosk?              @relation(fields: [kioskId], references: [id], onDelete: SetNull)
   staff              User?               @relation("StaffOrders", fields: [staffUserId], references: [id], onDelete: SetNull)
   promo              Promo?              @relation(fields: [promoId], references: [id], onDelete: SetNull)
+  partner            B2BPartner?         @relation(fields: [partnerId], references: [id], onDelete: SetNull)
   items              OrderItem[]
   statusLogs         OrderStatusLog[]
   payments           Payment[]
   walletTransactions WalletTransaction[]
+  walletLedgers      WalletLedger[]
+  pointLedgers       PointLedger[]
   promoUsages        PromoUsage[]
+  voucherRedemption  VoucherRedemption?
   review             Review?
 
   @@index([orderNumber])
@@ -310,6 +387,7 @@ model Order {
   @@index([status])
   @@index([orderDate])
   @@index([promoId])
+  @@index([partnerId])
   @@map("orders")
 }
 
@@ -369,14 +447,20 @@ model Payment {
 }
 
 model Wallet {
-  id         String   @id @default(uuid())
-  customerId String   @unique
-  balance    Decimal  @default(0) @db.Decimal(14, 2)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id           String   @id @default(uuid())
+  customerId   String?  @unique // RETAIL (kompatibel data lama)
+  partnerId    String?  @unique // B2B deposit
+  balance      Decimal  @default(0) @db.Decimal(14, 2) // = MAIN_BALANCE (top up)
+  bonusBalance Decimal  @default(0) @db.Decimal(14, 2) // cashback/promo
+  pointBalance Int      @default(0) // poin loyalty (cache; sumber kebenaran: point_ledgers)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  customer     Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer     Customer?           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  partner      B2BPartner?         @relation(fields: [partnerId], references: [id], onDelete: Cascade)
   transactions WalletTransaction[]
+  ledgers      WalletLedger[]
+  pointLedgers PointLedger[]
 
   @@map("wallets")
 }
@@ -697,4 +781,465 @@ model MachineBooking {
   @@index([customerId])
   @@index([bookingCode])
   @@map("machine_bookings")
+}
+
+// ============================================
+// PROMOTION & LOYALTY ENGINE
+// ============================================
+
+/// Ledger uang multi-saldo (MAIN/BONUS/POINT). Setiap mutasi saldo wajib menulis
+/// satu baris (keputusan 9). balanceBefore/After untuk audit & rekonsiliasi.
+model WalletLedger {
+  id             String          @id @default(uuid())
+  walletId       String
+  orderId        String?
+  walletType     WalletType
+  direction      LedgerDirection
+  amount         Decimal         @db.Decimal(14, 2) // magnitudo (positif)
+  balanceBefore  Decimal         @db.Decimal(14, 2)
+  balanceAfter   Decimal         @db.Decimal(14, 2)
+  referenceType  String? // 'TOPUP' | 'CASHBACK' | 'VOUCHER' | 'REFUND' | ...
+  referenceId    String?
+  description    String?
+  idempotencyKey String?         @unique
+  createdAt      DateTime        @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  order  Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([walletId])
+  @@index([walletType])
+  @@index([orderId])
+  @@index([referenceType, referenceId])
+  @@index([idempotencyKey])
+  @@map("wallet_ledgers")
+}
+
+/// Ledger poin loyalty. Poin hanya dari transaksi sukses (keputusan 3) & tak bisa
+/// diuangkan (keputusan 8). expiresAt untuk batch kedaluwarsa.
+model PointLedger {
+  id             String          @id @default(uuid())
+  walletId       String
+  orderId        String?
+  direction      LedgerDirection
+  points         Int // magnitudo (positif)
+  balanceBefore  Int
+  balanceAfter   Int
+  sourceType     String? // 'ORDER' | 'REDEMPTION' | 'EXPIRY' | 'ADJUST' | 'REFUND_REVERSAL'
+  sourceId       String?
+  expiresAt      DateTime?
+  description    String?
+  idempotencyKey String?         @unique
+  createdAt      DateTime        @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  order  Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([walletId])
+  @@index([orderId])
+  @@index([direction])
+  @@index([expiresAt])
+  @@index([idempotencyKey])
+  @@map("point_ledgers")
+}
+
+/// Definisi voucher (template). Beda dgn Promo (kode publik): voucher diterbitkan
+/// ke pemilik tertentu. Tidak bisa digabung (keputusan 5): isStackable selalu false.
+model VoucherTemplate {
+  id                 String          @id @default(uuid())
+  code               String          @unique
+  name               String
+  description        String?
+  bannerUrl          String?
+  segment            UserSegment     @default(RETAIL)
+  voucherType        VoucherType
+  value              Decimal         @default(0) @db.Decimal(14, 2)
+  maxDiscount        Decimal?        @db.Decimal(14, 2)
+  minTransaction     Decimal?        @db.Decimal(14, 2)
+  applicableServices String? // CSV serviceId (konsisten PromoRule)
+  applicableOutlets  String? // CSV outletId
+  tierRestriction    MembershipTier? // batasi ke tier retail tertentu
+  b2bTierRestriction B2BPartnerTier? // batasi ke tier B2B tertentu
+  validityDays       Int? // masa berlaku sejak diterbitkan
+  startDate          DateTime?
+  endDate            DateTime?
+  isStackable        Boolean         @default(false)
+  quota              Int?
+  issuedCount        Int             @default(0)
+  perUserLimit       Int?            @default(1)
+  pointCost          Int? // bila ditukar dari poin
+  isActive           Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  userVouchers    UserVoucher[]
+  campaignRewards CampaignReward[]
+
+  @@index([code])
+  @@index([segment])
+  @@index([isActive])
+  @@map("voucher_templates")
+}
+
+/// Voucher milik 1 pemilik (retail customer atau B2B partner).
+model UserVoucher {
+  id         String        @id @default(uuid())
+  templateId String
+  customerId String?
+  partnerId  String?
+  segment    UserSegment
+  code       String        @unique // kode instance unik
+  status     VoucherStatus @default(ACTIVE)
+  sourceType String? // 'CAMPAIGN' | 'REFERRAL' | 'BIRTHDAY' | 'MANUAL' | 'POINT_REDEMPTION' | ...
+  sourceId   String?
+  issuedAt   DateTime      @default(now())
+  expiresAt  DateTime?
+  usedAt     DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  template   VoucherTemplate    @relation(fields: [templateId], references: [id])
+  customer   Customer?          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  partner    B2BPartner?        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  redemption VoucherRedemption?
+
+  @@index([templateId])
+  @@index([customerId])
+  @@index([partnerId])
+  @@index([status])
+  @@index([code])
+  @@map("user_vouchers")
+}
+
+/// Audit pemakaian voucher (keputusan 9) + jalur pembalikan refund (keputusan 10).
+/// orderId @unique → 1 voucher per transaksi (keputusan 5).
+model VoucherRedemption {
+  id              String    @id @default(uuid())
+  userVoucherId   String    @unique
+  orderId         String    @unique
+  customerId      String?
+  partnerId       String?
+  discountApplied Decimal   @db.Decimal(14, 2)
+  status          String    @default("APPLIED") // APPLIED | REVERSED
+  redeemedAt      DateTime  @default(now())
+  reversedAt      DateTime?
+
+  userVoucher UserVoucher @relation(fields: [userVoucherId], references: [id], onDelete: Cascade)
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([partnerId])
+  @@map("voucher_redemptions")
+}
+
+/// Konfigurasi tier membership retail (Silver/Gold/Platinum/Diamond).
+model MembershipTierConfig {
+  id                 String         @id @default(uuid())
+  tier               MembershipTier @unique
+  name               String
+  level              Int            @unique // 1=Silver terendah
+  thresholdSpending  Decimal?       @db.Decimal(14, 2) // earned spending utk naik
+  thresholdTxnCount  Int? // ATAU jumlah transaksi sukses
+  pointMultiplier    Decimal        @default(1) @db.Decimal(6, 2)
+  cashbackRate       Decimal        @default(0) @db.Decimal(5, 2) // % ke BONUS
+  benefitDescription String?
+  color              String?
+  isActive           Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@map("membership_tiers")
+}
+
+/// Konfigurasi tier partner B2B.
+model B2BPartnerTierConfig {
+  id                  String         @id @default(uuid())
+  tier                B2BPartnerTier @unique
+  name                String
+  level               Int            @unique
+  thresholdSpending   Decimal?       @db.Decimal(14, 2)
+  thresholdTxnCount   Int?
+  discountRate        Decimal        @default(0) @db.Decimal(5, 2) // % potongan harga partner
+  pointMultiplier     Decimal        @default(1) @db.Decimal(6, 2)
+  cashbackRate        Decimal        @default(0) @db.Decimal(5, 2)
+  benefitDescription  String?
+  isActive            Boolean        @default(true)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  @@map("b2b_partner_tiers")
+}
+
+/// Special pricing B2B per partner/tier/outlet/service/machine. Jika rule cocok,
+/// rule ini meng-override discount tier B2B agar tidak terjadi diskon berlapis.
+model B2BPricingRule {
+  id          String          @id @default(uuid())
+  name        String
+  partnerId   String?
+  tier        B2BPartnerTier?
+  outletId    String?
+  serviceId   String?
+  machineType String?
+  priceType   String // DISCOUNT_PERCENT | FIXED_DISCOUNT | FIXED_PRICE
+  value       Decimal         @db.Decimal(14, 2)
+  startDate   DateTime?
+  endDate     DateTime?
+  priority    Int             @default(0)
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  partner B2BPartner? @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  outlet  Outlet?     @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  service Service?    @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId])
+  @@index([tier])
+  @@index([outletId])
+  @@index([serviceId])
+  @@index([machineType])
+  @@index([isActive])
+  @@map("b2b_pricing_rules")
+}
+
+/// Status tier per pemilik (retail/B2B). earnedSpending mengakumulasi transaksi
+/// sukses; top up DIKECUALIKAN (keputusan 4).
+model UserMembershipStatus {
+  id                 String          @id @default(uuid())
+  customerId         String?         @unique
+  partnerId          String?         @unique
+  segment            UserSegment
+  currentTier        MembershipTier? // utk RETAIL
+  currentB2BTier     B2BPartnerTier? // utk B2B
+  earnedSpending     Decimal         @default(0) @db.Decimal(14, 2)
+  successfulTxnCount Int             @default(0)
+  achievedAt         DateTime        @default(now())
+  evaluatedAt        DateTime        @default(now())
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  customer Customer?   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  partner  B2BPartner? @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([segment])
+  @@map("user_membership_status")
+}
+
+/// Partner B2B. Memakai wallet/deposit, bukan invoice (keputusan 6).
+model B2BPartner {
+  id          String         @id @default(uuid())
+  userId      String?        @unique // akun login PIC (reuse User)
+  partnerCode String         @unique
+  companyName String
+  picName     String
+  phone       String
+  email       String?
+  address     String?
+  tier        B2BPartnerTier @default(BUSINESS_PARTNER)
+  status      String         @default("ACTIVE") // ACTIVE | SUSPENDED
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  user             User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  wallet           Wallet?
+  membershipStatus UserMembershipStatus?
+  userVouchers     UserVoucher[]
+  orders           Order[]
+  pricingRules     B2BPricingRule[]
+
+  @@index([partnerCode])
+  @@map("b2b_partners")
+}
+
+/// Kampanye pemicu reward (cashback top up, LTNS, referral, ulang tahun, dst).
+model Campaign {
+  id          String       @id @default(uuid())
+  type        CampaignType
+  name        String
+  description String?
+  segment     UserSegment  @default(RETAIL)
+  status      String       @default("DRAFT") // DRAFT | ACTIVE | PAUSED | ENDED
+  startDate   DateTime?
+  endDate     DateTime?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  rules         CampaignRule[]
+  rewards       CampaignReward[]
+  issuances     CampaignIssuance[]
+  referrals     Referral[]
+  executionLogs CampaignExecutionLog[]
+
+  @@index([type])
+  @@index([status])
+  @@map("campaigns")
+}
+
+/// Audit penerbitan reward kampanye (keputusan 9) + idempotensi anti dobel-terbit
+/// (mis. ulang tahun 1x/tahun via idempotencyKey).
+model CampaignIssuance {
+  id             String   @id @default(uuid())
+  campaignId     String
+  customerId     String?
+  partnerId      String?
+  userVoucherId  String?
+  pointsAwarded  Int?
+  idempotencyKey String   @unique
+  issuedAt       DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([customerId])
+  @@map("campaign_issuances")
+}
+
+/// Referral: kode milik referrer, ditautkan ke referee. Reward diberikan saat
+/// referee transaksi pertama (bukan saat daftar). refereeCustomerId unik → satu
+/// orang hanya bisa dirujuk sekali.
+model Referral {
+  id                 String         @id @default(uuid())
+  campaignId         String?
+  referrerCustomerId String
+  refereeCustomerId  String?        @unique
+  referralCode       String
+  status             ReferralStatus @default(PENDING)
+  qualifiedAt        DateTime?
+  rewardedAt         DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([referrerCustomerId])
+  @@index([referralCode])
+  @@map("referrals")
+}
+
+/// Audit eksekusi kampanye terjadwal (per run). Melengkapi CampaignIssuance
+/// (per reward) — keputusan 9.
+model CampaignExecutionLog {
+  id           String       @id @default(uuid())
+  campaignId   String?
+  campaignType CampaignType
+  jobName      String // 'birthday' | 'anniversary' | 'long-time-no-see' | 'monthly-tier' | 'cashback-topup' | 'referral'
+  runAt        DateTime     @default(now())
+  scannedCount Int          @default(0)
+  issuedCount  Int          @default(0)
+  status       String       @default("SUCCESS") // SUCCESS | FAILED
+  message      String?
+
+  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId])
+  @@index([campaignType])
+  @@index([runAt])
+  @@map("campaign_execution_logs")
+}
+
+/// Syarat kampanye sebagai pasangan key/value (mis. inactiveDays=30, minTopup=100000).
+model CampaignRule {
+  id         String   @id @default(uuid())
+  campaignId String
+  ruleKey    String
+  ruleValue  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@map("campaign_rules")
+}
+
+/// Reward kampanye: voucher / poin / cashback, dengan target penerima.
+model CampaignReward {
+  id                String   @id @default(uuid())
+  campaignId        String
+  rewardType        String // 'VOUCHER' | 'POINT' | 'CASHBACK'
+  voucherTemplateId String?
+  rewardPoints      Int?
+  rewardCashback    Decimal? @db.Decimal(14, 2)
+  targetParty       String   @default("SELF") // SELF | REFERRER | REFEREE
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  campaign        Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  voucherTemplate VoucherTemplate? @relation(fields: [voucherTemplateId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId])
+  @@map("campaign_rewards")
+}
+
+/// Aturan happy hour: ubah harga mesin/layanan per hari & jam.
+model HappyHourRule {
+  id             String    @id @default(uuid())
+  name           String
+  outletId       String?
+  serviceId      String?
+  machineType    String?
+  daysOfWeek     String // CSV "1,2,3" (1=Senin)
+  startTime      String // "18:00"
+  endTime        String // "21:00"
+  timezone       String    @default("Asia/Jakarta")
+  adjustmentType String // PERCENTAGE_OFF | FIXED_OFF | FIXED_PRICE
+  value          Decimal   @db.Decimal(14, 2)
+  priority       Int       @default(0)
+  startDate      DateTime?
+  endDate        DateTime?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  outlet  Outlet?  @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  service Service? @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([outletId])
+  @@index([serviceId])
+  @@index([isActive])
+  @@map("happy_hour_rules")
+}
+
+/// Aturan promosi yang dapat dipakai ulang (batas transaksi, segment, tier, dll).
+model PromotionRule {
+  id                 String          @id @default(uuid())
+  name               String
+  segment            UserSegment?
+  minTransaction     Decimal?        @db.Decimal(14, 2)
+  maxDiscount        Decimal?        @db.Decimal(14, 2)
+  applicableServices String?
+  applicableOutlets  String?
+  tierRestriction    MembershipTier?
+  maxUsagePerUser    Int?
+  isActive           Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@map("promotion_rules")
+}
+
+/// Log perhitungan harga (audit pricing pipeline).
+model PricingCalculationLog {
+  id                  String       @id @default(uuid())
+  orderId             String?
+  customerId          String?
+  partnerId           String?
+  segment             UserSegment?
+  subtotal            Decimal      @db.Decimal(14, 2)
+  happyHourAdjustment Decimal      @default(0) @db.Decimal(14, 2)
+  discountAmount      Decimal      @default(0) @db.Decimal(14, 2)
+  discountSource      String? // 'VOUCHER' | 'PROMO' | 'NONE'
+  voucherId           String?
+  promoId             String?
+  totalAmount         Decimal      @db.Decimal(14, 2)
+  pointsToEarn        Int          @default(0)
+  cashbackToCredit    Decimal      @default(0) @db.Decimal(14, 2)
+  breakdown           Json?
+  createdAt           DateTime     @default(now())
+
+  @@index([orderId])
+  @@index([customerId])
+  @@index([partnerId])
+  @@map("pricing_calculation_logs")
 }

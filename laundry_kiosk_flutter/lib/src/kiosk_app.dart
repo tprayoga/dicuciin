@@ -426,8 +426,7 @@ class _MachinesScreenState extends State<MachinesScreen> {
                   : machines.isEmpty
                   ? RefreshableEmpty(
                       message:
-                          controller.error ??
-                          'Belum ada mesin di outlet ini.',
+                          controller.error ?? 'Belum ada mesin di outlet ini.',
                       onRetry: controller.loadMachines,
                     )
                   : Column(
@@ -664,6 +663,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final service = controller.selectedService;
     final machine = controller.selectedMachine;
     final price = service?.price ?? 0;
+    final quote = controller.quote;
 
     return Scaffold(
       backgroundColor: background,
@@ -671,7 +671,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         bottom: false,
         child: Column(
           children: [
-            CenterHeader(title: 'Order layanan', onBack: controller.backToMachines),
+            CenterHeader(
+              title: 'Order layanan',
+              onBack: controller.backToMachines,
+            ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
@@ -709,25 +712,50 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        DetailRow(label: 'No. Order', value: controller.createdOrder?.orderNumber ?? '-'),
+                        DetailRow(
+                          label: 'No. Order',
+                          value: controller.createdOrder?.orderNumber ?? '-',
+                        ),
                         DetailRow(
                           label: 'Kategori Mesin',
-                          value: (machine?.isWasher ?? true) ? 'Washer' : 'Dryer',
+                          value: (machine?.isWasher ?? true)
+                              ? 'Washer'
+                              : 'Dryer',
                         ),
-                        DetailRow(label: 'Kapasitas', value: _capacityLabel(service)),
-                        DetailRow(label: 'Estimasi', value: _estimasiLabel(service)),
+                        DetailRow(
+                          label: 'Kapasitas',
+                          value: _capacityLabel(service),
+                        ),
+                        DetailRow(
+                          label: 'Estimasi',
+                          value: _estimasiLabel(service),
+                        ),
                         DetailRow(label: 'Tanggal', value: _todayLabel()),
                         const SizedBox(height: 10),
                         const Divider(height: 1),
                         const SizedBox(height: 10),
-                        DetailRow(label: 'Harga', value: rupiah(price)),
-                        DetailRow(label: 'Diskon', value: rupiah(0)),
+                        DetailRow(
+                          label: 'Harga Normal',
+                          value: rupiah(quote?.basePrice ?? price),
+                        ),
+                        DetailRow(
+                          label: 'Happy Hour Discount',
+                          value: '- ${rupiah(quote?.happyHourDiscount ?? 0)}',
+                        ),
+                        DetailRow(
+                          label: 'Voucher Discount',
+                          value: '- ${rupiah(quote?.voucherDiscount ?? 0)}',
+                        ),
+                        DetailRow(
+                          label: 'Estimasi Point',
+                          value: '${quote?.pointsToEarn ?? 0} poin',
+                        ),
                         const SizedBox(height: 10),
                         const DashedDivider(),
                         const SizedBox(height: 10),
                         DetailRow(
                           label: 'Total Bayar',
-                          value: rupiah(price),
+                          value: rupiah(quote?.finalAmount ?? price),
                           emphasized: true,
                         ),
                       ],
@@ -747,6 +775,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       'Masukkan voucher/kode promo',
                       Icons.confirmation_number_outlined,
                     ),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        controller.loadQuote(voucherCode: voucher.text),
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('Cek Promo'),
                   ),
                   const SizedBox(height: 22),
                   const SectionTitle('Metode Pembayaran'),
@@ -904,7 +939,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
         bottom: false,
         child: Column(
           children: [
-            CenterHeader(title: 'Pembayaran', onBack: controller.backToCheckout),
+            CenterHeader(
+              title: 'Pembayaran',
+              onBack: controller.backToCheckout,
+            ),
             Expanded(
               child: payment == null
                   ? const Center(child: CircularProgressIndicator())
@@ -927,10 +965,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        if (isQris)
-                          _qrisCard()
-                        else
-                          _vaCard(payment),
+                        if (isQris) _qrisCard() else _vaCard(payment),
                         const SizedBox(height: 16),
                         const InstructionCard(
                           title: 'Petunjuk Pembayaran',
@@ -1054,7 +1089,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
         SizedBox(width: 8),
-        Text('Menunggu pembayaran…', style: TextStyle(fontSize: 12, color: textMuted)),
+        Text(
+          'Menunggu pembayaran…',
+          style: TextStyle(fontSize: 12, color: textMuted),
+        ),
       ],
     );
   }
@@ -1071,7 +1109,9 @@ class SuccessScreen extends StatelessWidget {
     final service = controller.selectedService;
     final machine = controller.selectedMachine;
     final payment = controller.payment;
-    final methodLabel = payment?.method == 'TRANSFER' ? 'Virtual Account' : 'QRIS';
+    final methodLabel = payment?.method == 'TRANSFER'
+        ? 'Virtual Account'
+        : 'QRIS';
 
     return Scaffold(
       backgroundColor: background,
@@ -1114,13 +1154,24 @@ class SuccessScreen extends StatelessWidget {
                   AppCard(
                     child: Column(
                       children: [
-                        DetailRow(label: 'No. Order', value: order?.orderNumber ?? '-'),
+                        DetailRow(
+                          label: 'No. Order',
+                          value: order?.orderNumber ?? '-',
+                        ),
                         DetailRow(
                           label: 'Kategori Mesin',
-                          value: (machine?.isWasher ?? true) ? 'Washer' : 'Dryer',
+                          value: (machine?.isWasher ?? true)
+                              ? 'Washer'
+                              : 'Dryer',
                         ),
-                        DetailRow(label: 'Kapasitas', value: _capacityLabel(service)),
-                        DetailRow(label: 'Estimasi', value: _estimasiLabel(service)),
+                        DetailRow(
+                          label: 'Kapasitas',
+                          value: _capacityLabel(service),
+                        ),
+                        DetailRow(
+                          label: 'Estimasi',
+                          value: _estimasiLabel(service),
+                        ),
                         DetailRow(label: 'Tanggal', value: _todayLabel()),
                         DetailRow(
                           label: 'Lokasi',
@@ -1350,7 +1401,10 @@ class _CountdownRowState extends State<CountdownRow> {
     final ss = (expired ? 0 : left.inSeconds % 60).toString().padLeft(2, '0');
     return Row(
       children: [
-        const Text('Bayar dalam', style: TextStyle(color: textMuted, fontSize: 14)),
+        const Text(
+          'Bayar dalam',
+          style: TextStyle(color: textMuted, fontSize: 14),
+        ),
         const Spacer(),
         Text(
           expired ? 'Kedaluwarsa' : '$mm:$ss',
@@ -1401,7 +1455,9 @@ class PaymentMethodRow extends StatelessWidget {
               ),
             ),
             Icon(
-              active ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              active
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
               color: active ? primary : textMuted,
             ),
           ],
@@ -1546,7 +1602,11 @@ class TwoButtonBar extends StatelessWidget {
 }
 
 class RefreshableEmpty extends StatelessWidget {
-  const RefreshableEmpty({required this.message, required this.onRetry, super.key});
+  const RefreshableEmpty({
+    required this.message,
+    required this.onRetry,
+    super.key,
+  });
 
   final String message;
   final VoidCallback onRetry;

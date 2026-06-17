@@ -23,6 +23,7 @@ class AppUser {
     this.phone,
     this.avatarUrl,
     this.customer,
+    this.b2bPartner,
   });
 
   final String id;
@@ -32,6 +33,9 @@ class AppUser {
   final String? phone;
   final String? avatarUrl;
   final CustomerProfile? customer;
+  final B2BPartnerProfile? b2bPartner;
+
+  bool get isPartner => b2bPartner != null;
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
     return AppUser(
@@ -43,6 +47,11 @@ class AppUser {
       avatarUrl: json['avatarUrl'] as String?,
       customer: json['customer'] is Map<String, dynamic>
           ? CustomerProfile.fromJson(json['customer'] as Map<String, dynamic>)
+          : null,
+      b2bPartner: json['b2bPartner'] is Map<String, dynamic>
+          ? B2BPartnerProfile.fromJson(
+              json['b2bPartner'] as Map<String, dynamic>,
+            )
           : null,
     );
   }

@@ -6,6 +6,7 @@ class _OrderSuccessPage extends StatelessWidget {
     required this.methodLabel,
     required this.total,
     this.orderId,
+    this.result,
   });
 
   final _CheckoutData data;
@@ -14,6 +15,7 @@ class _OrderSuccessPage extends StatelessWidget {
 
   /// ID order nyata (bila ada) → untuk form ulasan akhir pembayaran.
   final String? orderId;
+  final LoyaltyCheckoutResult? result;
 
   @override
   Widget build(BuildContext context) {
@@ -99,6 +101,23 @@ class _OrderSuccessPage extends StatelessWidget {
           _DetailRow(left: 'Tanggal', right: data.date),
           _DetailRow(left: 'Lokasi', right: data.locationName),
           _DetailRow(left: 'Metode', right: methodLabel),
+          if (result != null) ...[
+            _DetailRow(
+              left: 'Bonus Balance Digunakan',
+              right:
+                  '- ${_formatRupiah(result!.breakdown.bonusBalanceUsed.round())}',
+            ),
+            _DetailRow(
+              left: 'Main Balance Digunakan',
+              right:
+                  '- ${_formatRupiah(result!.breakdown.mainBalanceUsed.round())}',
+            ),
+            _DetailRow(
+              left: 'Point Didapat',
+              right: '${result!.breakdown.pointEarned} poin',
+              greenRight: true,
+            ),
+          ],
           const SizedBox(height: 10),
           const Divider(height: 1),
           const SizedBox(height: 10),
@@ -285,7 +304,9 @@ class _ReviewCardState extends State<_ReviewCard> {
     });
     if (!ok) {
       messenger.showSnackBar(
-        SnackBar(content: Text(controller.errorMessage ?? 'Gagal mengirim ulasan.')),
+        SnackBar(
+          content: Text(controller.errorMessage ?? 'Gagal mengirim ulasan.'),
+        ),
       );
     }
   }

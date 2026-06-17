@@ -73,6 +73,29 @@ class CustomerService {
         .toList();
   }
 
+  Future<List<UserVoucher>> getMyVouchers({required String accessToken}) async {
+    final payload = await _apiClient.get(
+      '/vouchers/mine',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    final list = _asList(payload);
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(UserVoucher.fromJson)
+        .toList();
+  }
+
+  Future<MembershipStatus?> getMembershipStatus({
+    required String accessToken,
+  }) async {
+    final payload = await _apiClient.get(
+      '/memberships/me',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    if (payload is! Map<String, dynamic>) return null;
+    return MembershipStatus.fromJson(payload);
+  }
+
   /// Verifikasi pemesan via scan QR mesin (deviceCode).
   Future<BookingVerifyResult> verifyBooking({
     required String accessToken,
@@ -259,7 +282,8 @@ class CustomerService {
         'orderAmount': orderAmount,
         'items': [
           {
-            if (serviceId != null && serviceId.isNotEmpty) 'serviceId': serviceId,
+            if (serviceId != null && serviceId.isNotEmpty)
+              'serviceId': serviceId,
             'subtotal': orderAmount,
           },
         ],
@@ -267,6 +291,117 @@ class CustomerService {
       }),
     );
     return PromoValidation.fromJson(payload as Map<String, dynamic>);
+  }
+
+  Map<String, dynamic> _checkoutPayload({
+    required String customerId,
+    required String outletId,
+    required List<CreateOrderItemInput> items,
+    String? partnerId,
+    String? voucherCode,
+    String? promoCode,
+    String? sourcePlatform,
+  }) {
+    return {
+      if (partnerId != null && partnerId.isNotEmpty)
+        'partnerId': partnerId
+      else
+        'customerId': customerId,
+      'outletId': outletId,
+      'sourcePlatform': sourcePlatform ?? 'MOBILE_APP',
+      'items': items
+          .map(
+            (item) => {
+              'serviceId': item.serviceId,
+              'quantity': item.quantity,
+              if (item.notes != null && item.notes!.isNotEmpty)
+                'notes': item.notes,
+              if (item.machineType != null && item.machineType!.isNotEmpty)
+                'machineType': item.machineType,
+            },
+          )
+          .toList(),
+      if (voucherCode != null && voucherCode.isNotEmpty)
+        'voucherCode': voucherCode,
+      if (promoCode != null && promoCode.isNotEmpty) 'promoCode': promoCode,
+    };
+  }
+
+  Future<PricingQuote> quotePricing({
+    required String accessToken,
+    required String customerId,
+    required String outletId,
+    required List<CreateOrderItemInput> items,
+    String? partnerId,
+    String? voucherCode,
+    String? promoCode,
+    String sourcePlatform = 'MOBILE_APP',
+  }) async {
+    final payload = await _apiClient.post(
+      '/pricing/calculate',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode(
+        _checkoutPayload(
+          customerId: customerId,
+          partnerId: partnerId,
+          outletId: outletId,
+          items: items,
+          voucherCode: voucherCode,
+          promoCode: promoCode,
+          sourcePlatform: sourcePlatform,
+        ),
+      ),
+    );
+    return PricingQuote.fromJson(payload as Map<String, dynamic>);
+  }
+
+  Future<UserVoucher> redeemPointVoucher({
+    required String accessToken,
+    required String walletId,
+    required String templateId,
+    String? idempotencyKey,
+  }) async {
+    final payload = await _apiClient.post(
+      '/points/redeem-voucher',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({
+        'walletId': walletId,
+        'templateId': templateId,
+        if (idempotencyKey != null && idempotencyKey.isNotEmpty)
+          'idempotencyKey': idempotencyKey,
+      }),
+    );
+    final data = payload as Map<String, dynamic>;
+    final voucher = data['userVoucher'];
+    return UserVoucher.fromJson(voucher as Map<String, dynamic>);
+  }
+
+  Future<LoyaltyCheckoutResult> checkoutLoyalty({
+    required String accessToken,
+    required String customerId,
+    required String outletId,
+    required List<CreateOrderItemInput> items,
+    String? partnerId,
+    String? voucherCode,
+    String? promoCode,
+    String sourcePlatform = 'MOBILE_APP',
+  }) async {
+    final payload = await _apiClient.post(
+      '/transactions/checkout',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode(
+        _checkoutPayload(
+          customerId: customerId,
+          partnerId: partnerId,
+          outletId: outletId,
+          items: items,
+          voucherCode: voucherCode,
+          promoCode: promoCode,
+          sourcePlatform: sourcePlatform,
+        ),
+      ),
+    );
+    return LoyaltyCheckoutResult.fromJson(payload as Map<String, dynamic>);
   }
 
   Future<List<OutletOption>> getOutlets({required String accessToken}) async {
@@ -315,6 +450,8 @@ class CustomerService {
             'quantity': item.quantity,
             if (item.notes != null && item.notes!.isNotEmpty)
               'notes': item.notes,
+            if (item.machineType != null && item.machineType!.isNotEmpty)
+              'machineType': item.machineType,
           },
         )
         .toList();

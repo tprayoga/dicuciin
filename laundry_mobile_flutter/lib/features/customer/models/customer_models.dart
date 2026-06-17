@@ -28,15 +28,53 @@ class CustomerProfile {
   }
 }
 
+class B2BPartnerProfile {
+  B2BPartnerProfile({
+    required this.id,
+    required this.partnerCode,
+    required this.companyName,
+    required this.picName,
+    required this.tier,
+    required this.status,
+    this.wallet,
+  });
+
+  final String id;
+  final String partnerCode;
+  final String companyName;
+  final String picName;
+  final String tier;
+  final String status;
+  final WalletData? wallet;
+
+  factory B2BPartnerProfile.fromJson(Map<String, dynamic> json) {
+    return B2BPartnerProfile(
+      id: (json['id'] as String?) ?? '',
+      partnerCode: (json['partnerCode'] as String?) ?? '-',
+      companyName: (json['companyName'] as String?) ?? '-',
+      picName: (json['picName'] as String?) ?? '-',
+      tier: (json['tier'] as String?) ?? 'BUSINESS_PARTNER',
+      status: (json['status'] as String?) ?? 'ACTIVE',
+      wallet: json['wallet'] is Map<String, dynamic>
+          ? WalletData.fromJson(json['wallet'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+}
+
 class WalletData {
   WalletData({
     required this.id,
     required this.balance,
+    required this.bonusBalance,
+    required this.pointBalance,
     required this.transactions,
   });
 
   final String id;
   final double balance;
+  final double bonusBalance;
+  final int pointBalance;
   final List<WalletTransaction> transactions;
 
   factory WalletData.fromJson(Map<String, dynamic> json) {
@@ -44,6 +82,8 @@ class WalletData {
     return WalletData(
       id: (json['id'] as String?) ?? '',
       balance: _toDouble(json['balance']),
+      bonusBalance: _toDouble(json['bonusBalance']),
+      pointBalance: (json['pointBalance'] as num?)?.toInt() ?? 0,
       transactions: rawTransactions is List
           ? rawTransactions
                 .whereType<Map<String, dynamic>>()
@@ -582,16 +622,213 @@ class PromoValidation {
   }
 }
 
+class UserVoucher {
+  UserVoucher({
+    required this.id,
+    required this.code,
+    required this.status,
+    required this.segment,
+    required this.templateName,
+    required this.voucherType,
+    this.expiresAt,
+  });
+
+  final String id;
+  final String code;
+  final String status;
+  final String segment;
+  final String templateName;
+  final String voucherType;
+  final DateTime? expiresAt;
+
+  factory UserVoucher.fromJson(Map<String, dynamic> json) {
+    final template = json['template'] as Map<String, dynamic>? ?? const {};
+    return UserVoucher(
+      id: (json['id'] as String?) ?? '',
+      code: (json['code'] as String?) ?? '-',
+      status: (json['status'] as String?) ?? '-',
+      segment: (json['segment'] as String?) ?? 'RETAIL',
+      templateName: (template['name'] as String?) ?? 'Voucher',
+      voucherType: (template['voucherType'] as String?) ?? '-',
+      expiresAt: DateTime.tryParse((json['expiresAt'] as String?) ?? ''),
+    );
+  }
+}
+
+class VoucherEligibility {
+  VoucherEligibility({
+    required this.voucher,
+    required this.eligible,
+    this.reason,
+    this.quote,
+  });
+
+  final UserVoucher voucher;
+  final bool eligible;
+  final String? reason;
+  final PricingQuote? quote;
+}
+
+class PricingQuote {
+  PricingQuote({
+    required this.basePrice,
+    required this.b2bDiscount,
+    required this.happyHourDiscount,
+    required this.voucherDiscount,
+    required this.promoDiscount,
+    required this.deliveryFee,
+    required this.spendingAmount,
+    required this.finalAmount,
+    required this.pointsToEarn,
+    required this.cashbackToCredit,
+    this.voucherCode,
+  });
+
+  final double basePrice;
+  final double b2bDiscount;
+  final double happyHourDiscount;
+  final double voucherDiscount;
+  final double promoDiscount;
+  final double deliveryFee;
+  final double spendingAmount;
+  final double finalAmount;
+  final int pointsToEarn;
+  final double cashbackToCredit;
+  final String? voucherCode;
+
+  double get totalDiscount =>
+      b2bDiscount + happyHourDiscount + voucherDiscount + promoDiscount;
+
+  factory PricingQuote.fromJson(Map<String, dynamic> json) {
+    return PricingQuote(
+      basePrice: _toDouble(json['basePrice']),
+      b2bDiscount: _toDouble(json['b2bDiscount']),
+      happyHourDiscount: _toDouble(json['happyHourDiscount']),
+      voucherDiscount: _toDouble(json['voucherDiscount']),
+      promoDiscount: _toDouble(json['promoDiscount']),
+      deliveryFee: _toDouble(json['deliveryFee']),
+      spendingAmount: _toDouble(json['spendingAmount']),
+      finalAmount: _toDouble(json['finalAmount']),
+      pointsToEarn: (json['pointsToEarn'] as num?)?.toInt() ?? 0,
+      cashbackToCredit: _toDouble(json['cashbackToCredit']),
+      voucherCode: json['voucherCode'] as String?,
+    );
+  }
+}
+
+class LoyaltyCheckoutResult {
+  LoyaltyCheckoutResult({
+    required this.orderId,
+    required this.orderNumber,
+    required this.status,
+    required this.segment,
+    required this.breakdown,
+  });
+
+  final String orderId;
+  final String orderNumber;
+  final String status;
+  final String segment;
+  final LoyaltyPaymentBreakdown breakdown;
+
+  factory LoyaltyCheckoutResult.fromJson(Map<String, dynamic> json) {
+    return LoyaltyCheckoutResult(
+      orderId: (json['orderId'] as String?) ?? '',
+      orderNumber: (json['orderNumber'] as String?) ?? '-',
+      status: (json['status'] as String?) ?? '-',
+      segment: (json['segment'] as String?) ?? 'RETAIL',
+      breakdown: LoyaltyPaymentBreakdown.fromJson(
+        json['breakdown'] as Map<String, dynamic>? ?? const {},
+      ),
+    );
+  }
+}
+
+class LoyaltyPaymentBreakdown {
+  LoyaltyPaymentBreakdown({
+    required this.basePrice,
+    required this.b2bDiscount,
+    required this.happyHourDiscount,
+    required this.voucherDiscount,
+    required this.promoDiscount,
+    required this.deliveryFee,
+    required this.finalAmount,
+    required this.bonusBalanceUsed,
+    required this.mainBalanceUsed,
+    required this.pointEarned,
+    required this.cashbackCredited,
+    this.voucherCode,
+  });
+
+  final double basePrice;
+  final double b2bDiscount;
+  final double happyHourDiscount;
+  final double voucherDiscount;
+  final double promoDiscount;
+  final double deliveryFee;
+  final double finalAmount;
+  final double bonusBalanceUsed;
+  final double mainBalanceUsed;
+  final int pointEarned;
+  final double cashbackCredited;
+  final String? voucherCode;
+
+  factory LoyaltyPaymentBreakdown.fromJson(Map<String, dynamic> json) {
+    return LoyaltyPaymentBreakdown(
+      basePrice: _toDouble(json['basePrice']),
+      b2bDiscount: _toDouble(json['b2bDiscount']),
+      happyHourDiscount: _toDouble(json['happyHourDiscount']),
+      voucherDiscount: _toDouble(json['voucherDiscount']),
+      promoDiscount: _toDouble(json['promoDiscount']),
+      deliveryFee: _toDouble(json['deliveryFee']),
+      finalAmount: _toDouble(json['finalAmount']),
+      bonusBalanceUsed: _toDouble(json['bonusBalanceUsed']),
+      mainBalanceUsed: _toDouble(json['mainBalanceUsed']),
+      pointEarned: (json['pointEarned'] as num?)?.toInt() ?? 0,
+      cashbackCredited: _toDouble(json['cashbackCredited']),
+      voucherCode: json['voucherCode'] as String?,
+    );
+  }
+}
+
+class MembershipStatus {
+  MembershipStatus({
+    required this.segment,
+    this.currentTier,
+    this.currentB2BTier,
+    this.earnedSpending = 0,
+    this.successfulTxnCount = 0,
+  });
+
+  final String segment;
+  final String? currentTier;
+  final String? currentB2BTier;
+  final double earnedSpending;
+  final int successfulTxnCount;
+
+  factory MembershipStatus.fromJson(Map<String, dynamic> json) {
+    return MembershipStatus(
+      segment: (json['segment'] as String?) ?? 'RETAIL',
+      currentTier: json['currentTier'] as String?,
+      currentB2BTier: json['currentB2BTier'] as String?,
+      earnedSpending: _toDouble(json['earnedSpending']),
+      successfulTxnCount: (json['successfulTxnCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 class CreateOrderItemInput {
   CreateOrderItemInput({
     required this.serviceId,
     required this.quantity,
     this.notes,
+    this.machineType,
   });
 
   final String serviceId;
   final double quantity;
   final String? notes;
+  final String? machineType;
 }
 
 /// Tagihan QRIS/VA dari payment gateway.

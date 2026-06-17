@@ -226,3 +226,27 @@ class CreatedOrder {
     status: (json['status'] as String?) ?? '-',
   );
 }
+
+class PricingQuote {
+  const PricingQuote({
+    required this.basePrice,
+    required this.happyHourDiscount,
+    required this.voucherDiscount,
+    required this.finalAmount,
+    required this.pointsToEarn,
+  });
+
+  final double basePrice;
+  final double happyHourDiscount;
+  final double voucherDiscount;
+  final double finalAmount;
+  final int pointsToEarn;
+
+  factory PricingQuote.fromJson(Map<String, dynamic> json) => PricingQuote(
+    basePrice: _money(json['basePrice']),
+    happyHourDiscount: _money(json['happyHourDiscount']),
+    voucherDiscount: _money(json['voucherDiscount']),
+    finalAmount: _money(json['finalAmount']),
+    pointsToEarn: (json['pointsToEarn'] as num?)?.toInt() ?? 0,
+  );
+}

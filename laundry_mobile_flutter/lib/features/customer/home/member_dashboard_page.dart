@@ -10,9 +10,10 @@ class _MemberDashboardPage extends StatelessWidget {
     final user = auth.user;
     final token = auth.accessToken;
     if (user != null && token != null) {
-      await context
-          .read<CustomerController>()
-          .loadDashboard(user: user, accessToken: token);
+      await context.read<CustomerController>().loadDashboard(
+        user: user,
+        accessToken: token,
+      );
     }
   }
 
@@ -20,10 +21,13 @@ class _MemberDashboardPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.watch<CustomerController>();
     final balance = context.watch<WalletController>().balance;
+    final wallet = c.wallet;
     final stats = c.stats;
     final txns = c.wallet?.transactions ?? const [];
     final orders = c.orders;
     final promos = c.promos;
+    final membership = c.membershipStatus;
+    final partner = context.watch<AuthController>().user?.b2bPartner;
 
     return Scaffold(
       backgroundColor: _bg,
@@ -39,6 +43,12 @@ class _MemberDashboardPage extends StatelessWidget {
                 children: [
                   // ── Saldo ──
                   _balanceCard(context, balance),
+                  const SizedBox(height: 12),
+                  _tierProgressCard(membership, wallet),
+                  if (partner != null) ...[
+                    const SizedBox(height: 12),
+                    _b2bPartnerCard(partner),
+                  ],
                   const SizedBox(height: 20),
 
                   // ── Statistik order ──
@@ -46,11 +56,17 @@ class _MemberDashboardPage extends StatelessWidget {
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      _statTile('Total Order', '${stats.totalOrders}',
-                          Icons.receipt_long_outlined),
+                      _statTile(
+                        'Total Order',
+                        '${stats.totalOrders}',
+                        Icons.receipt_long_outlined,
+                      ),
                       const SizedBox(width: 12),
-                      _statTile('Selesai', '${stats.completedOrders}',
-                          Icons.check_circle_outline),
+                      _statTile(
+                        'Selesai',
+                        '${stats.completedOrders}',
+                        Icons.check_circle_outline,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -106,15 +122,16 @@ class _MemberDashboardPage extends StatelessWidget {
   }
 
   Widget _sectionTitle(String t) => Text(
-        t,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w700,
-          color: _textDark,
-        ),
-      );
+    t,
+    style: const TextStyle(
+      fontSize: 16,
+      fontWeight: FontWeight.w700,
+      color: _textDark,
+    ),
+  );
 
   Widget _balanceCard(BuildContext context, int balance) {
+    final wallet = context.watch<CustomerController>().wallet;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -138,14 +155,29 @@ class _MemberDashboardPage extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _miniBalance(
+                  'Bonus',
+                  _formatRupiah((wallet?.bonusBalance ?? 0).round()),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _miniBalance('Poin', '${wallet?.pointBalance ?? 0}'),
+              ),
+            ],
+          ),
           const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const _TopUpPage()),
-                  ),
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const _TopUpPage())),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white,
                     side: const BorderSide(color: Colors.white70),
@@ -156,6 +188,139 @@ class _MemberDashboardPage extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniBalance(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tierProgressCard(MembershipStatus? status, WalletData? wallet) {
+    final tier = status?.currentTier ?? status?.currentB2BTier ?? 'SILVER';
+    final spending = status?.earnedSpending ?? 0;
+    final txn = status?.successfulTxnCount ?? 0;
+    final point = wallet?.pointBalance ?? 0;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.workspace_premium_outlined, color: _primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Tier $tier',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: _textDark,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(
+                '$point poin',
+                style: const TextStyle(
+                  color: _primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              minHeight: 8,
+              value: ((spending % 500000) / 500000).clamp(0, 1),
+              color: _primary,
+              backgroundColor: AppColors.tintBlueAlt,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${_formatRupiah(spending.round())} spending • $txn transaksi sukses',
+            style: const TextStyle(fontSize: 12, color: _textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _b2bPartnerCard(B2BPartnerProfile partner) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.tintBlueAlt,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _primary.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.business_center_outlined, color: _primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  partner.companyName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: _textDark,
+                  ),
+                ),
+                Text(
+                  '${partner.partnerCode} • ${partner.tier}',
+                  style: const TextStyle(fontSize: 12, color: _textMuted),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            _formatRupiah((partner.wallet?.balance ?? 0).round()),
+            style: const TextStyle(
+              color: AppColors.success,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -325,8 +490,11 @@ class _MemberDashboardPage extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.confirmation_number_outlined,
-              color: _primary, size: 22),
+          const Icon(
+            Icons.confirmation_number_outlined,
+            color: _primary,
+            size: 22,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -360,16 +528,13 @@ class _MemberDashboardPage extends StatelessWidget {
   }
 
   Widget _emptyHint(String msg) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _line),
-        ),
-        child: Text(
-          msg,
-          style: const TextStyle(fontSize: 13, color: _textMuted),
-        ),
-      );
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: _line),
+    ),
+    child: Text(msg, style: const TextStyle(fontSize: 13, color: _textMuted)),
+  );
 }
