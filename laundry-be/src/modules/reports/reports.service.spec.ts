@@ -56,6 +56,12 @@ describe('ReportsService promotion loyalty', () => {
           },
         ]),
       },
+      // Ledger legacy: TIDAK boleh dipakai report saldo modern (cegah double count).
+      walletTransaction: {
+        aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(999999) } }),
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
+      },
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -77,5 +83,29 @@ describe('ReportsService promotion loyalty', () => {
         discountAmount: 75000,
       }),
     ]);
+  });
+
+  // --- Phase C: source-of-truth ledger (cegah double count) ---
+
+  it('bonus liability bersumber dari walletLedger (BONUS/CREDIT), bukan walletTransaction legacy', async () => {
+    const report = await service.getPromotionLoyalty('2026-06');
+    expect(report.dashboard.totalBonusBalanceIssued).toBe(25000); // dari walletLedger.aggregate
+    expect(prisma.walletLedger.aggregate).toHaveBeenCalled();
+    expect(prisma.walletTransaction.aggregate).not.toHaveBeenCalled();
+    expect(prisma.walletTransaction.findMany).not.toHaveBeenCalled();
+  });
+
+  it('point liability bersumber dari Wallet.pointBalance (cache poin)', async () => {
+    const report = await service.getPromotionLoyalty('2026-06');
+    expect(report.dashboard.totalOutstandingPoint).toBe(1234);
+    expect(prisma.wallet.aggregate).toHaveBeenCalled();
+  });
+
+  it('revenue dari order PAID; top up (walletTransaction TOPUP) tidak dihitung sebagai revenue', async () => {
+    const report = await service.getPromotionLoyalty('2026-06');
+    expect(report.dashboard.promoRevenueImpact).toBe(50000); // discountAmount order PAID
+    expect(report.dashboard.promoDrivenRevenue).toBe(450000); // totalAmount order PAID
+    expect(prisma.order.aggregate).toHaveBeenCalled();
+    expect(prisma.walletTransaction.aggregate).not.toHaveBeenCalled();
   });
 });

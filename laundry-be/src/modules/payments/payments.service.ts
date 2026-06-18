@@ -20,6 +20,7 @@ import { PointService } from '../points/point.service';
 import { MembershipTierService } from '../memberships/membership-tier.service';
 import { B2BPartnerService } from '../partners/b2b-partner.service';
 import { CampaignService } from '../campaigns/campaign.service';
+import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 
 @Injectable()
 export class PaymentsService {
@@ -32,6 +33,7 @@ export class PaymentsService {
     private membershipTierService: MembershipTierService,
     private b2bPartnerService: B2BPartnerService,
     private campaignService: CampaignService,
+    private loyaltyConfig: LoyaltyConfigService,
   ) {}
 
   /** Buat tagihan QRIS/VA untuk sebuah order via gateway (status awal PENDING). */
@@ -222,7 +224,7 @@ export class PaymentsService {
       const benefits = await this.membershipTierService.getBenefits(status.currentTier);
       const wallet = await this.getOrCreateWalletInTx(tx, { customerId: order.customerId });
       const pointsToEarn = Math.floor(
-        Math.floor(toNum(spendingAmount) / Number(process.env.LOYALTY_POINT_RATE ?? '1000')) *
+        Math.floor(toNum(spendingAmount) / this.loyaltyConfig.pointEarnRate) *
           toNum(benefits.pointMultiplier),
       );
       if (pointsToEarn > 0) {

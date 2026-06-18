@@ -1,5 +1,6 @@
 import { Prisma, PaymentStatus, OrderStatus } from '@prisma/client';
 import { PaymentsService } from './payments.service';
+import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 
 describe('PaymentsService loyalty settlement', () => {
   function setup() {
@@ -59,6 +60,7 @@ describe('PaymentsService loyalty settlement', () => {
       membershipTierService as any,
       b2bPartnerService as any,
       campaignService as any,
+      new LoyaltyConfigService(),
     );
     return {
       service,

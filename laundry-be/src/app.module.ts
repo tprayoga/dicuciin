@@ -33,6 +33,7 @@ import { PartnersModule } from './modules/partners/partners.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
+import { LoyaltyConfigModule } from './modules/loyalty-config/loyalty-config.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { TransactionsModule } from './modules/transactions/transactions.module';
     }),
     PrismaModule,
     QueuesModule,
+    LoyaltyConfigModule,
     AuthModule,
     UsersModule,
     OutletsModule,

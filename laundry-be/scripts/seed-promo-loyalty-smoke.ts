@@ -3,6 +3,7 @@ import {
   MembershipTier,
   Prisma,
   PrismaClient,
+  PromoType,
   UserRole,
   UserSegment,
   VoucherStatus,
@@ -28,13 +29,16 @@ export const TEST_CODES = {
   voucherMinTemplate: 'TEST_VOUCHER_MIN_HIGH',
   voucherStackTemplate: 'TEST_VOUCHER_STACK_FIXED',
   voucherB2BTemplate: 'TEST_VOUCHER_B2B_FIXED',
+  voucherRefundTemplate: 'TEST_VOUCHER_REFUND',
   voucherPercentCode: 'TEST_VOUCHER_PERCENT_CODE',
   voucherFixedCode: 'TEST_VOUCHER_FIXED_CODE',
   voucherExpiredCode: 'TEST_VOUCHER_EXPIRED_CODE',
   voucherMinCode: 'TEST_VOUCHER_MIN_HIGH_CODE',
   voucherStackCode: 'TEST_VOUCHER_STACK_CODE',
   voucherB2BCode: 'TEST_VOUCHER_B2B_CODE',
+  voucherRefundCode: 'TEST_VOUCHER_REFUND_CODE',
   b2bRule: 'TEST_B2B_SPECIAL_PRICE',
+  promoFixedCode: 'TEST_PROMO_FIXED_CODE',
 };
 
 export interface PromoLoyaltySmokeSeedResult {
@@ -305,6 +309,17 @@ export async function seedPromoLoyaltySmokeData(
         startDate: validStart,
         endDate: validEnd,
       },
+      {
+        code: TEST_CODES.voucherRefundTemplate,
+        name: 'TEST Voucher Refund Fixed 10K',
+        voucherType: VoucherType.NOMINAL_DISCOUNT,
+        value: new Prisma.Decimal(10_000),
+        maxDiscount: new Prisma.Decimal(10_000),
+        minTransaction: new Prisma.Decimal(50_000),
+        segment: UserSegment.RETAIL,
+        startDate: validStart,
+        endDate: validEnd,
+      },
     ];
     for (const template of templates) {
       await prisma.voucherTemplate.upsert({
@@ -440,6 +455,41 @@ export async function seedPromoLoyaltySmokeData(
       },
     });
 
+    // Promo code (publik) untuk skenario smoke promo discount. Idempoten: upsert promo
+    // lalu ganti rule-nya (PromoRule tak punya unique selain id).
+    const promo = await prisma.promo.upsert({
+      where: { code: TEST_CODES.promoFixedCode },
+      update: {
+        name: 'TEST Promo Fixed 8K',
+        promoType: PromoType.FIXED_AMOUNT,
+        value: new Prisma.Decimal(8_000),
+        startDate: validStart,
+        endDate: validEnd,
+        quota: null,
+        usedCount: 0,
+        isActive: true,
+      },
+      create: {
+        code: TEST_CODES.promoFixedCode,
+        name: 'TEST Promo Fixed 8K',
+        promoType: PromoType.FIXED_AMOUNT,
+        value: new Prisma.Decimal(8_000),
+        startDate: validStart,
+        endDate: validEnd,
+        isActive: true,
+      },
+    });
+    await prisma.promoRule.deleteMany({ where: { promoId: promo.id } });
+    await prisma.promoRule.create({
+      data: {
+        promoId: promo.id,
+        minTransaction: new Prisma.Decimal(50_000),
+        applicableOutlets: servicePrice.outletId,
+        applicableServices: servicePrice.serviceId,
+        maxUsagePerCustomer: null,
+      },
+    });
+
     const templateByCode = new Map(
       await prisma.voucherTemplate
         .findMany({ where: { code: { startsWith: TEST_PREFIX } } })
@@ -452,6 +502,7 @@ export async function seedPromoLoyaltySmokeData(
       [TEST_CODES.voucherMinCode, TEST_CODES.voucherMinTemplate, retailCustomer.id, null, UserSegment.RETAIL, validEnd],
       [TEST_CODES.voucherStackCode, TEST_CODES.voucherStackTemplate, retailCustomer.id, null, UserSegment.RETAIL, validEnd],
       [TEST_CODES.voucherB2BCode, TEST_CODES.voucherB2BTemplate, null, activePartner.id, UserSegment.B2B, validEnd],
+      [TEST_CODES.voucherRefundCode, TEST_CODES.voucherRefundTemplate, retailCustomer.id, null, UserSegment.RETAIL, validEnd],
     ] as const;
     for (const [code, templateCode, customerId, partnerId, segment, expiresAt] of userVoucherRows) {
       const template = templateByCode.get(templateCode);

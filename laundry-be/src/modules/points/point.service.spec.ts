@@ -4,6 +4,7 @@ import { LedgerDirection, UserRole } from '@prisma/client';
 import { PointService } from './point.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { VoucherService } from '../vouchers/voucher.service';
+import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 
 describe('PointService', () => {
   let service: PointService;
@@ -34,6 +35,7 @@ describe('PointService', () => {
         PointService,
         { provide: PrismaService, useValue: prisma },
         { provide: VoucherService, useValue: voucherService },
+        LoyaltyConfigService,
       ],
     }).compile();
     service = moduleRef.get(PointService);
@@ -206,5 +208,107 @@ describe('PointService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.wallet.update).not.toHaveBeenCalled();
     expect(voucherService.issue).not.toHaveBeenCalled();
+  });
+
+  // --- Phase E: point expiry ---
+
+  it('earn mengisi expiresAt default dari config (365 hari)', async () => {
+    prisma.wallet.findUnique
+      .mockResolvedValueOnce({ id: 'w1', pointBalance: 0 })
+      .mockResolvedValueOnce({ id: 'w1', pointBalance: 50 });
+    const before = Date.now();
+    const ledger: any = await service.earn({ walletId: 'w1', points: 50, orderId: 'o1' });
+    expect(ledger.expiresAt).toBeInstanceOf(Date);
+    const days = Math.round((ledger.expiresAt.getTime() - before) / (24 * 60 * 60 * 1000));
+    expect(days).toBe(365);
+  });
+
+  it('earn menghormati expiresAt eksplisit dari pemanggil', async () => {
+    prisma.wallet.findUnique
+      .mockResolvedValueOnce({ id: 'w1', pointBalance: 0 })
+      .mockResolvedValueOnce({ id: 'w1', pointBalance: 10 });
+    const explicit = new Date('2027-01-01T00:00:00.000Z');
+    const ledger: any = await service.earn({
+      walletId: 'w1',
+      points: 10,
+      orderId: 'o1',
+      expiresAt: explicit,
+    });
+    expect(ledger.expiresAt).toEqual(explicit);
+  });
+
+  it('expireDuePoints membuat DEBIT EXPIRED untuk credit jatuh tempo', async () => {
+    prisma.pointLedger.findMany = jest
+      .fn()
+      .mockResolvedValue([{ id: 'pl-credit', walletId: 'w1', points: 30, direction: 'CREDIT' }]);
+    prisma.pointLedger.findUnique = jest.fn().mockResolvedValue(null);
+    prisma.wallet.findUnique
+      .mockResolvedValueOnce({ id: 'w1', pointBalance: 30 }) // pre-check
+      .mockResolvedValueOnce({ id: 'w1', pointBalance: 30 }) // mutate read
+      .mockResolvedValueOnce({ id: 'w1', pointBalance: 0 }); // mutate refresh
+
+    const res = await service.expireDuePoints(new Date());
+
+    expect(res.expiredLedgers).toBe(1);
+    expect(res.expiredPoints).toBe(30);
+    expect(prisma.wallet.updateMany).toHaveBeenCalledWith({
+      where: { id: 'w1', pointBalance: { gte: 30 } },
+      data: { pointBalance: { decrement: 30 } },
+    });
+    expect(prisma.pointLedger.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          idempotencyKey: 'point-expiry-pl-credit',
+          sourceType: 'EXPIRY',
+        }),
+      }),
+    );
+  });
+
+  it('expireDuePoints idempoten: skip bila EXPIRE sudah ada (run kedua tidak double debit)', async () => {
+    prisma.pointLedger.findMany = jest
+      .fn()
+      .mockResolvedValue([{ id: 'pl-credit', walletId: 'w1', points: 30, direction: 'CREDIT' }]);
+    prisma.pointLedger.findUnique = jest.fn().mockResolvedValue({ id: 'existing-expire' });
+
+    const res = await service.expireDuePoints(new Date());
+
+    expect(res.expiredLedgers).toBe(0);
+    expect(prisma.wallet.updateMany).not.toHaveBeenCalled();
+    expect(prisma.pointLedger.create).not.toHaveBeenCalled();
+  });
+
+  it('expireDuePoints di-clamp ke saldo: tidak membuat pointBalance negatif', async () => {
+    prisma.pointLedger.findMany = jest
+      .fn()
+      .mockResolvedValue([{ id: 'pl-credit', walletId: 'w1', points: 100, direction: 'CREDIT' }]);
+    prisma.pointLedger.findUnique = jest.fn().mockResolvedValue(null);
+    prisma.wallet.findUnique
+      .mockResolvedValueOnce({ id: 'w1', pointBalance: 40 }) // saldo cuma 40
+      .mockResolvedValueOnce({ id: 'w1', pointBalance: 40 })
+      .mockResolvedValueOnce({ id: 'w1', pointBalance: 0 });
+
+    const res = await service.expireDuePoints(new Date());
+
+    expect(res.expiredPoints).toBe(40); // bukan 100
+    expect(prisma.wallet.updateMany).toHaveBeenCalledWith({
+      where: { id: 'w1', pointBalance: { gte: 40 } },
+      data: { pointBalance: { decrement: 40 } },
+    });
+  });
+
+  it('expireDuePoints dryRun tidak melakukan mutasi', async () => {
+    prisma.pointLedger.findMany = jest
+      .fn()
+      .mockResolvedValue([{ id: 'pl-credit', walletId: 'w1', points: 30, direction: 'CREDIT' }]);
+    prisma.pointLedger.findUnique = jest.fn().mockResolvedValue(null);
+    prisma.wallet.findUnique.mockResolvedValueOnce({ id: 'w1', pointBalance: 30 });
+
+    const res = await service.expireDuePoints(new Date(), { dryRun: true });
+
+    expect(res.dryRun).toBe(true);
+    expect(res.expiredPoints).toBe(30);
+    expect(prisma.wallet.updateMany).not.toHaveBeenCalled();
+    expect(prisma.pointLedger.create).not.toHaveBeenCalled();
   });
 });

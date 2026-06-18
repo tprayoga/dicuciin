@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { Prisma, LedgerDirection, UserRole } from '@prisma/client';
 import { VoucherService } from '../vouchers/voucher.service';
+import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 
 type PrismaTx = Prisma.TransactionClient;
 
@@ -57,7 +58,19 @@ export class PointService {
   constructor(
     private prisma: PrismaService,
     private voucherService: VoucherService,
+    private loyaltyConfig: LoyaltyConfigService,
   ) {}
+
+  /**
+   * Masa berlaku default poin earn = now + `pointExpiryDays` (default 365).
+   * `pointExpiryDays` selalu > 0 (di-clamp di config), jadi poin earn baru selalu
+   * punya `expiresAt`. Poin lama (historis) tetap `expiresAt = null` → non-expiring
+   * (backward compatible).
+   */
+  private defaultEarnExpiry(): Date | undefined {
+    const days = this.loyaltyConfig.pointExpiryDays;
+    return days > 0 ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : undefined;
+  }
 
   private readonly adminRoles = new Set<UserRole>([
     UserRole.SUPER_ADMIN,
@@ -171,7 +184,8 @@ export class PointService {
         orderId: input.orderId,
         sourceType: input.sourceType ?? 'ORDER',
         sourceId: input.sourceId ?? input.orderId,
-        expiresAt: input.expiresAt,
+        // Bila pemanggil tidak menyetel expiresAt, pakai default dari config.
+        expiresAt: input.expiresAt ?? this.defaultEarnExpiry(),
         description: input.description,
         idempotencyKey: input.idempotencyKey,
       }),
@@ -284,5 +298,88 @@ export class PointService {
     const wallet = await this.prisma.wallet.findUnique({ where: { id: walletId } });
     if (!wallet) throw new NotFoundException('Wallet tidak ditemukan');
     return wallet.pointBalance;
+  }
+
+  /**
+   * Job kedaluwarsa poin. Mencari `PointLedger` CREDIT yang sudah `expiresAt <= now`
+   * dan belum punya pasangan EXPIRE (idempoten via `idempotencyKey=point-expiry-<ledgerId>`),
+   * lalu men-debit saldo poin.
+   *
+   * AMAN & IDEMPOTEN:
+   * - Tiap credit ledger di-debit maksimal `min(credit.points, saldo poin saat itu)` →
+   *   `Wallet.pointBalance` tidak pernah negatif (juga dijaga guard `updateMany` di `mutate`).
+   * - Diproses berurutan; bila dijalankan ulang, key unik mencegah double-debit.
+   *
+   * LIMITATION (didokumentasikan): tidak ada tracking "sisa terpakai" per credit ledger,
+   * jadi ini BUKAN FIFO-exact. Poin fungible; total yang di-expire tetap di-clamp ke saldo
+   * agar tak melebihi yang benar-benar tersedia.
+   *
+   * @param options.dryRun true → hanya menghitung (tidak menulis ledger / mutasi saldo).
+   */
+  async expireDuePoints(
+    now: Date = new Date(),
+    options: { dryRun?: boolean } = {},
+  ): Promise<{ scanned: number; expiredLedgers: number; expiredPoints: number; dryRun: boolean }> {
+    const dryRun = options.dryRun ?? false;
+    const dueCredits = await this.prisma.pointLedger.findMany({
+      where: {
+        direction: LedgerDirection.CREDIT,
+        expiresAt: { not: null, lte: now },
+      },
+      orderBy: { expiresAt: 'asc' },
+    });
+
+    let scanned = 0;
+    let expiredLedgers = 0;
+    let expiredPoints = 0;
+
+    for (const credit of dueCredits) {
+      scanned++;
+      const idempotencyKey = `point-expiry-${credit.id}`;
+
+      const already = await this.prisma.pointLedger.findUnique({
+        where: { idempotencyKey },
+      });
+      if (already) continue; // sudah pernah di-expire → idempoten
+
+      const wallet = await this.prisma.wallet.findUnique({
+        where: { id: credit.walletId },
+      });
+      if (!wallet || wallet.pointBalance <= 0) continue;
+
+      const toExpire = Math.min(credit.points, wallet.pointBalance);
+      if (toExpire <= 0) continue;
+
+      if (dryRun) {
+        expiredLedgers++;
+        expiredPoints += toExpire;
+        continue;
+      }
+
+      try {
+        await this.prisma.$transaction((tx) =>
+          this.mutate(tx, LedgerDirection.DEBIT, credit.walletId, toExpire, {
+            sourceType: 'EXPIRY',
+            sourceId: credit.id,
+            description: 'Poin kedaluwarsa',
+            idempotencyKey,
+          }),
+        );
+        expiredLedgers++;
+        expiredPoints += toExpire;
+      } catch (err) {
+        // Dijalankan paralel (key unik) atau saldo berubah → aman dilewati.
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2002'
+        ) {
+          continue;
+        }
+        if (err instanceof BadRequestException) continue;
+        throw err;
+      }
+    }
+
+    return { scanned, expiredLedgers, expiredPoints, dryRun };
   }
 }

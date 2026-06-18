@@ -12,6 +12,7 @@ import {
   PaymentStatus,
   UserSegment,
   LedgerDirection,
+  WalletType,
 } from '@prisma/client';
 import { generateDailySequence } from '../../common/utils/sequence.util';
 import { toNum, D } from '../../common/utils/money.util';
@@ -24,6 +25,7 @@ import { MembershipTierService } from '../memberships/membership-tier.service';
 import { B2BPartnerService } from '../partners/b2b-partner.service';
 import { PromosService } from '../promos/promos.service';
 import { CampaignService } from '../campaigns/campaign.service';
+import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 
 export interface CheckoutInput {
   customerId?: string;
@@ -79,6 +81,7 @@ export class TransactionService {
     private b2bPartnerService: B2BPartnerService,
     private promosService: PromosService,
     private campaignService: CampaignService,
+    private loyaltyConfig: LoyaltyConfigService,
   ) {}
 
   /**
@@ -409,8 +412,38 @@ export class TransactionService {
       // Tarik kembali poin yang sempat diberikan.
       if (walletId) {
         await this.pointService.reverseForOrder(tx, walletId, order.id);
-        // Tarik kembali cashback tier (bila ada) — bonus balance.
-        // (Cashback masuk sebagai CREDIT BONUS; di-debit balik bila saldo cukup.)
+      }
+
+      // Cashback tier (CREDIT BONUS saat PAID) — di-debit balik HANYA bila flag aktif
+      // (LOYALTY_REVERSE_TIER_CASHBACK_ON_REFUND=true). Default: tidak ditarik (perilaku
+      // lama). Aman karena cashback dapat dilacak via ledger (referenceType TIER_CASHBACK)
+      // dan di-clamp ke saldo bonus tersisa agar tak minus.
+      if (this.loyaltyConfig.reverseTierCashbackOnRefund) {
+        const cashbackLedgers = await tx.walletLedger.findMany({
+          where: {
+            orderId: order.id,
+            walletType: WalletType.BONUS_BALANCE,
+            direction: LedgerDirection.CREDIT,
+            referenceType: 'TIER_CASHBACK',
+          },
+        });
+        for (const cb of cashbackLedgers) {
+          const w = await tx.wallet.findUnique({ where: { id: cb.walletId } });
+          if (!w) continue;
+          const reversible = Prisma.Decimal.min(D(cb.amount), D(w.bonusBalance));
+          if (reversible.gt(0)) {
+            await this.walletService.debit(WalletType.BONUS_BALANCE, {
+              walletId: cb.walletId,
+              amount: reversible,
+              orderId: order.id,
+              referenceType: 'REFUND_CASHBACK_REVERSAL',
+              referenceId: order.id,
+              idempotencyKey: `refund-cashback-${order.id}-${cb.id}`,
+              description: reason,
+              tx,
+            });
+          }
+        }
       }
 
       // Rollback voucher → ACTIVE kembali bila masih berlaku.

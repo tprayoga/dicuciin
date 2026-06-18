@@ -12,6 +12,7 @@ import { MembershipTierService } from '../memberships/membership-tier.service';
 import { B2BPartnerService } from '../partners/b2b-partner.service';
 import { PromosService } from '../promos/promos.service';
 import { CampaignService } from '../campaigns/campaign.service';
+import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 
 jest.mock('../../common/utils/sequence.util', () => ({
   generateDailySequence: jest.fn().mockResolvedValue('ORD-TEST-001'),
@@ -108,6 +109,7 @@ describe('TransactionService', () => {
         { provide: B2BPartnerService, useValue: mocks.b2bPartnerService },
         { provide: PromosService, useValue: mocks.promosService },
         { provide: CampaignService, useValue: mocks.campaignService },
+        LoyaltyConfigService,
       ],
     }).compile();
     service = moduleRef.get(TransactionService);
@@ -296,6 +298,51 @@ describe('TransactionService', () => {
     expect(mocks.pointService.reverseForOrder).toHaveBeenCalledWith(tx, 'w1', 'o1');
     expect(mocks.voucherService.reverseRedemption).toHaveBeenCalledWith(tx, 'o1');
     expect(mocks.membershipTierService.reverseTransaction).toHaveBeenCalled();
+  });
+
+  it('refund men-debit balik cashback bonus tier hanya saat flag aktif (default off = tidak)', async () => {
+    const prev = process.env.LOYALTY_REVERSE_TIER_CASHBACK_ON_REFUND;
+    process.env.LOYALTY_REVERSE_TIER_CASHBACK_ON_REFUND = 'true';
+    try {
+      prisma.order.findUnique.mockResolvedValue({
+        id: 'o1',
+        status: OrderStatus.PAID,
+        customerId: 'cust-1',
+        partnerId: null,
+        totalAmount: new Prisma.Decimal(50000),
+        deliveryFee: new Prisma.Decimal(0),
+        payments: [{ id: 'pay1', amount: new Prisma.Decimal(50000), status: 'PAID' }],
+        walletLedgers: [
+          {
+            walletId: 'w1',
+            walletType: 'MAIN_BALANCE',
+            amount: new Prisma.Decimal(50000),
+            direction: 'DEBIT',
+          },
+        ],
+      });
+      tx.walletLedger = {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ id: 'cb1', walletId: 'w1', amount: new Prisma.Decimal(5000) }]),
+      };
+      tx.wallet = {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ id: 'w1', bonusBalance: new Prisma.Decimal(5000) }),
+      };
+      mocks.walletService.debit = jest.fn().mockResolvedValue({});
+
+      await service.refund('o1', 'admin-1', 'Refund + cashback reversal');
+
+      expect(tx.walletLedger.findMany).toHaveBeenCalled();
+      expect(mocks.walletService.debit).toHaveBeenCalledWith(
+        'BONUS_BALANCE',
+        expect.objectContaining({ walletId: 'w1', idempotencyKey: 'refund-cashback-o1-cb1' }),
+      );
+    } finally {
+      process.env.LOYALTY_REVERSE_TIER_CASHBACK_ON_REFUND = prev;
+    }
   });
 
   it('refund B2B rollback akumulasi partner', async () => {

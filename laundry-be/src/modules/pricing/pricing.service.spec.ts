@@ -9,6 +9,7 @@ import { MembershipTierService } from '../memberships/membership-tier.service';
 import { B2BPartnerService } from '../partners/b2b-partner.service';
 import { CampaignService } from '../campaigns/campaign.service';
 import { B2BPricingService } from './b2b-pricing.service';
+import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 
 describe('PricingService.calculate', () => {
   let service: PricingService;
@@ -54,6 +55,7 @@ describe('PricingService.calculate', () => {
         { provide: B2BPartnerService, useValue: b2bPartnerService },
         { provide: CampaignService, useValue: campaignService },
         { provide: B2BPricingService, useValue: b2bPricingService },
+        LoyaltyConfigService,
       ],
     }).compile();
     service = moduleRef.get(PricingService);

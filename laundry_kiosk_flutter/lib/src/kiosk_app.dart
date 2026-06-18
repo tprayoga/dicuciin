@@ -713,6 +713,38 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             ),
                           ],
                         ),
+                        if ((quote?.happyHourDiscount ?? 0) > 0) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: tintBlue,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.bolt_rounded,
+                                  size: 16,
+                                  color: primary,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Happy Hour aktif — hemat ${rupiah(quote!.happyHourDiscount)}',
+                                  style: const TextStyle(
+                                    color: primary,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 12),
                         DetailRow(
                           label: 'No. Order',

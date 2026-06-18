@@ -1,8 +1,16 @@
 # Promotion & Loyalty Engine — Development Plan (Teknis)
 
-> Rencana implementasi. Pendamping: [promotion-loyalty-schema.md](./promotion-loyalty-schema.md).
+> **Status (2026-06-18): SEBAGIAN BESAR SUDAH DIIMPLEMENTASIKAN.** Dokumen ini awalnya
+> rencana; kini menjadi catatan teknis. Fase P1–P9 mayoritas selesai (lihat kolom Status
+> di tabel §6). Schema final terdokumentasi di
+> [promotion-loyalty-schema.md](./promotion-loyalty-schema.md) (sudah disinkronkan dengan
+> kode); API di [promotion-loyalty-api.md](./promotion-loyalty-api.md); seed & smoke di
+> [testing-promo-loyalty.md](./testing-promo-loyalty.md). Beberapa nama model final berbeda
+> dari sketsa awal di bawah (mis. `B2BPartner`, `UserMembershipStatus`,
+> `MembershipTierConfig`, `WalletLedger`).
+>
 > **Prinsip: extend, jangan rewrite.** Ikuti pola modul, struktur folder, naming, dan
-> style kode yang sudah ada. Belum ada kode yang ditulis sampai plan & schema disetujui.
+> style kode yang sudah ada.
 
 ## 1. Analisa struktur project saat ini
 
@@ -133,24 +141,24 @@ Tambah queue `loyalty-scheduler` + processor di `modules/queues/processors/`:
 > verifikasi (`tsc`, `jest`, `flutter analyze`, `nuxi typecheck`). Pola "verifikasi curl"
 > seperti di `ROADMAP_FITUR.md`.
 
-| Fase | Isi | Alasan urutan |
-|------|-----|---------------|
-| **P1. Fondasi wallet & ledger** | Wallet multi-saldo (MAIN/BONUS/POINT), `balanceType` di ledger, refund-safe. | Semua reward bermuara ke sini; tanpa ini point/cashback tak punya tempat. |
-| **P2. Pricing service** | `PricingService` menyatukan happy-hour-ready + promo (reuse `evaluatePromo`). | Sentralisasi kalkulasi sebelum tambah voucher/tier. |
-| **P3. Voucher engine** | Template + UserVoucher + redemption + commit saat PAID. | Membuka birthday/anniversary/LTNS/referral/tier-benefit (semua menerbitkan voucher). |
-| **P4. Loyalty point** | PointLedger earn (PAID) + redeem ke voucher + expiry job. | Butuh wallet (P1) & voucher (P3, utk redeem). |
-| **P5. Membership tier (retail)** | Tier + evaluasi saat PAID + benefit (multiplier/cashback/voucher bulanan). | Butuh point/spending dari P1–P4. |
-| **P6. Campaign + scheduler** | Campaign model + BullMQ jobs (birthday/anniversary/LTNS) + referral. | Butuh voucher (P3) sebagai reward. |
-| **P7. Happy hour** | HappyHourRule + integrasi `PricingService`. | Independen; bisa paralel dgn P5/P6. |
-| **P8. B2B partner** | Partner + deposit (reuse wallet) + tier B2B + order partner. | Reuse semua primitive; paling akhir karena lintas-modul. |
-| **P9. Reporting & revenue recognition** | Endpoint liability/funnel/ROI/tier/B2B + pemisahan top-up vs revenue. | Setelah data mengalir dari fase sebelumnya. |
+| Fase | Isi | Status | Catatan |
+|------|-----|--------|---------|
+| **P1. Fondasi wallet & ledger** | Wallet multi-saldo (MAIN/BONUS/POINT) + `WalletLedger` (`walletType`+`direction`), refund-safe. | DONE | Ledger uang baru = tabel terpisah `WalletLedger`; `Wallet.balance` tetap = MAIN. |
+| **P2. Pricing service** | `PricingService` (B2B → happy hour → voucher/promo) + `PricingCalculationLog`. | DONE | `modules/pricing` + log audit. |
+| **P3. Voucher engine** | Template + UserVoucher + redemption + commit saat PAID. | DONE | Non-stackable via `VoucherRedemption.orderId @unique`. |
+| **P4. Loyalty point** | PointLedger earn (PAID) + redeem ke voucher. | DONE (expiry job: belum terverifikasi) | `/points/redeem-voucher` atomik. |
+| **P5. Membership tier (retail/B2B)** | Tier config + `UserMembershipStatus` + evaluasi saat PAID + reverse saat refund. | DONE | `MembershipHistory` audit belum dibuat. |
+| **P6. Campaign + scheduler** | Campaign(+rules/rewards) + BullMQ jobs + referral + `CampaignExecutionLog`. | DONE (runtime scheduler butuh Redis utk dibuktikan) | `/campaigns/run/scheduled` untuk manual run. |
+| **P7. Happy hour** | HappyHourRule (+ quota & `allowVoucherStack`) + integrasi `PricingService`. | DONE | — |
+| **P8. B2B partner** | `B2BPartner` + deposit (reuse wallet) + tier B2B + `B2BPricingRule`(+Usage) + order partner. | DONE | Special pricing override discount tier. |
+| **P9. Reporting & revenue recognition** | `GET /reports/promotion-loyalty` + pemisahan top-up vs revenue. | DONE | Hati-hati double-count 2 tabel ledger uang. |
 
 ## 7. Strategi testing
 - **Unit (`*.service.spec.ts`)** mengikuti pola yang ada (mock `PrismaService`, `$transaction`
   callback): `PricingService` (pipeline & non-stackable), point earn/redeem/expire, tier
   threshold (naik/turun), refund reversal (semua ledger), campaign idempotency.
 - **Integrasi** di titik PAID & refund (order → ledger lengkap konsisten).
-- Pertahankan suite hijau (saat ini 45 test) + tambah per fase.
+- Pertahankan suite hijau (per 2026-06-18: **114 test, 17 suite, semua pass**) + tambah per fase.
 
 ## 8. Risiko & mitigasi
 | Risiko | Mitigasi |

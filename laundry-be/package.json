@@ -25,6 +25,7 @@
     "seed:promo-loyalty": "ts-node scripts/seed-promo-loyalty-smoke.ts",
     "test:smoke:promo-loyalty": "ts-node scripts/smoke-promo-loyalty.ts",
     "backfill:b2b-pricing-usages": "ts-node scripts/backfill-b2b-pricing-usages.ts",
+    "verify:redis-scheduler": "ts-node scripts/verify-redis-scheduler.ts",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down"
   },

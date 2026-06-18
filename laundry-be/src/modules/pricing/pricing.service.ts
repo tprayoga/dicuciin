@@ -8,6 +8,7 @@ import { MembershipTierService } from '../memberships/membership-tier.service';
 import { B2BPartnerService } from '../partners/b2b-partner.service';
 import { CampaignService } from '../campaigns/campaign.service';
 import { B2BPricingService } from './b2b-pricing.service';
+import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 
 export interface PricingItem {
   serviceId?: string;
@@ -56,9 +57,6 @@ export interface PricingBreakdown {
   promoId?: string;
 }
 
-/** Rp per 1 poin (default; bisa dipindah ke LoyaltyConfig). */
-const POINT_RATE = Number(process.env.LOYALTY_POINT_RATE ?? '1000');
-
 const rupiah = (v: Prisma.Decimal): Prisma.Decimal =>
   v.toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
 
@@ -77,6 +75,7 @@ export class PricingService {
     private b2bPartnerService: B2BPartnerService,
     private campaignService: CampaignService,
     private b2bPricingService: B2BPricingService,
+    private loyaltyConfig: LoyaltyConfigService,
   ) {}
 
   async calculate(input: CalculatePricingInput): Promise<PricingBreakdown> {
@@ -227,7 +226,9 @@ export class PricingService {
         ? await this.membershipTierService.getBenefits(input.tier)
         : { pointMultiplier: new Prisma.Decimal(1), cashbackRate: new Prisma.Decimal(0) };
 
-    const basePoints = Math.floor(toNum(spendingAmount) / POINT_RATE);
+    const basePoints = Math.floor(
+      toNum(spendingAmount) / this.loyaltyConfig.pointEarnRate,
+    );
     const pointsToEarn = Math.floor(basePoints * toNum(benefits.pointMultiplier));
     const cashbackToCredit = rupiah(spendingAmount.mul(benefits.cashbackRate).div(100));
 

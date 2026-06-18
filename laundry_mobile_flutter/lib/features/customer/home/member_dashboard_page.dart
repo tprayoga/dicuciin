@@ -26,6 +26,7 @@ class _MemberDashboardPage extends StatelessWidget {
     final txns = c.wallet?.transactions ?? const [];
     final orders = c.orders;
     final promos = c.promos;
+    final vouchers = c.vouchers;
     final membership = c.membershipStatus;
     final partner = context.watch<AuthController>().user?.b2bPartner;
 
@@ -105,11 +106,22 @@ class _MemberDashboardPage extends StatelessWidget {
                     ...orders.take(6).map(_orderRow),
                   const SizedBox(height: 22),
 
-                  // ── Voucher / promo ──
-                  _sectionTitle('Voucher & Promo Kamu'),
+                  // ── Voucher saya (UserVoucher milik customer) ──
+                  _sectionTitle('Voucher Saya'),
+                  const SizedBox(height: 10),
+                  if (vouchers.isEmpty)
+                    _emptyHint(
+                      'Belum punya voucher. Tukar poin atau ikuti promo untuk dapat voucher.',
+                    )
+                  else
+                    ...vouchers.map(_myVoucherRow),
+                  const SizedBox(height: 22),
+
+                  // ── Promo publik (kode yang bisa dipakai siapa saja) ──
+                  _sectionTitle('Promo Tersedia'),
                   const SizedBox(height: 10),
                   if (promos.isEmpty)
-                    _emptyHint('Belum ada voucher aktif.')
+                    _emptyHint('Belum ada promo aktif.')
                   else
                     ...promos.map(_promoRow),
                 ],
@@ -520,6 +532,128 @@ class _MemberDashboardPage extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _voucherTypeLabel(String t) {
+    switch (t) {
+      case 'PERCENTAGE_DISCOUNT':
+        return 'Diskon persen';
+      case 'NOMINAL_DISCOUNT':
+        return 'Potongan nominal';
+      case 'FREE_WASH':
+        return 'Gratis cuci';
+      case 'FREE_DRY':
+        return 'Gratis pengering';
+      case 'FREE_WASH_DRY':
+        return 'Gratis cuci & kering';
+      case 'B2B_EXCLUSIVE':
+        return 'Khusus B2B';
+      case 'TIER_EXCLUSIVE':
+        return 'Khusus tier';
+      case 'LOTTERY_TICKET':
+        return 'Tiket undian';
+      default:
+        return t;
+    }
+  }
+
+  /// Baris voucher milik customer (UserVoucher) dengan badge status.
+  Widget _myVoucherRow(UserVoucher v) {
+    Color badgeBg;
+    Color badgeFg;
+    String badgeLabel;
+    switch (v.status) {
+      case 'ACTIVE':
+        badgeBg = AppColors.successBg;
+        badgeFg = AppColors.success;
+        badgeLabel = 'Aktif';
+        break;
+      case 'USED':
+        badgeBg = AppColors.tintBlueAlt;
+        badgeFg = _textMuted;
+        badgeLabel = 'Terpakai';
+        break;
+      case 'EXPIRED':
+        badgeBg = AppColors.errorBg;
+        badgeFg = AppColors.error;
+        badgeLabel = 'Kedaluwarsa';
+        break;
+      case 'CANCELLED':
+        badgeBg = AppColors.errorBg;
+        badgeFg = AppColors.error;
+        badgeLabel = 'Dibatalkan';
+        break;
+      default:
+        badgeBg = AppColors.tintBlueAlt;
+        badgeFg = _textMuted;
+        badgeLabel = v.status;
+    }
+    final inactive = v.status != 'ACTIVE';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _line),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.local_activity_outlined,
+            size: 22,
+            color: inactive ? _textMuted : _primary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  v.templateName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: _textDark,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${_voucherTypeLabel(v.voucherType)} • ${v.code}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: _textMuted),
+                ),
+                if (v.expiresAt != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Berlaku s/d ${_formatDateId(v.expiresAt!)}',
+                    style: const TextStyle(fontSize: 11, color: _textMuted),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: badgeBg,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              badgeLabel,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: badgeFg,
+              ),
             ),
           ),
         ],
