@@ -35,11 +35,17 @@ export interface MoneyMutationInput {
  * - Cashback hanya masuk BONUS_BALANCE.
  * - Hanya MAIN_BALANCE yang bisa ditarik (BONUS non-withdrawable — keputusan 8).
  *
- * Catatan: tidak menggantikan `WalletsService` (pay/topup lama). Ini service
- * tambahan sebagai integration point yang aman untuk fitur loyalty.
+ * BATASAN TANGGUNG JAWAB (jangan tertukar dengan `WalletsService`):
+ * - `WalletLedgerService` (file ini) = engine mutasi saldo multi-bucket untuk
+ *   Promotion & Loyalty. Menulis ke `wallet_ledgers`. Dipakai oleh
+ *   payments / transactions / campaigns / pricing.
+ * - `WalletsService` (wallets.service.ts) = service fitur wallet yang menghadap
+ *   HTTP/mobile (PIN, topup, pay, refund). Menulis ke `wallet_transactions`.
+ * Keduanya memutasi `Wallet.balance`, tetapi mencatat ke tabel ledger berbeda;
+ * penyatuan ke satu ledger tunggal adalah pekerjaan lanjutan (belum dilakukan).
  */
 @Injectable()
-export class WalletService {
+export class WalletLedgerService {
   constructor(private prisma: PrismaService) {}
 
   /** Kolom saldo uang sesuai tipe (POINT ditangani PointService). */
@@ -47,7 +53,7 @@ export class WalletService {
     if (type === WalletType.MAIN_BALANCE) return 'balance';
     if (type === WalletType.BONUS_BALANCE) return 'bonusBalance';
     throw new BadRequestException(
-      'POINT_BALANCE dimutasi lewat PointService, bukan WalletService',
+      'POINT_BALANCE dimutasi lewat PointService, bukan WalletLedgerService',
     );
   }
 
@@ -64,7 +70,15 @@ export class WalletService {
     return this.prisma.wallet.create({ data: { ...where } });
   }
 
-  /** Inti mutasi saldo uang + tulis ledger, atomik. */
+  /**
+   * Inti mutasi saldo uang + tulis ledger — ATOMIK.
+   *
+   * Saldo dimutasi lewat `increment`/`decrement` di DB (bukan set nilai absolut
+   * hasil read), dan DEBIT dijaga `updateMany` bersyarat `<field> >= amount`.
+   * Ini mencegah lost-update / saldo minus saat ada mutasi bersamaan: dua debit
+   * paralel tak bisa keduanya lolos guard, dan `balanceBefore/After` diturunkan
+   * dari nilai hasil update (bukan snapshot lama yang bisa basi).
+   */
   private async mutateMoney(
     db: PrismaTx,
     type: WalletType,
@@ -77,27 +91,49 @@ export class WalletService {
       throw new BadRequestException('Nominal mutasi harus lebih dari 0');
     }
 
-    const wallet = await db.wallet.findUnique({ where: { id: input.walletId } });
-    if (!wallet) throw new NotFoundException('Wallet tidak ditemukan');
+    let balanceBefore: Prisma.Decimal;
+    let balanceAfter: Prisma.Decimal;
 
-    const balanceBefore = D(wallet[field]);
-    const balanceAfter =
-      direction === LedgerDirection.CREDIT
-        ? balanceBefore.plus(amount)
-        : balanceBefore.minus(amount);
-
-    if (direction === LedgerDirection.DEBIT && balanceAfter.lt(0)) {
-      throw new BadRequestException('Saldo tidak mencukupi');
+    if (direction === LedgerDirection.CREDIT) {
+      // Increment atomik. updateMany (bukan update) agar wallet hilang → count 0,
+      // dipetakan ke NotFound tanpa menangkap P2025.
+      const credited = await db.wallet.updateMany({
+        where: { id: input.walletId },
+        data: { [field]: { increment: amount } },
+      });
+      if (credited.count === 0) {
+        throw new NotFoundException('Wallet tidak ditemukan');
+      }
+      const fresh = await db.wallet.findUniqueOrThrow({
+        where: { id: input.walletId },
+      });
+      balanceAfter = D(fresh[field]);
+      balanceBefore = balanceAfter.minus(amount);
+    } else {
+      // Decrement atomik dengan guard saldo cukup — hanya berhasil bila
+      // `<field> >= amount`. Mencegah overspend/lost-update saat konkuren.
+      const debited = await db.wallet.updateMany({
+        where: { id: input.walletId, [field]: { gte: amount } },
+        data: { [field]: { decrement: amount } },
+      });
+      if (debited.count === 0) {
+        const exists = await db.wallet.findUnique({
+          where: { id: input.walletId },
+          select: { id: true },
+        });
+        if (!exists) throw new NotFoundException('Wallet tidak ditemukan');
+        throw new BadRequestException('Saldo tidak mencukupi');
+      }
+      const fresh = await db.wallet.findUniqueOrThrow({
+        where: { id: input.walletId },
+      });
+      balanceAfter = D(fresh[field]);
+      balanceBefore = balanceAfter.plus(amount);
     }
-
-    await db.wallet.update({
-      where: { id: wallet.id },
-      data: { [field]: balanceAfter },
-    });
 
     return db.walletLedger.create({
       data: {
-        walletId: wallet.id,
+        walletId: input.walletId,
         orderId: input.orderId,
         walletType: type,
         direction,

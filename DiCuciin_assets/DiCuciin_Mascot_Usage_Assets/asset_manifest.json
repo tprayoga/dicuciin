@@ -1,0 +1,686 @@
+[
+  {
+    "id": "neutral_standing",
+    "file": "01_core_pose_pack/01_neutral_standing.png",
+    "pack": "01_core_pose_pack",
+    "description": "Neutral standing front mascot",
+    "source_sheet": "cheerful_seals_with_laundry_fun.png",
+    "grid_index": 1,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "waving",
+    "file": "01_core_pose_pack/02_waving.png",
+    "pack": "01_core_pose_pack",
+    "description": "Welcome / greeting mascot waving",
+    "source_sheet": "cheerful_seals_with_laundry_fun.png",
+    "grid_index": 2,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "thumbs_up",
+    "file": "01_core_pose_pack/03_thumbs_up.png",
+    "pack": "01_core_pose_pack",
+    "description": "Positive confirmation mascot giving thumbs up",
+    "source_sheet": "cheerful_seals_with_laundry_fun.png",
+    "grid_index": 3,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "holding_blank_board",
+    "file": "01_core_pose_pack/04_holding_blank_board.png",
+    "pack": "01_core_pose_pack",
+    "description": "Mascot holding blank vertical board/sign",
+    "source_sheet": "cheerful_seals_with_laundry_fun.png",
+    "grid_index": 4,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "holding_folded_laundry",
+    "file": "01_core_pose_pack/05_holding_folded_laundry.png",
+    "pack": "01_core_pose_pack",
+    "description": "Mascot holding folded laundry stack",
+    "source_sheet": "cheerful_seals_with_laundry_fun.png",
+    "grid_index": 5,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "holding_laundry_basket",
+    "file": "01_core_pose_pack/06_holding_laundry_basket.png",
+    "pack": "01_core_pose_pack",
+    "description": "Mascot holding laundry basket",
+    "source_sheet": "cheerful_seals_with_laundry_fun.png",
+    "grid_index": 6,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "sitting_with_washing_machine",
+    "file": "01_core_pose_pack/07_sitting_with_washing_machine.png",
+    "pack": "01_core_pose_pack",
+    "description": "Mascot sitting beside washing machine",
+    "source_sheet": "cheerful_seals_with_laundry_fun.png",
+    "grid_index": 7,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "pointing_right",
+    "file": "01_core_pose_pack/08_pointing_right.png",
+    "pack": "01_core_pose_pack",
+    "description": "Mascot pointing right",
+    "source_sheet": "cheerful_seals_with_laundry_fun.png",
+    "grid_index": 8,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "happy",
+    "file": "02_emotion_pack/01_happy.png",
+    "pack": "02_emotion_pack",
+    "description": "Emotion: happy",
+    "source_sheet": "cute_seal_mascot_sticker_sheet.png",
+    "grid_index": 1,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "excited",
+    "file": "02_emotion_pack/02_excited.png",
+    "pack": "02_emotion_pack",
+    "description": "Emotion: excited",
+    "source_sheet": "cute_seal_mascot_sticker_sheet.png",
+    "grid_index": 2,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "thank_you_bow",
+    "file": "02_emotion_pack/03_thank_you_bow.png",
+    "pack": "02_emotion_pack",
+    "description": "Emotion: thank you / polite bow",
+    "source_sheet": "cute_seal_mascot_sticker_sheet.png",
+    "grid_index": 3,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "thinking",
+    "file": "02_emotion_pack/04_thinking.png",
+    "pack": "02_emotion_pack",
+    "description": "Emotion: thinking",
+    "source_sheet": "cute_seal_mascot_sticker_sheet.png",
+    "grid_index": 4,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "confused",
+    "file": "02_emotion_pack/05_confused.png",
+    "pack": "02_emotion_pack",
+    "description": "Emotion: confused",
+    "source_sheet": "cute_seal_mascot_sticker_sheet.png",
+    "grid_index": 5,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "sleeping",
+    "file": "02_emotion_pack/06_sleeping.png",
+    "pack": "02_emotion_pack",
+    "description": "Emotion: sleeping",
+    "source_sheet": "cute_seal_mascot_sticker_sheet.png",
+    "grid_index": 6,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "waiting",
+    "file": "02_emotion_pack/07_waiting.png",
+    "pack": "02_emotion_pack",
+    "description": "Emotion: waiting / checking time",
+    "source_sheet": "cute_seal_mascot_sticker_sheet.png",
+    "grid_index": 7,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "running",
+    "file": "02_emotion_pack/08_running.png",
+    "pack": "02_emotion_pack",
+    "description": "Emotion/action: running",
+    "source_sheet": "cute_seal_mascot_sticker_sheet.png",
+    "grid_index": 8,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "celebrating",
+    "file": "02_emotion_pack/09_celebrating.png",
+    "pack": "02_emotion_pack",
+    "description": "Emotion: celebrating",
+    "source_sheet": "cute_seal_mascot_sticker_sheet.png",
+    "grid_index": 9,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "sad",
+    "file": "02_emotion_pack/10_sad.png",
+    "pack": "02_emotion_pack",
+    "description": "Emotion: sad",
+    "source_sheet": "cute_seal_mascot_sticker_sheet.png",
+    "grid_index": 10,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "shocked",
+    "file": "02_emotion_pack/11_shocked.png",
+    "pack": "02_emotion_pack",
+    "description": "Emotion: shocked",
+    "source_sheet": "cute_seal_mascot_sticker_sheet.png",
+    "grid_index": 11,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "proud",
+    "file": "02_emotion_pack/12_proud.png",
+    "pack": "02_emotion_pack",
+    "description": "Emotion: proud",
+    "source_sheet": "cute_seal_mascot_sticker_sheet.png",
+    "grid_index": 12,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "pointing_left",
+    "file": "03_action_pack_navigation/01_pointing_left.png",
+    "pack": "03_action_pack_navigation",
+    "description": "Action: pointing left",
+    "source_sheet": "chubby_mascots_with_fun_props.png",
+    "grid_index": 1,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "pointing_right",
+    "file": "03_action_pack_navigation/02_pointing_right.png",
+    "pack": "03_action_pack_navigation",
+    "description": "Action: pointing right",
+    "source_sheet": "chubby_mascots_with_fun_props.png",
+    "grid_index": 2,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "pointing_up",
+    "file": "03_action_pack_navigation/03_pointing_up.png",
+    "pack": "03_action_pack_navigation",
+    "description": "Action: pointing up",
+    "source_sheet": "chubby_mascots_with_fun_props.png",
+    "grid_index": 3,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "pointing_down",
+    "file": "03_action_pack_navigation/04_pointing_down.png",
+    "pack": "03_action_pack_navigation",
+    "description": "Action: pointing down",
+    "source_sheet": "chubby_mascots_with_fun_props.png",
+    "grid_index": 4,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "holding_phone",
+    "file": "03_action_pack_navigation/05_holding_phone.png",
+    "pack": "03_action_pack_navigation",
+    "description": "Action: holding phone",
+    "source_sheet": "chubby_mascots_with_fun_props.png",
+    "grid_index": 5,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "holding_qr_card",
+    "file": "03_action_pack_navigation/06_holding_qr_card.png",
+    "pack": "03_action_pack_navigation",
+    "description": "Action: holding QR card",
+    "source_sheet": "chubby_mascots_with_fun_props.png",
+    "grid_index": 6,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "holding_voucher",
+    "file": "03_action_pack_navigation/07_holding_voucher.png",
+    "pack": "03_action_pack_navigation",
+    "description": "Action: holding voucher/coupon",
+    "source_sheet": "chubby_mascots_with_fun_props.png",
+    "grid_index": 7,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "holding_map",
+    "file": "03_action_pack_navigation/08_holding_map.png",
+    "pack": "03_action_pack_navigation",
+    "description": "Action: holding map",
+    "source_sheet": "chubby_mascots_with_fun_props.png",
+    "grid_index": 8,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "holding_wallet",
+    "file": "04_action_pack_laundry_payment/01_holding_wallet.png",
+    "pack": "04_action_pack_laundry_payment",
+    "description": "Action: holding wallet",
+    "source_sheet": "laundry_buddies_in_playful_poses.png",
+    "grid_index": 1,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "holding_coin",
+    "file": "04_action_pack_laundry_payment/02_holding_coin.png",
+    "pack": "04_action_pack_laundry_payment",
+    "description": "Action: holding coin",
+    "source_sheet": "laundry_buddies_in_playful_poses.png",
+    "grid_index": 2,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "holding_laundry_basket",
+    "file": "04_action_pack_laundry_payment/03_holding_laundry_basket.png",
+    "pack": "04_action_pack_laundry_payment",
+    "description": "Action: holding laundry basket",
+    "source_sheet": "laundry_buddies_in_playful_poses.png",
+    "grid_index": 3,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "holding_tshirt",
+    "file": "04_action_pack_laundry_payment/04_holding_tshirt.png",
+    "pack": "04_action_pack_laundry_payment",
+    "description": "Action: holding T-shirt",
+    "source_sheet": "laundry_buddies_in_playful_poses.png",
+    "grid_index": 4,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "holding_towel",
+    "file": "04_action_pack_laundry_payment/05_holding_towel.png",
+    "pack": "04_action_pack_laundry_payment",
+    "description": "Action: holding towel",
+    "source_sheet": "laundry_buddies_in_playful_poses.png",
+    "grid_index": 5,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "beside_washer",
+    "file": "04_action_pack_laundry_payment/06_beside_washer.png",
+    "pack": "04_action_pack_laundry_payment",
+    "description": "Action: beside washing machine",
+    "source_sheet": "laundry_buddies_in_playful_poses.png",
+    "grid_index": 6,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "beside_dryer",
+    "file": "04_action_pack_laundry_payment/07_beside_dryer.png",
+    "pack": "04_action_pack_laundry_payment",
+    "description": "Action: beside dryer",
+    "source_sheet": "laundry_buddies_in_playful_poses.png",
+    "grid_index": 7,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "carrying_folded_laundry",
+    "file": "04_action_pack_laundry_payment/08_carrying_folded_laundry.png",
+    "pack": "04_action_pack_laundry_payment",
+    "description": "Action: carrying folded laundry",
+    "source_sheet": "laundry_buddies_in_playful_poses.png",
+    "grid_index": 8,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "registration_welcome_waving",
+    "file": "05_app_flow_registration_permissions/01_registration_welcome_waving.png",
+    "pack": "05_app_flow_registration_permissions",
+    "description": "Registration: welcome screen, mascot waving",
+    "source_sheet": "cute_seal_mascot_emoji_set.png",
+    "grid_index": 1,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "signup_success_clean_clothes",
+    "file": "05_app_flow_registration_permissions/02_signup_success_clean_clothes.png",
+    "pack": "05_app_flow_registration_permissions",
+    "description": "Registration: sign up success, holding clean clothes",
+    "source_sheet": "cute_seal_mascot_emoji_set.png",
+    "grid_index": 2,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "otp_verification_phone",
+    "file": "05_app_flow_registration_permissions/03_otp_verification_phone.png",
+    "pack": "05_app_flow_registration_permissions",
+    "description": "Registration: OTP verification, holding phone",
+    "source_sheet": "cute_seal_mascot_emoji_set.png",
+    "grid_index": 3,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "otp_wrong_confused_phone",
+    "file": "05_app_flow_registration_permissions/04_otp_wrong_confused_phone.png",
+    "pack": "05_app_flow_registration_permissions",
+    "description": "Registration: OTP wrong, confused with phone",
+    "source_sheet": "cute_seal_mascot_emoji_set.png",
+    "grid_index": 4,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "location_permission_map",
+    "file": "05_app_flow_registration_permissions/05_location_permission_map.png",
+    "pack": "05_app_flow_registration_permissions",
+    "description": "Permission: location request, pointing to map marker",
+    "source_sheet": "cute_seal_mascot_emoji_set.png",
+    "grid_index": 5,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "location_denied_compass",
+    "file": "05_app_flow_registration_permissions/06_location_denied_compass.png",
+    "pack": "05_app_flow_registration_permissions",
+    "description": "Permission: location denied, confused with compass",
+    "source_sheet": "cute_seal_mascot_emoji_set.png",
+    "grid_index": 6,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "camera_permission_qr_scan",
+    "file": "05_app_flow_registration_permissions/07_camera_permission_qr_scan.png",
+    "pack": "05_app_flow_registration_permissions",
+    "description": "Permission: camera / QR scan guidance",
+    "source_sheet": "cute_seal_mascot_emoji_set.png",
+    "grid_index": 7,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "camera_denied_cover_eye",
+    "file": "05_app_flow_registration_permissions/08_camera_denied_cover_eye.png",
+    "pack": "05_app_flow_registration_permissions",
+    "description": "Permission: camera denied, covering eye",
+    "source_sheet": "cute_seal_mascot_emoji_set.png",
+    "grid_index": 8,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "homepage_scan_guide",
+    "file": "06_app_flow_home_outlet_promo_history/01_homepage_scan_guide.png",
+    "pack": "06_app_flow_home_outlet_promo_history",
+    "description": "Homepage: first-time guide pointing to scan",
+    "source_sheet": "cute_seals_with_app_themed_props.png",
+    "grid_index": 1,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "wallet_balance_helper",
+    "file": "06_app_flow_home_outlet_promo_history/02_wallet_balance_helper.png",
+    "pack": "06_app_flow_home_outlet_promo_history",
+    "description": "Homepage/wallet: balance helper with wallet",
+    "source_sheet": "cute_seals_with_app_themed_props.png",
+    "grid_index": 2,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "empty_history_sitting",
+    "file": "06_app_flow_home_outlet_promo_history/03_empty_history_sitting.png",
+    "pack": "06_app_flow_home_outlet_promo_history",
+    "description": "History: empty transaction, sitting casually",
+    "source_sheet": "cute_seals_with_app_themed_props.png",
+    "grid_index": 3,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "outlet_nearby_pointer",
+    "file": "06_app_flow_home_outlet_promo_history/04_outlet_nearby_pointer.png",
+    "pack": "06_app_flow_home_outlet_promo_history",
+    "description": "Outlet: nearby outlet pointer",
+    "source_sheet": "cute_seals_with_app_themed_props.png",
+    "grid_index": 4,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "outlet_busy_sweating",
+    "file": "06_app_flow_home_outlet_promo_history/05_outlet_busy_sweating.png",
+    "pack": "06_app_flow_home_outlet_promo_history",
+    "description": "Outlet: busy outlet, sweating",
+    "source_sheet": "cute_seals_with_app_themed_props.png",
+    "grid_index": 5,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "outlet_quiet_relaxed",
+    "file": "06_app_flow_home_outlet_promo_history/06_outlet_quiet_relaxed.png",
+    "pack": "06_app_flow_home_outlet_promo_history",
+    "description": "Outlet: quiet outlet, relaxed",
+    "source_sheet": "cute_seals_with_app_themed_props.png",
+    "grid_index": 6,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "promo_holding_voucher",
+    "file": "06_app_flow_home_outlet_promo_history/07_promo_holding_voucher.png",
+    "pack": "06_app_flow_home_outlet_promo_history",
+    "description": "Promo: holding voucher",
+    "source_sheet": "cute_seals_with_app_themed_props.png",
+    "grid_index": 7,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "promo_empty_waiting",
+    "file": "06_app_flow_home_outlet_promo_history/08_promo_empty_waiting.png",
+    "pack": "06_app_flow_home_outlet_promo_history",
+    "description": "Promo: no promo, waiting/reclining",
+    "source_sheet": "cute_seals_with_app_themed_props.png",
+    "grid_index": 8,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "scan_qr_start",
+    "file": "07_app_flow_scan_machine_payment/01_scan_qr_start.png",
+    "pack": "07_app_flow_scan_machine_payment",
+    "description": "Scan QR: before starting scan",
+    "source_sheet": "seal_mascots_and_washing_machine_scenarios.png",
+    "grid_index": 1,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "scan_qr_unreadable",
+    "file": "07_app_flow_scan_machine_payment/02_scan_qr_unreadable.png",
+    "pack": "07_app_flow_scan_machine_payment",
+    "description": "Scan QR: unreadable QR",
+    "source_sheet": "seal_mascots_and_washing_machine_scenarios.png",
+    "grid_index": 2,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "machine_offline_cable",
+    "file": "07_app_flow_scan_machine_payment/03_machine_offline_cable.png",
+    "pack": "07_app_flow_scan_machine_payment",
+    "description": "Machine: offline / disconnected",
+    "source_sheet": "seal_mascots_and_washing_machine_scenarios.png",
+    "grid_index": 3,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "machine_ready_thumbs_up",
+    "file": "07_app_flow_scan_machine_payment/04_machine_ready_thumbs_up.png",
+    "pack": "07_app_flow_scan_machine_payment",
+    "description": "Machine: ready, thumbs up",
+    "source_sheet": "seal_mascots_and_washing_machine_scenarios.png",
+    "grid_index": 4,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "machine_running_waiting",
+    "file": "07_app_flow_scan_machine_payment/05_machine_running_waiting.png",
+    "pack": "07_app_flow_scan_machine_payment",
+    "description": "Machine: running / in use, waiting",
+    "source_sheet": "seal_mascots_and_washing_machine_scenarios.png",
+    "grid_index": 5,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "machine_almost_finished_clock",
+    "file": "07_app_flow_scan_machine_payment/06_machine_almost_finished_clock.png",
+    "pack": "07_app_flow_scan_machine_payment",
+    "description": "Machine: almost finished, checking clock",
+    "source_sheet": "seal_mascots_and_washing_machine_scenarios.png",
+    "grid_index": 6,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "payment_processing_terminal",
+    "file": "07_app_flow_scan_machine_payment/07_payment_processing_terminal.png",
+    "pack": "07_app_flow_scan_machine_payment",
+    "description": "Payment: processing with terminal",
+    "source_sheet": "seal_mascots_and_washing_machine_scenarios.png",
+    "grid_index": 7,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "payment_failed_receipt",
+    "file": "07_app_flow_scan_machine_payment/08_payment_failed_receipt.png",
+    "pack": "07_app_flow_scan_machine_payment",
+    "description": "Payment: failed, panicking with receipt",
+    "source_sheet": "seal_mascots_and_washing_machine_scenarios.png",
+    "grid_index": 8,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "payment_success_basket_confetti",
+    "file": "08_notification_feedback_pack/01_payment_success_basket_confetti.png",
+    "pack": "08_notification_feedback_pack",
+    "description": "Notification: payment success with basket and confetti",
+    "source_sheet": "cheerful_seals_with_laundry_flair.png",
+    "grid_index": 1,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "machine_started_wave",
+    "file": "08_notification_feedback_pack/02_machine_started_wave.png",
+    "pack": "08_notification_feedback_pack",
+    "description": "Notification: machine started, waving",
+    "source_sheet": "cheerful_seals_with_laundry_flair.png",
+    "grid_index": 2,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "machine_50_percent_thumbs_up",
+    "file": "08_notification_feedback_pack/03_machine_50_percent_thumbs_up.png",
+    "pack": "08_notification_feedback_pack",
+    "description": "Notification: machine 50 percent, thumbs up",
+    "source_sheet": "cheerful_seals_with_laundry_flair.png",
+    "grid_index": 3,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "machine_90_percent_clean_shirt",
+    "file": "08_notification_feedback_pack/04_machine_90_percent_clean_shirt.png",
+    "pack": "08_notification_feedback_pack",
+    "description": "Notification: machine 90 percent, ready with clothes",
+    "source_sheet": "cheerful_seals_with_laundry_flair.png",
+    "grid_index": 4,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "machine_finished_bell",
+    "file": "08_notification_feedback_pack/05_machine_finished_bell.png",
+    "pack": "08_notification_feedback_pack",
+    "description": "Notification: machine finished, ringing bell",
+    "source_sheet": "cheerful_seals_with_laundry_flair.png",
+    "grid_index": 5,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "dryer_finished_towels",
+    "file": "08_notification_feedback_pack/06_dryer_finished_towels.png",
+    "pack": "08_notification_feedback_pack",
+    "description": "Notification: dryer finished, carrying towels",
+    "source_sheet": "cheerful_seals_with_laundry_flair.png",
+    "grid_index": 6,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "feedback_request_curious",
+    "file": "08_notification_feedback_pack/07_feedback_request_curious.png",
+    "pack": "08_notification_feedback_pack",
+    "description": "Feedback: request feedback, curious",
+    "source_sheet": "cheerful_seals_with_laundry_flair.png",
+    "grid_index": 7,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "feedback_submitted_thank_you",
+    "file": "08_notification_feedback_pack/08_feedback_submitted_thank_you.png",
+    "pack": "08_notification_feedback_pack",
+    "description": "Feedback: submitted, thank you bow",
+    "source_sheet": "cheerful_seals_with_laundry_flair.png",
+    "grid_index": 8,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "error_no_internet",
+    "file": "09_error_kiosk_pack/01_error_no_internet.png",
+    "pack": "09_error_kiosk_pack",
+    "description": "Error: no internet / lost signal",
+    "source_sheet": "kawaii_seal_mascots_in_fun_activities.png",
+    "grid_index": 1,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "error_server_maintenance",
+    "file": "09_error_kiosk_pack/02_error_server_maintenance.png",
+    "pack": "09_error_kiosk_pack",
+    "description": "Error: server maintenance with toolbox",
+    "source_sheet": "kawaii_seal_mascots_in_fun_activities.png",
+    "grid_index": 2,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "empty_page_sweeping",
+    "file": "09_error_kiosk_pack/03_empty_page_sweeping.png",
+    "pack": "09_error_kiosk_pack",
+    "description": "Empty state: sweeping empty page",
+    "source_sheet": "kawaii_seal_mascots_in_fun_activities.png",
+    "grid_index": 3,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "error_404_lost",
+    "file": "09_error_kiosk_pack/04_error_404_lost.png",
+    "pack": "09_error_kiosk_pack",
+    "description": "Error: 404 page lost/confused",
+    "source_sheet": "kawaii_seal_mascots_in_fun_activities.png",
+    "grid_index": 4,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "kiosk_idle_cleaning",
+    "file": "09_error_kiosk_pack/05_kiosk_idle_cleaning.png",
+    "pack": "09_error_kiosk_pack",
+    "description": "Kiosk: idle screen cleaning clothes",
+    "source_sheet": "kawaii_seal_mascots_in_fun_activities.png",
+    "grid_index": 5,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "kiosk_fast_login_qr",
+    "file": "09_error_kiosk_pack/06_kiosk_fast_login_qr.png",
+    "pack": "09_error_kiosk_pack",
+    "description": "Kiosk: fast login QR",
+    "source_sheet": "kawaii_seal_mascots_in_fun_activities.png",
+    "grid_index": 6,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "kiosk_guest_checkout",
+    "file": "09_error_kiosk_pack/07_kiosk_guest_checkout.png",
+    "pack": "09_error_kiosk_pack",
+    "description": "Kiosk: guest checkout welcoming",
+    "source_sheet": "kawaii_seal_mascots_in_fun_activities.png",
+    "grid_index": 7,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  },
+  {
+    "id": "kiosk_pin_confirmation_security",
+    "file": "09_error_kiosk_pack/08_kiosk_pin_confirmation_security.png",
+    "pack": "09_error_kiosk_pack",
+    "description": "Kiosk: PIN confirmation / security",
+    "source_sheet": "kawaii_seal_mascots_in_fun_activities.png",
+    "grid_index": 8,
+    "recommended_usage": "Mobile app, web dashboard, kiosk UI, empty state, notification, payment and QR flow"
+  }
+]

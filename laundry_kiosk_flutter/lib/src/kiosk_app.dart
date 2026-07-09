@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import 'core/assets/kiosk_mascot_assets.dart';
+import 'features/member/member_login_screen.dart';
 import 'kiosk_controller.dart';
 import 'models.dart';
+import 'shared/widgets/kiosk_mascot_panel.dart';
 
 // ── Token warna terpusat — palet resmi Di.Cuciin (Brand Book V01). ──
 const primary = Color(0xFF0360DA); // water blue
@@ -119,6 +122,7 @@ class KioskRouter extends StatelessWidget {
       KioskStage.enrollment => const EnrollmentScreen(),
       KioskStage.closed => const ClosedScreen(),
       KioskStage.welcome => const WelcomeScreen(),
+      KioskStage.memberLogin => const MemberLoginScreen(),
       KioskStage.machines => const MachinesScreen(),
       KioskStage.checkout => const CheckoutScreen(),
       KioskStage.payment => const PaymentScreen(),
@@ -254,44 +258,13 @@ class ClosedScreen extends StatelessWidget {
             children: [
               const Brand(),
               const Spacer(),
-              Container(
-                width: 150,
-                height: 150,
-                decoration: const BoxDecoration(
-                  color: tintBlue,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.schedule_rounded,
-                  color: primary,
-                  size: 82,
-                ),
-              ),
-              const SizedBox(height: 28),
-              const Text(
-                'Kiosk Sedang Tutup',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: textDark,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '${controller.terminal?.outlet.name ?? 'Outlet'} sedang berada di luar jam operasional.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: textMuted,
-                  fontSize: 15,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Layar akan aktif kembali secara otomatis sesuai jadwal.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: textMuted, fontSize: 13),
+              KioskMascotPanel(
+                mascotAsset: KioskMascotAssets.sleeping,
+                title: 'Kiosk Sedang Tutup',
+                message:
+                    '${controller.terminal?.outlet.name ?? 'Outlet'} sedang di luar jam operasional. '
+                    'Layar akan aktif kembali secara otomatis sesuai jadwal.',
+                showCard: false,
               ),
               const Spacer(),
               const Text(
@@ -314,83 +287,106 @@ class WelcomeScreen extends StatelessWidget {
     final controller = context.watch<KioskController>();
     return Material(
       color: Colors.white,
-      child: InkWell(
-        onTap: controller.startOrder,
-        child: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                flex: 6,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 30),
-                  decoration: const BoxDecoration(
-                    color: primaryDark,
-                    borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(36),
-                      bottomRight: Radius.circular(36),
+      child: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              flex: 6,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+                decoration: const BoxDecoration(
+                  color: primaryDark,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(36),
+                    bottomRight: Radius.circular(36),
+                  ),
+                ),
+                child: const Column(
+                  children: [
+                    Brand(),
+                    Spacer(),
+                    CircleIllustration(),
+                    Spacer(),
+                    Text(
+                      'Laundry Jadi\nLebih Mudah',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 30,
+                        height: 1.15,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                  child: const Column(
-                    children: [
-                      Brand(),
-                      Spacer(),
-                      CircleIllustration(),
-                      Spacer(),
-                      Text(
-                        'Laundry Jadi\nLebih Mudah',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 32,
-                          height: 1.15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      SizedBox(height: 12),
-                      Text(
-                        'Pilih mesin, bayar, lalu mesin siap dipakai.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
-                      ),
-                    ],
-                  ),
+                    SizedBox(height: 10),
+                    Text(
+                      'Pilih mesin, bayar, lalu mesin siap dipakai.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ],
                 ),
               ),
-              Expanded(
-                flex: 4,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 25, 24, 15),
-                  child: Column(
-                    children: [
-                      const Text(
-                        'Selamat Datang!',
-                        style: TextStyle(
-                          color: textDark,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                        ),
+            ),
+            Expanded(
+              flex: 4,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 14),
+                child: Column(
+                  children: [
+                    const Text(
+                      'Selamat Datang!',
+                      style: TextStyle(
+                        color: textDark,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
                       ),
-                      const SizedBox(height: 7),
-                      Text(
-                        controller.terminal?.outlet.name ?? 'Dicuciin Laundry',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: textMuted),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Login sebagai member untuk pakai wallet, voucher, dan loyalty point.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: textMuted,
+                        fontSize: 13,
+                        height: 1.35,
                       ),
-                      const Spacer(),
-                      PrimaryButton(
-                        label: 'Sentuh untuk Mulai',
-                        icon: Icons.touch_app_rounded,
-                        height: 60,
+                    ),
+                    const Spacer(),
+                    // CTA utama: login member. Guest tetap tersedia di bawah.
+                    PrimaryButton(
+                      label: 'Login Member',
+                      icon: Icons.badge_rounded,
+                      height: 60,
+                      onPressed: controller.goToMemberLogin,
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 52,
+                      width: double.infinity,
+                      child: OutlinedButton(
                         onPressed: controller.startOrder,
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: primary),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Lanjut sebagai Guest',
+                          style: TextStyle(
+                            color: primary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 12),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -1193,17 +1189,22 @@ class SuccessScreen extends StatelessWidget {
                 children: [
                   Column(
                     children: [
-                      Container(
-                        width: 84,
-                        height: 84,
-                        decoration: const BoxDecoration(
-                          color: success,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.check_rounded,
-                          color: Colors.white,
-                          size: 50,
+                      Image.asset(
+                        KioskMascotAssets.paymentSuccessBasketConfetti,
+                        height: 150,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stack) => Container(
+                          width: 84,
+                          height: 84,
+                          decoration: const BoxDecoration(
+                            color: success,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.check_rounded,
+                            color: Colors.white,
+                            size: 50,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -1680,31 +1681,12 @@ class RefreshableEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(30),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.local_laundry_service_outlined,
-              size: 58,
-              color: textMutedLight,
-            ),
-            const SizedBox(height: 14),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: textMuted),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: 180,
-              child: PrimaryButton(label: 'Coba Lagi', onPressed: onRetry),
-            ),
-          ],
-        ),
-      ),
+    return KioskMascotPanel(
+      mascotAsset: KioskMascotAssets.machineOfflineCable,
+      title: 'Mesin belum tersedia',
+      message: message,
+      primaryButtonText: 'Coba Lagi',
+      onPrimaryPressed: onRetry,
     );
   }
 }
@@ -1858,10 +1840,16 @@ class CircleIllustration extends StatelessWidget {
         shape: BoxShape.circle,
         border: Border.all(color: Colors.white24, width: 2),
       ),
-      child: const Icon(
-        Icons.local_laundry_service_rounded,
-        size: 100,
-        color: Colors.white,
+      padding: const EdgeInsets.all(18),
+      // Maskot idle Di.Cuciin; fallback ke ikon laundry bila aset gagal dimuat.
+      child: Image.asset(
+        KioskMascotAssets.kioskIdleCleaning,
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stack) => const Icon(
+          Icons.local_laundry_service_rounded,
+          size: 100,
+          color: Colors.white,
+        ),
       ),
     );
   }

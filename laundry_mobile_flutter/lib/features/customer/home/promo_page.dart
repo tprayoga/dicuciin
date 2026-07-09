@@ -8,8 +8,9 @@ class _PromoPage extends StatelessWidget {
     final promos = context.watch<CustomerController>().promos;
     final vouchers = context.watch<CustomerController>().vouchers;
     final activeVouchers = vouchers.where((v) => v.status == 'ACTIVE').toList();
-    final inactiveVouchers = vouchers
-        .where((v) => v.status != 'ACTIVE')
+    final usedVouchers = vouchers.where((v) => v.status == 'USED').toList();
+    final expiredVouchers = vouchers
+        .where((v) => v.status == 'EXPIRED')
         .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -47,9 +48,9 @@ class _PromoPage extends StatelessWidget {
                 ...activeVouchers.map(_VoucherCard.new),
                 const SizedBox(height: 16),
               ],
-              if (inactiveVouchers.isNotEmpty) ...[
+              if (usedVouchers.isNotEmpty) ...[
                 const Text(
-                  'Voucher Tidak Aktif',
+                  'Voucher Terpakai',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -57,41 +58,42 @@ class _PromoPage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                ...inactiveVouchers.map(_VoucherCard.new),
+                ...usedVouchers.map(_VoucherCard.new),
+                const SizedBox(height: 16),
+              ],
+              if (expiredVouchers.isNotEmpty) ...[
+                const Text(
+                  'Voucher Kedaluwarsa',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: _textDark,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ...expiredVouchers.map(_VoucherCard.new),
                 const SizedBox(height: 16),
               ],
               if (promos.isEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(top: 40),
-                  child: Center(
-                    child: Column(
-                      children: [
-                        const Text(
-                          'Belum ada promo aktif saat ini.',
-                          style: TextStyle(fontSize: 14, color: _textMuted),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: 160,
-                          child: AppOutlineButton(
-                            label: 'Muat ulang',
-                            onTap: () {
-                              final auth = context.read<AuthController>();
-                              final user = auth.user;
-                              final token = auth.accessToken;
-                              if (user != null && token != null) {
-                                context
-                                    .read<CustomerController>()
-                                    .loadDashboard(
-                                      user: user,
-                                      accessToken: token,
-                                    );
-                              }
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
+                  padding: const EdgeInsets.only(top: 24),
+                  child: MascotMessageCard(
+                    mascotAsset: AppMascotAssets.promoEmptyWaiting,
+                    variant: MascotMessageVariant.promo,
+                    title: 'Belum ada promo saat ini',
+                    message: 'Belum ada promo aktif. Cek lagi nanti, ya.',
+                    primaryButtonText: 'Muat ulang',
+                    onPrimaryPressed: () {
+                      final auth = context.read<AuthController>();
+                      final user = auth.user;
+                      final token = auth.accessToken;
+                      if (user != null && token != null) {
+                        context.read<CustomerController>().loadDashboard(
+                          user: user,
+                          accessToken: token,
+                        );
+                      }
+                    },
                   ),
                 )
               else

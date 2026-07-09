@@ -15,12 +15,13 @@ import {
 } from './gateway/payment-gateway.interface';
 import { CreateGatewayPaymentDto, PaymentWebhookDto } from './dto/payment.dto';
 import { PromosService } from '../promos/promos.service';
-import { WalletService } from '../wallets/wallet.service';
+import { WalletLedgerService } from '../wallets/wallet-ledger.service';
 import { PointService } from '../points/point.service';
 import { MembershipTierService } from '../memberships/membership-tier.service';
 import { B2BPartnerService } from '../partners/b2b-partner.service';
 import { CampaignService } from '../campaigns/campaign.service';
 import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
+import { IotMachineService } from '../iot/iot-machine.service';
 
 @Injectable()
 export class PaymentsService {
@@ -28,12 +29,13 @@ export class PaymentsService {
     private prisma: PrismaService,
     @Inject(PAYMENT_GATEWAY) private gateway: PaymentGateway,
     private promosService: PromosService,
-    private walletService: WalletService,
+    private walletLedger: WalletLedgerService,
     private pointService: PointService,
     private membershipTierService: MembershipTierService,
     private b2bPartnerService: B2BPartnerService,
     private campaignService: CampaignService,
     private loyaltyConfig: LoyaltyConfigService,
+    private iotMachineService: IotMachineService,
   ) {}
 
   /** Buat tagihan QRIS/VA untuk sebuah order via gateway (status awal PENDING). */
@@ -169,6 +171,7 @@ export class PaymentsService {
    * Idempoten: kalau payment sudah PAID, tidak melakukan apa-apa.
    */
   private async settlePaid(paymentId: string) {
+    let paidOrderId: string | null = null;
     await this.prisma.$transaction(async (tx) => {
       const payment = await tx.payment.findUniqueOrThrow({
         where: { id: paymentId },
@@ -200,8 +203,15 @@ export class PaymentsService {
         // Pemakaian promo dicatat saat order benar-benar dibayar.
         await this.promosService.commitUsage(tx, order.id);
         await this.settlePromotionLoyalty(tx, order);
+        paidOrderId = order.id;
       }
     });
+
+    // Aktivasi mesin di luar transaksi finansial (best-effort; tak pernah
+    // menggagalkan pembayaran). No-op bila order tak terikat mesin.
+    if (paidOrderId) {
+      await this.iotMachineService.activateMachineForOrder(paidOrderId);
+    }
   }
 
   private async settlePromotionLoyalty(
@@ -242,7 +252,7 @@ export class PaymentsService {
         .div(100)
         .toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
       if (cashback.gt(0)) {
-        await this.walletService.creditCashback({
+        await this.walletLedger.creditCashback({
           walletId: wallet.id,
           amount: cashback,
           orderId: order.id,

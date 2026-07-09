@@ -489,12 +489,14 @@ class _LocationDetailPageState extends State<_LocationDetailPage> {
           hasScrollBody: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-            child: _stateCard(
-              icon: Icons.cloud_off_outlined,
-              title: 'Data mesin belum tersedia',
-              subtitle: _machineError!,
-              actionLabel: 'Coba Lagi',
-              onAction: _loadMachines,
+            child: MascotMessageCard(
+              mascotAsset: AppMascotAssets.machineOfflineCable,
+              variant: MascotMessageVariant.machine,
+              title: 'Mesin belum terhubung',
+              message:
+                  'Mesin sedang tidak terhubung. Pilih mesin lain dulu atau coba lagi.',
+              primaryButtonText: 'Coba Lagi',
+              onPrimaryPressed: _loadMachines,
             ),
           ),
         ),

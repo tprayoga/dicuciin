@@ -158,7 +158,15 @@ onMounted(() => load())
 
     <div class="dc-page-card p-4">
       <div class="mb-3 text-sm text-[#6f809f]">{{ meta.total }} pesanan</div>
-      <UTable :data="orders" :columns="columns" :loading="loading" />
+      <UTable :data="orders" :columns="columns" :loading="loading">
+        <template #empty>
+          <CommonMascotEmptyState
+            image="/mascot/09_error_kiosk_pack/03_empty_page_sweeping.png"
+            title="Belum ada order"
+            description="Order laundry akan muncul di sini setelah customer mulai transaksi."
+          />
+        </template>
+      </UTable>
       <div v-if="meta.totalPages > 1" class="flex justify-center pt-4">
         <UPagination v-model:page="meta.page" :total="meta.total" :items-per-page="meta.limit" @update:page="load" />
       </div>

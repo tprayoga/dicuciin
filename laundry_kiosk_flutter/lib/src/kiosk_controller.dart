@@ -11,6 +11,7 @@ enum KioskStage {
   enrollment,
   closed,
   welcome,
+  memberLogin,
   machines,
   checkout,
   payment,
@@ -122,6 +123,13 @@ class KioskController extends ChangeNotifier {
         .map(ServicePrice.fromJson)
         .where((item) => item.serviceId.isNotEmpty)
         .toList();
+  }
+
+  /// Buka layar "Login sebagai Member" (UI-only). Tidak mengubah state order.
+  void goToMemberLogin() {
+    error = null;
+    stage = KioskStage.memberLogin;
+    notifyListeners();
   }
 
   /// Mulai alur pesan: buka daftar mesin outlet ini.

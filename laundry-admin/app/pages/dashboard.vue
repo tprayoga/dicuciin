@@ -183,8 +183,12 @@ onMounted(loadDashboard)
       <div v-if="loading" class="h-[260px] rounded-xl border border-[#d7e0ee] flex items-center justify-center text-sm text-[#6f809f]">
         Memuat grafik...
       </div>
-      <div v-else-if="chartPoints.length === 0" class="h-[260px] rounded-xl border border-[#d7e0ee] flex items-center justify-center text-sm text-[#6f809f]">
-        Belum ada data 30 hari terakhir.
+      <div v-else-if="chartPoints.length === 0" class="rounded-xl border border-[#d7e0ee] flex items-center justify-center">
+        <CommonMascotEmptyState
+          image="/mascot/06_app_flow_home_outlet_promo_history/03_empty_history_sitting.png"
+          title="Belum ada aktivitas"
+          description="Ringkasan operasional akan muncul setelah data transaksi tersedia."
+        />
       </div>
       <div v-else class="space-y-2">
         <div class="flex items-center gap-4 text-xs font-medium text-[#4f607f]">

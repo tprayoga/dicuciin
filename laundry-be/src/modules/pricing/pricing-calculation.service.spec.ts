@@ -3,7 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { B2BPartnerTier, MembershipTier, Prisma, UserSegment } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { OrdersService } from '../orders/orders.service';
-import { WalletService } from '../wallets/wallet.service';
+import { WalletLedgerService } from '../wallets/wallet-ledger.service';
 import { MembershipTierService } from '../memberships/membership-tier.service';
 import { PricingService } from './pricing.service';
 import { PricingCalculationService } from './pricing-calculation.service';
@@ -42,7 +42,7 @@ describe('PricingCalculationService', () => {
         PricingCalculationService,
         { provide: PrismaService, useValue: prisma },
         { provide: OrdersService, useValue: mocks.ordersService },
-        { provide: WalletService, useValue: mocks.walletService },
+        { provide: WalletLedgerService, useValue: mocks.walletService },
         { provide: MembershipTierService, useValue: mocks.membershipTierService },
         { provide: PricingService, useValue: mocks.pricingService },
       ],

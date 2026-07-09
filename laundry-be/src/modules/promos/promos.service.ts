@@ -6,8 +6,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreatePromoDto, UpdatePromoDto } from './dto/promo.dto';
-import { Prisma, PromoType, WalletTransactionType } from '@prisma/client';
+import { Prisma, PromoType } from '@prisma/client';
 import { toNum } from '../../common/utils/money.util';
+import { WalletLedgerService } from '../wallets/wallet-ledger.service';
 
 type PrismaTx = Prisma.TransactionClient;
 
@@ -52,7 +53,10 @@ const parseIdCsv = (csv?: string | null): Set<string> =>
 
 @Injectable()
 export class PromosService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private walletLedger: WalletLedgerService,
+  ) {}
 
   async create(createPromoDto: CreatePromoDto) {
     const { rule, ...promoData } = createPromoDto;
@@ -292,23 +296,19 @@ export class PromosService {
           where: { customerId: order.customerId },
         });
         if (wallet) {
-          const balanceBefore = wallet.balance;
-          const balanceAfter = balanceBefore.plus(cashback);
-          await tx.wallet.update({
-            where: { id: wallet.id },
-            data: { balance: balanceAfter },
-          });
-          await tx.walletTransaction.create({
-            data: {
-              walletId: wallet.id,
-              orderId,
-              transactionType: WalletTransactionType.CASHBACK,
-              amount: cashback,
-              balanceBefore,
-              balanceAfter,
-              description: `Cashback promo ${order.promo.code} untuk order ${order.orderNumber}`,
-              idempotencyKey: `cashback-${orderId}`,
-            },
+          // Cashback → BONUS_BALANCE (non-withdrawable), lewat satu pintu
+          // WalletLedgerService (SSoT wallet_ledgers, increment atomik).
+          // Sebelumnya keliru kredit ke MAIN (`balance`) via tulisan langsung —
+          // itu membuat cashback bisa ditarik & tercatat di tabel berbeda (G4).
+          await this.walletLedger.creditCashback({
+            tx,
+            walletId: wallet.id,
+            amount: cashback,
+            orderId,
+            referenceType: 'CASHBACK',
+            referenceId: order.promoId,
+            description: `Cashback promo ${order.promo.code} untuk order ${order.orderNumber}`,
+            idempotencyKey: `cashback-${orderId}`,
           });
         }
       }

@@ -14,7 +14,7 @@ import {
   RefundWalletDto,
 } from './dto/wallet.dto';
 import {
-  WalletTransactionType,
+  WalletType,
   PaymentMethod,
   PaymentStatus,
   OrderStatus,
@@ -22,12 +22,26 @@ import {
   Prisma,
 } from '@prisma/client';
 import { PromosService } from '../promos/promos.service';
+import { WalletLedgerService } from './wallet-ledger.service';
+import { mapLedgerToTransaction } from './wallet-history.mapper';
 
+/**
+ * Service fitur wallet yang menghadap HTTP/mobile: PIN, top-up, pembayaran, dan
+ * refund. Orkestrasi validasi (owner order, status, PIN) + efek samping order
+ * (payment/status log/promo), tetapi **mutasi saldo didelegasikan** ke
+ * `WalletLedgerService` sebagai satu-satunya pintu (SSoT `wallet_ledgers`).
+ *
+ * `wallet_transactions` tidak lagi ditulis (dual-write dihentikan di T9). Histori
+ * dibaca dari `wallet_ledgers` (via `mapLedgerToTransaction`), dan respons
+ * top-up/pay/refund menurunkan field `transaction` dari baris ledger agar
+ * kontrak lama tetap. Tabel `wallet_transactions` disimpan untuk arsip.
+ */
 @Injectable()
 export class WalletsService {
   constructor(
     private prisma: PrismaService,
     private promosService: PromosService,
+    private walletLedger: WalletLedgerService,
   ) {}
 
   /**
@@ -137,18 +151,21 @@ export class WalletsService {
 
     const skip = (page - 1) * limit;
 
-    const [transactions, total] = await Promise.all([
-      this.prisma.walletTransaction.findMany({
+    // Baca dari `wallet_ledgers` (SSoT) lalu petakan ke bentuk histori lama agar
+    // kontrak endpoint/mobile tidak berubah. Menampilkan seluruh mutasi uang
+    // (MAIN + BONUS) — lebih lengkap dari sebelumnya, tetapi bentuk baris sama.
+    const [ledgers, total] = await Promise.all([
+      this.prisma.walletLedger.findMany({
         where: { walletId: wallet.id },
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.walletTransaction.count({ where: { walletId: wallet.id } }),
+      this.prisma.walletLedger.count({ where: { walletId: wallet.id } }),
     ]);
 
     return {
-      data: transactions,
+      data: ledgers.map(mapLedgerToTransaction),
       meta: {
         total,
         page,
@@ -165,31 +182,21 @@ export class WalletsService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        // Increment atomik di DB → balanceBefore/After diturunkan dari hasil update,
-        // mencegah lost-update saat ada top-up bersamaan. idempotencyKey ganda →
-        // create gagal P2002 dan seluruh transaksi (termasuk increment) di-rollback.
-        const updatedWallet = await tx.wallet.update({
-          where: { id: wallet.id },
-          data: { balance: { increment: amount } },
-        });
-        const balanceAfter = updatedWallet.balance;
-        const balanceBefore = balanceAfter.minus(amount);
-
-        const transaction = await tx.walletTransaction.create({
-          data: {
-            walletId: wallet.id,
-            transactionType: WalletTransactionType.TOPUP,
-            amount,
-            balanceBefore,
-            balanceAfter,
-            description: description || 'Wallet top-up',
-            idempotencyKey,
-          },
+        // Mutasi saldo (increment atomik) lewat satu pintu WalletLedgerService →
+        // menulis wallet_ledgers (SSoT). idempotencyKey ganda → ledger.create
+        // gagal P2002 dan seluruh transaksi di-rollback.
+        const ledger = await this.walletLedger.topUp({
+          tx,
+          walletId: wallet.id,
+          amount,
+          referenceType: 'TOPUP',
+          description: description || 'Wallet top-up',
+          idempotencyKey,
         });
 
         return {
-          wallet: updatedWallet,
-          transaction,
+          wallet: { ...wallet, balance: ledger.balanceAfter },
+          transaction: mapLedgerToTransaction(ledger),
         };
       });
     } catch (err) {
@@ -221,35 +228,21 @@ export class WalletsService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        // Potong saldo secara atomik: hanya berhasil bila saldo >= amount.
-        // Mencegah lost-update / overspend saat ada request bersamaan.
-        const decremented = await tx.wallet.updateMany({
-          where: { id: wallet.id, balance: { gte: amount } },
-          data: { balance: { decrement: amount } },
+        // Potong saldo lewat satu pintu WalletLedgerService (MAIN_BALANCE saja —
+        // perilaku sama seperti sebelumnya). Guard saldo cukup + potong atomik
+        // (cegah overspend/lost-update) ditangani di dalam service ledger; saldo
+        // kurang → BadRequestException.
+        const ledger = await this.walletLedger.debit(WalletType.MAIN_BALANCE, {
+          tx,
+          walletId: wallet.id,
+          amount,
+          orderId,
+          referenceType: 'PAYMENT',
+          description: `Payment for order ${order.orderNumber}`,
+          idempotencyKey,
         });
 
-        if (decremented.count === 0) {
-          throw new BadRequestException('Saldo wallet tidak cukup');
-        }
-
-        const refreshed = await tx.wallet.findUniqueOrThrow({
-          where: { id: wallet.id },
-        });
-        const balanceAfter = refreshed.balance;
-        const balanceBefore = balanceAfter.plus(amount);
-
-        const transaction = await tx.walletTransaction.create({
-          data: {
-            walletId: wallet.id,
-            orderId,
-            transactionType: WalletTransactionType.PAYMENT,
-            amount: -amount,
-            balanceBefore,
-            balanceAfter,
-            description: `Payment for order ${order.orderNumber}`,
-            idempotencyKey,
-          },
-        });
+        const transaction = mapLedgerToTransaction(ledger);
 
         // Catat pembayaran (paymentNumber unik diturunkan dari orderNumber →
         // pembayaran kedua atas order yang sama akan ditolak constraint unik).
@@ -283,7 +276,7 @@ export class WalletsService {
         await this.promosService.commitUsage(tx, orderId);
 
         return {
-          wallet: refreshed,
+          wallet: { ...wallet, balance: ledger.balanceAfter },
           transaction,
           payment,
           order: updatedOrder,
@@ -435,26 +428,19 @@ export class WalletsService {
           throw new ConflictException('Order sudah direfund');
         }
 
-        // Increment atomik (lihat topup) → cegah lost-update saat refund bersamaan.
-        const updatedWallet = await tx.wallet.update({
-          where: { id: wallet.id },
-          data: { balance: { increment: amount } },
+        // Kembalikan saldo lewat satu pintu WalletLedgerService (increment atomik
+        // ke MAIN_BALANCE) → menulis wallet_ledgers (SSoT).
+        const ledger = await this.walletLedger.credit(WalletType.MAIN_BALANCE, {
+          tx,
+          walletId: wallet.id,
+          amount,
+          orderId,
+          referenceType: 'REFUND',
+          description,
+          idempotencyKey,
         });
-        const balanceAfter = updatedWallet.balance;
-        const balanceBefore = balanceAfter.minus(amount);
 
-        const transaction = await tx.walletTransaction.create({
-          data: {
-            walletId: wallet.id,
-            orderId,
-            transactionType: WalletTransactionType.REFUND,
-            amount,
-            balanceBefore,
-            balanceAfter,
-            description,
-            idempotencyKey,
-          },
-        });
+        const transaction = mapLedgerToTransaction(ledger);
 
         const updatedOrder = await tx.order.update({
           where: { id: order.id },
@@ -473,7 +459,7 @@ export class WalletsService {
         });
 
         return {
-          wallet: updatedWallet,
+          wallet: { ...wallet, balance: ledger.balanceAfter },
           transaction,
           payment: { ...payment, status: PaymentStatus.REFUNDED },
           order: updatedOrder,

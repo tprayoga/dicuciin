@@ -15,6 +15,7 @@ import { BookingsService } from '../bookings/bookings.service';
 import { PaymentsService } from '../payments/payments.service';
 import { CreateGatewayPaymentDto } from '../payments/dto/payment.dto';
 import { TransactionService } from '../transactions/transaction.service';
+import { IotMachineService } from '../iot/iot-machine.service';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -26,7 +27,14 @@ export class KiosksService {
     private paymentsService: PaymentsService,
     private transactionService: TransactionService,
     private config: ConfigService,
+    private iotMachineService: IotMachineService,
   ) {}
+
+  /** Status aktivasi mesin untuk order kiosk (read-only). */
+  async deviceMachineStatus(deviceToken: string, orderId: string) {
+    await this.authenticateDevice(deviceToken);
+    return this.iotMachineService.getMachineStatusForOrder(orderId);
+  }
 
   async create(createKioskDto: CreateKioskDto) {
     const outlet = await this.prisma.outlet.findUnique({

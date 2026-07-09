@@ -211,6 +211,13 @@ onMounted(load)
 
     <div v-if="loading" class="text-sm text-[#6f809f]">Memuat data promo...</div>
 
+    <CommonMascotEmptyState
+      v-else-if="!filteredPromos.length"
+      image="/mascot/06_app_flow_home_outlet_promo_history/08_promo_empty_waiting.png"
+      title="Belum ada promo"
+      description="Buat campaign promo untuk menarik transaksi customer."
+    />
+
     <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       <div v-for="promo in filteredPromos" :key="promo.id" class="dc-page-card overflow-hidden">
         <div

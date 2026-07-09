@@ -3,6 +3,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { OrdersService } from './orders.service';
 import { PromosService } from '../promos/promos.service';
+import { WalletLedgerService } from '../wallets/wallet-ledger.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 jest.mock('../../common/utils/sequence.util', () => ({
@@ -41,6 +42,9 @@ describe('OrdersService.create', () => {
         OrdersService,
         PromosService,
         { provide: PrismaService, useValue: prisma },
+        // PromosService kini bergantung pada WalletLedgerService (cashback →
+        // BONUS). create() tak memicu cashback, cukup stub agar DI resolve.
+        { provide: WalletLedgerService, useValue: { creditCashback: jest.fn() } },
       ],
     }).compile();
     service = moduleRef.get(OrdersService);

@@ -105,6 +105,207 @@ class _HomePageState extends State<_HomePage> {
     );
   }
 
+  Widget _memberSummaryCard(
+    CustomerController controller,
+    MemberSummary? summary,
+  ) {
+    if (controller.isLoading && summary == null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _line),
+        ),
+        child: const Row(
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Memuat data member...',
+                style: TextStyle(color: _textMuted, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (summary == null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _line),
+        ),
+        child: const Text(
+          'Data member belum bisa dimuat. Coba lagi nanti.',
+          style: TextStyle(color: _textMuted, fontSize: 13),
+        ),
+      );
+    }
+
+    final membership = summary.membership;
+    final progress =
+        (membership.tierProgressPercent / 100).clamp(0.0, 1.0).toDouble();
+    final hasNextTier = membership.nextTier.isNotEmpty;
+    final progressCopy = hasNextTier
+        ? 'Sedikit lagi menuju ${membership.nextTier}'
+        : 'Kamu sudah di tier tertinggi';
+    final pointCopy = membership.currentPoints == 0
+        ? 'Kamu belum punya poin. Poin akan bertambah setelah transaksi berhasil.'
+        : 'Poin kamu bisa ditukar untuk benefit berikutnya.';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.tintBlue,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.workspace_premium_outlined,
+                  color: _primary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${membership.tier} Member',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: _textDark,
+                      ),
+                    ),
+                    Text(
+                      summary.customer.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: _textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '${membership.currentPoints} Poin',
+                style: const TextStyle(
+                  color: _primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _summaryMetric(
+                  Icons.confirmation_number_outlined,
+                  '${summary.vouchers.activeCount}',
+                  'Voucher Aktif',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _summaryMetric(
+                  Icons.account_balance_wallet_outlined,
+                  _formatRupiah(summary.wallet.balance.round()),
+                  'Saldo',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              minHeight: 8,
+              value: progress,
+              color: _primary,
+              backgroundColor: AppColors.tintBlueAlt,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            progressCopy,
+            style: const TextStyle(
+              fontSize: 12,
+              color: _textDark,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            pointCopy,
+            style: const TextStyle(fontSize: 12, color: _textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryMetric(IconData icon, String value, String label) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 17, color: _primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: _textDark,
+                  ),
+                ),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10.5, color: _textMuted),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -112,6 +313,7 @@ class _HomePageState extends State<_HomePage> {
     final firstName = (user?.name ?? 'Pengguna').split(' ').first;
     final occupation = user?.customer?.occupation;
     final customer = context.watch<CustomerController>();
+    final summary = customer.memberSummary;
     final promos = customer.promos;
     final banners = customer.carouselBanners;
 
@@ -355,7 +557,10 @@ class _HomePageState extends State<_HomePage> {
                               children: [
                                 Text(
                                   _formatRupiah(
-                                    context.watch<WalletController>().balance,
+                                    summary?.wallet.balance.round() ??
+                                        context
+                                            .watch<WalletController>()
+                                            .balance,
                                   ),
                                   style: const TextStyle(
                                     fontSize: 18,
@@ -401,6 +606,13 @@ class _HomePageState extends State<_HomePage> {
                 ),
               ),
             ],
+          ),
+
+          const SizedBox(height: 20),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: _memberSummaryCard(customer, summary),
           ),
 
           const SizedBox(height: 20),

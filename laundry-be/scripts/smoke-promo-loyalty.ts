@@ -12,6 +12,8 @@ import { CampaignService } from '../src/modules/campaigns/campaign.service';
 import { B2BPricingService } from '../src/modules/pricing/b2b-pricing.service';
 import { TransactionService } from '../src/modules/transactions/transaction.service';
 import { LoyaltyConfigService } from '../src/modules/loyalty-config/loyalty-config.service';
+import { IotMqttService } from '../src/modules/iot/iot-mqtt.service';
+import { IotMachineService } from '../src/modules/iot/iot-machine.service';
 import {
   seedPromoLoyaltySmokeData,
   TEST_CODES,
@@ -74,6 +76,7 @@ async function main() {
       loyaltyConfig,
     );
     const orders = new OrdersService(prisma, promos);
+    const iotMachine = new IotMachineService(prisma, new IotMqttService());
     const txService = new TransactionService(
       prisma,
       orders,
@@ -86,6 +89,7 @@ async function main() {
       promos,
       campaign,
       loyaltyConfig,
+      iotMachine,
     );
 
     const item = {

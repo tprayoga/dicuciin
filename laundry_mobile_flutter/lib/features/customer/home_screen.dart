@@ -6,10 +6,12 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../core/assets/app_mascot_assets.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/app_buttons.dart';
 import '../../shared/widgets/app_toast.dart';
+import '../../shared/widgets/mascot_message_card.dart';
 import '../../shared/widgets/pin_pad.dart';
 import '../../shared/widgets/user_avatar.dart';
 import '../auth/auth_controller.dart';

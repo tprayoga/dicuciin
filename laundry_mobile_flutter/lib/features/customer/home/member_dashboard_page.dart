@@ -28,6 +28,8 @@ class _MemberDashboardPage extends StatelessWidget {
     final promos = c.promos;
     final vouchers = c.vouchers;
     final membership = c.membershipStatus;
+    final summary = c.memberSummary;
+    final points = c.memberPoints;
     final partner = context.watch<AuthController>().user?.b2bPartner;
 
     return Scaffold(
@@ -45,7 +47,9 @@ class _MemberDashboardPage extends StatelessWidget {
                   // ── Saldo ──
                   _balanceCard(context, balance),
                   const SizedBox(height: 12),
-                  _tierProgressCard(membership, wallet),
+                  _tierProgressCard(summary, membership, wallet),
+                  const SizedBox(height: 12),
+                  _pointCard(summary, points),
                   if (partner != null) ...[
                     const SizedBox(height: 12),
                     _b2bPartnerCard(partner),
@@ -110,8 +114,13 @@ class _MemberDashboardPage extends StatelessWidget {
                   _sectionTitle('Voucher Saya'),
                   const SizedBox(height: 10),
                   if (vouchers.isEmpty)
-                    _emptyHint(
-                      'Belum punya voucher. Tukar poin atau ikuti promo untuk dapat voucher.',
+                    const MascotMessageCard(
+                      mascotAsset: AppMascotAssets.promoEmptyWaiting,
+                      variant: MascotMessageVariant.voucher,
+                      compact: true,
+                      title: 'Belum punya voucher aktif',
+                      message:
+                          'Kamu belum punya voucher aktif. Tukar poin atau ikuti promo untuk dapatkan voucher.',
                     )
                   else
                     ...vouchers.map(_myVoucherRow),
@@ -237,11 +246,26 @@ class _MemberDashboardPage extends StatelessWidget {
     );
   }
 
-  Widget _tierProgressCard(MembershipStatus? status, WalletData? wallet) {
-    final tier = status?.currentTier ?? status?.currentB2BTier ?? 'SILVER';
-    final spending = status?.earnedSpending ?? 0;
-    final txn = status?.successfulTxnCount ?? 0;
-    final point = wallet?.pointBalance ?? 0;
+  Widget _tierProgressCard(
+    MemberSummary? summary,
+    MembershipStatus? status,
+    WalletData? wallet,
+  ) {
+    final tier = summary?.membership.tier ??
+        status?.currentTier ??
+        status?.currentB2BTier ??
+        'Silver';
+    final spending = summary?.membership.lifetimeSpending ??
+        status?.earnedSpending ??
+        0;
+    final txn = summary?.membership.lifetimeTransactions ??
+        status?.successfulTxnCount ??
+        0;
+    final point = summary?.membership.currentPoints ?? wallet?.pointBalance ?? 0;
+    final progress = (summary == null
+            ? ((spending % 500000) / 500000).clamp(0.0, 1.0)
+            : (summary.membership.tierProgressPercent / 100).clamp(0.0, 1.0))
+        .toDouble();
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -258,7 +282,7 @@ class _MemberDashboardPage extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Tier $tier',
+                  '$tier Member',
                   style: const TextStyle(
                     fontSize: 16,
                     color: _textDark,
@@ -280,7 +304,7 @@ class _MemberDashboardPage extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
             child: LinearProgressIndicator(
               minHeight: 8,
-              value: ((spending % 500000) / 500000).clamp(0, 1),
+              value: progress,
               color: _primary,
               backgroundColor: AppColors.tintBlueAlt,
             ),
@@ -289,6 +313,61 @@ class _MemberDashboardPage extends StatelessWidget {
           Text(
             '${_formatRupiah(spending.round())} spending • $txn transaksi sukses',
             style: const TextStyle(fontSize: 12, color: _textMuted),
+          ),
+          if (summary != null && summary.membership.nextTier.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Progress ${summary.membership.tierProgressPercent}% menuju ${summary.membership.nextTier}',
+              style: const TextStyle(fontSize: 12, color: _textMuted),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _pointCard(MemberSummary? summary, MemberPoints? points) {
+    final currentPoints =
+        summary?.membership.currentPoints ?? points?.currentPoints ?? 0;
+    final lastLedger = points?.ledger.isNotEmpty == true
+        ? points!.ledger.first
+        : null;
+    final message = currentPoints == 0
+        ? 'Kamu belum punya poin. Poin akan bertambah setelah transaksi berhasil.'
+        : 'Poin kamu bisa ditukar untuk benefit berikutnya.';
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _line),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.stars_outlined, color: _primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$currentPoints Poin',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: _textDark,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  lastLedger == null
+                      ? message
+                      : '${lastLedger.direction == 'CREDIT' ? '+' : '-'}${lastLedger.points} poin terakhir',
+                  style: const TextStyle(fontSize: 12, color: _textMuted),
+                ),
+              ],
+            ),
           ),
         ],
       ),

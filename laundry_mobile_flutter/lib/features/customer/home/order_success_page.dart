@@ -29,6 +29,15 @@ class _OrderSuccessPage extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
                 children: [
+                  Center(
+                    child: Image.asset(
+                      AppMascotAssets.paymentSuccessBasketConfetti,
+                      height: 132,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   _successSummaryCard(),
                   const SizedBox(height: 16),
                   _usageScheduleCard(),

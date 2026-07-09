@@ -10,6 +10,7 @@ import { MembershipsModule } from '../memberships/memberships.module';
 import { PartnersModule } from '../partners/partners.module';
 import { PromosModule } from '../promos/promos.module';
 import { CampaignsModule } from '../campaigns/campaigns.module';
+import { IotModule } from '../iot/iot.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { CampaignsModule } from '../campaigns/campaigns.module';
     PartnersModule,
     PromosModule,
     CampaignsModule,
+    IotModule,
   ],
   controllers: [TransactionsController],
   providers: [TransactionService],

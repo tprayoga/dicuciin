@@ -56,6 +56,8 @@ class CustomerController extends ChangeNotifier {
   bool _popupConsumed = false;
   MemberStats? _stats;
   MembershipStatus? _membershipStatus;
+  MemberSummary? _memberSummary;
+  MemberPoints? _memberPoints;
 
   bool get isLoading => _isLoading;
   bool get isSubmittingOrder => _isSubmittingOrder;
@@ -79,6 +81,8 @@ class CustomerController extends ChangeNotifier {
 
   MemberStats get stats => _stats ?? MemberStats.empty();
   MembershipStatus? get membershipStatus => _membershipStatus;
+  MemberSummary? get memberSummary => _memberSummary;
+  MemberPoints? get memberPoints => _memberPoints;
 
   Future<void> loadDashboard({
     required AppUser user,
@@ -102,6 +106,12 @@ class CustomerController extends ChangeNotifier {
         customerId: customerId,
         accessToken: accessToken,
       ),
+    );
+    final memberSummaryF = _guard(
+      () => _customerService.getMemberSummary(accessToken: accessToken),
+    );
+    final memberPointsF = _guard(
+      () => _customerService.getMemberPoints(accessToken: accessToken),
     );
     final ordersF = _guard(
       () => _customerService.getOrders(
@@ -141,6 +151,8 @@ class CustomerController extends ChangeNotifier {
     );
 
     _wallet = await walletF ?? _wallet;
+    _memberSummary = await memberSummaryF ?? _memberSummary;
+    _memberPoints = await memberPointsF ?? _memberPoints;
     _orders = await ordersF ?? _orders;
     _activeBookings = await bookingsF ?? _activeBookings;
     _promos = await promosF ?? _promos;
@@ -564,6 +576,8 @@ class CustomerController extends ChangeNotifier {
     _popupConsumed = false;
     _stats = null;
     _membershipStatus = null;
+    _memberSummary = null;
+    _memberPoints = null;
     notifyListeners();
   }
 

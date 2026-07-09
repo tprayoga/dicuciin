@@ -22,10 +22,13 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "seed:dicuciin-demo": "ts-node prisma/seed.demo.ts",
     "seed:promo-loyalty": "ts-node scripts/seed-promo-loyalty-smoke.ts",
     "test:smoke:promo-loyalty": "ts-node scripts/smoke-promo-loyalty.ts",
     "backfill:b2b-pricing-usages": "ts-node scripts/backfill-b2b-pricing-usages.ts",
+    "backfill:wallet-ledger": "ts-node scripts/backfill-wallet-transactions-to-ledger.ts",
     "verify:redis-scheduler": "ts-node scripts/verify-redis-scheduler.ts",
+    "verify:mqtt": "ts-node scripts/verify-mqtt.ts",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down"
   },

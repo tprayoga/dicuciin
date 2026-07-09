@@ -129,7 +129,13 @@ watch([month, selectedOutlet], () => {
 
       <div v-if="loading" class="text-sm text-[#6f809f]">Memuat data grafik...</div>
 
-      <div v-else-if="dailySeries.length === 0" class="text-sm text-[#6f809f]">Belum ada data transaksi untuk filter saat ini.</div>
+      <div v-else-if="dailySeries.length === 0" class="py-4">
+        <CommonMascotEmptyState
+          image="/mascot/06_app_flow_home_outlet_promo_history/03_empty_history_sitting.png"
+          title="Belum ada data laporan"
+          description="Data laporan akan muncul setelah ada transaksi."
+        />
+      </div>
 
       <div v-else class="overflow-x-auto">
         <table class="w-full min-w-[700px] text-sm">

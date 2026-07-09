@@ -3,6 +3,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PromosService, PromoEvalItem } from './promos.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { WalletLedgerService } from '../wallets/wallet-ledger.service';
 
 /** Promo PERCENTAGE 20% yang valid hari ini, tanpa rule, tanpa kuota. */
 function validPromo(overrides: Record<string, unknown> = {}) {
@@ -46,7 +47,11 @@ describe('PromosService.evaluatePromo', () => {
       promoUsage: { count: jest.fn().mockResolvedValue(0) },
     };
     const moduleRef = await Test.createTestingModule({
-      providers: [PromosService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        PromosService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: WalletLedgerService, useValue: { creditCashback: jest.fn() } },
+      ],
     }).compile();
     service = moduleRef.get(PromosService);
   });
@@ -158,5 +163,103 @@ describe('PromosService.evaluatePromo', () => {
       validPromo({ quota: 5, usedCount: 5 }),
     );
     await expect(evalPromo()).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('PromosService.commitUsage', () => {
+  let service: PromosService;
+  let tx: any;
+  let walletLedger: any;
+
+  beforeEach(async () => {
+    tx = {
+      order: { findUnique: jest.fn() },
+      promoUsage: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+      },
+      promo: { update: jest.fn() },
+      wallet: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'w-1' }),
+        update: jest.fn(),
+      },
+    };
+    walletLedger = {
+      creditCashback: jest.fn().mockResolvedValue({
+        balanceBefore: new Prisma.Decimal('0'),
+        balanceAfter: new Prisma.Decimal('5000'),
+      }),
+    };
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        PromosService,
+        { provide: PrismaService, useValue: {} },
+        { provide: WalletLedgerService, useValue: walletLedger },
+      ],
+    }).compile();
+    service = moduleRef.get(PromosService);
+  });
+
+  const cashbackOrder = () => ({
+    id: 'ord-1',
+    orderNumber: 'ORD-1',
+    promoId: 'promo-1',
+    customerId: 'cust-1',
+    discountAmount: new Prisma.Decimal(0),
+    items: [{ serviceId: 'svc-1', subtotal: new Prisma.Decimal(50000) }],
+    promo: {
+      code: 'CB10',
+      promoType: 'CASHBACK',
+      value: new Prisma.Decimal(10), // 10% dari 50000 = 5000
+      rules: [],
+    },
+  });
+
+  it('CASHBACK → kredit BONUS via WalletLedgerService (bukan tulis saldo langsung)', async () => {
+    tx.order.findUnique.mockResolvedValue(cashbackOrder());
+
+    await service.commitUsage(tx, 'ord-1');
+
+    expect(walletLedger.creditCashback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        walletId: 'w-1',
+        orderId: 'ord-1',
+        referenceType: 'CASHBACK',
+        referenceId: 'promo-1',
+        idempotencyKey: 'cashback-ord-1',
+      }),
+    );
+    expect(
+      walletLedger.creditCashback.mock.calls[0][0].amount.toString(),
+    ).toBe('5000');
+    // G4 fixed: tidak lagi memutasi saldo langsung ke MAIN.
+    expect(tx.wallet.update).not.toHaveBeenCalled();
+  });
+
+  it('promo non-CASHBACK: tidak memanggil creditCashback', async () => {
+    tx.order.findUnique.mockResolvedValue({
+      ...cashbackOrder(),
+      discountAmount: new Prisma.Decimal(5000),
+      promo: {
+        code: 'P20',
+        promoType: 'PERCENTAGE',
+        value: new Prisma.Decimal(20),
+        rules: [],
+      },
+    });
+
+    await service.commitUsage(tx, 'ord-1');
+
+    expect(walletLedger.creditCashback).not.toHaveBeenCalled();
+  });
+
+  it('idempoten: PromoUsage sudah ada → tidak memproses ulang', async () => {
+    tx.order.findUnique.mockResolvedValue(cashbackOrder());
+    tx.promoUsage.findFirst.mockResolvedValue({ id: 'usage-1' });
+
+    await service.commitUsage(tx, 'ord-1');
+
+    expect(tx.promo.update).not.toHaveBeenCalled();
+    expect(walletLedger.creditCashback).not.toHaveBeenCalled();
   });
 });

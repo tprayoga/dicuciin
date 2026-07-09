@@ -88,7 +88,15 @@ class _TopUpPageState extends State<_TopUpPage> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
+                  const MascotMessageCard(
+                    mascotAsset: AppMascotAssets.walletBalanceHelper,
+                    variant: MascotMessageVariant.wallet,
+                    compact: true,
+                    title: 'Isi saldo, checkout lebih cepat',
+                    message: 'Saldo kamu bisa dipakai untuk checkout lebih cepat.',
+                  ),
+                  const SizedBox(height: 20),
 
                   // Pilih nominal
                   const Text(

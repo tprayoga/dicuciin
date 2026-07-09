@@ -9,9 +9,10 @@ import { PointsModule } from '../points/points.module';
 import { MembershipsModule } from '../memberships/memberships.module';
 import { PartnersModule } from '../partners/partners.module';
 import { CampaignsModule } from '../campaigns/campaigns.module';
+import { IotModule } from '../iot/iot.module';
 
 @Module({
-  imports: [PromosModule, WalletsModule, PointsModule, MembershipsModule, PartnersModule, CampaignsModule],
+  imports: [PromosModule, WalletsModule, PointsModule, MembershipsModule, PartnersModule, CampaignsModule, IotModule],
   controllers: [PaymentsController],
   providers: [
     PaymentsService,

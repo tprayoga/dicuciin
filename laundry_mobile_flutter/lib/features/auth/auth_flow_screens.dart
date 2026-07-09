@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/assets/app_mascot_assets.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/app_toast.dart';
@@ -152,7 +153,7 @@ class WelcomeScreen extends StatelessWidget {
                         ),
                         padding: const EdgeInsets.all(16),
                         child: Image.asset(
-                          'assets/branding/illustration_laundry.png',
+                          AppMascotAssets.registrationWelcomeWaving,
                           fit: BoxFit.contain,
                           errorBuilder: (_, _, _) => const Icon(
                             Icons.local_laundry_service_rounded,
@@ -713,6 +714,18 @@ class _OtpInputScreenState extends State<OtpInputScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 16),
+              Center(
+                child: Image.asset(
+                  // Maskot reflektif state: salah OTP → bingung, normal → verifikasi.
+                  _submitError != null
+                      ? AppMascotAssets.otpWrongConfusedPhone
+                      : AppMascotAssets.otpVerificationPhone,
+                  height: 104,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                ),
+              ),
+              const SizedBox(height: 12),
               Text(
                 'Masukkan Nomor Ponselmu',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(

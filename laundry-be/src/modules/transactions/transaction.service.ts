@@ -18,7 +18,7 @@ import { generateDailySequence } from '../../common/utils/sequence.util';
 import { toNum, D } from '../../common/utils/money.util';
 import { OrdersService } from '../orders/orders.service';
 import { PricingService } from '../pricing/pricing.service';
-import { WalletService } from '../wallets/wallet.service';
+import { WalletLedgerService } from '../wallets/wallet-ledger.service';
 import { VoucherService } from '../vouchers/voucher.service';
 import { PointService } from '../points/point.service';
 import { MembershipTierService } from '../memberships/membership-tier.service';
@@ -26,6 +26,7 @@ import { B2BPartnerService } from '../partners/b2b-partner.service';
 import { PromosService } from '../promos/promos.service';
 import { CampaignService } from '../campaigns/campaign.service';
 import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
+import { IotMachineService } from '../iot/iot-machine.service';
 
 export interface CheckoutInput {
   customerId?: string;
@@ -74,7 +75,7 @@ export class TransactionService {
     private prisma: PrismaService,
     private ordersService: OrdersService,
     private pricingService: PricingService,
-    private walletService: WalletService,
+    private walletLedger: WalletLedgerService,
     private voucherService: VoucherService,
     private pointService: PointService,
     private membershipTierService: MembershipTierService,
@@ -82,6 +83,7 @@ export class TransactionService {
     private promosService: PromosService,
     private campaignService: CampaignService,
     private loyaltyConfig: LoyaltyConfigService,
+    private iotMachineService: IotMachineService,
   ) {}
 
   /**
@@ -89,9 +91,9 @@ export class TransactionService {
    * Satu transaksi; cashback idempoten per top up.
    */
   async topUp(input: { customerId: string; amount: number; idempotencyKey?: string }) {
-    const wallet = await this.walletService.getOrCreateWallet({ customerId: input.customerId });
+    const wallet = await this.walletLedger.getOrCreateWallet({ customerId: input.customerId });
     return this.prisma.$transaction(async (tx) => {
-      const ledger = await this.walletService.topUp({
+      const ledger = await this.walletLedger.topUp({
         walletId: wallet.id,
         amount: input.amount,
         idempotencyKey: input.idempotencyKey,
@@ -210,7 +212,7 @@ export class TransactionService {
         let bonusUsed = new Prisma.Decimal(0);
         let mainUsed = new Prisma.Decimal(0);
         if (totalAmount.gt(0)) {
-          const paid = await this.walletService.payWithWallet(tx, {
+          const paid = await this.walletLedger.payWithWallet(tx, {
             walletId: ctx.walletId,
             amount: totalAmount,
             orderId: order.id,
@@ -296,7 +298,7 @@ export class TransactionService {
         // Cashback tier → BONUS_BALANCE.
         let cashbackCredited = new Prisma.Decimal(0);
         if (pricing.cashbackToCredit > 0) {
-          await this.walletService.creditCashback({
+          await this.walletLedger.creditCashback({
             walletId: ctx.walletId,
             amount: pricing.cashbackToCredit,
             orderId: order.id,
@@ -331,6 +333,10 @@ export class TransactionService {
 
         return { order, bonusUsed, mainUsed, cashbackCredited };
       });
+
+      // Aktivasi mesin di luar transaksi finansial (best-effort; tak menggagalkan
+      // checkout). No-op bila order tak terikat mesin (mis. tanpa booking).
+      await this.iotMachineService.activateMachineForOrder(result.order.id);
 
       return {
         orderId: result.order.id,
@@ -397,7 +403,7 @@ export class TransactionService {
 
       // Kembalikan saldo per bucket (MAIN→MAIN, BONUS→BONUS) dari ledger debit.
       for (const ledger of order.walletLedgers) {
-        await this.walletService.credit(ledger.walletType, {
+        await this.walletLedger.credit(ledger.walletType, {
           walletId: ledger.walletId,
           amount: ledger.amount,
           orderId: order.id,
@@ -432,7 +438,7 @@ export class TransactionService {
           if (!w) continue;
           const reversible = Prisma.Decimal.min(D(cb.amount), D(w.bonusBalance));
           if (reversible.gt(0)) {
-            await this.walletService.debit(WalletType.BONUS_BALANCE, {
+            await this.walletLedger.debit(WalletType.BONUS_BALANCE, {
               walletId: cb.walletId,
               amount: reversible,
               orderId: order.id,
@@ -483,7 +489,7 @@ export class TransactionService {
       if (partner.status !== 'ACTIVE') {
         throw new BadRequestException('Partner B2B belum approved/aktif');
       }
-      const wallet = await this.walletService.getOrCreateWallet({ partnerId: partner.id });
+      const wallet = await this.walletLedger.getOrCreateWallet({ partnerId: partner.id });
       return {
         segment: UserSegment.B2B,
         tier: null,
@@ -493,7 +499,7 @@ export class TransactionService {
     }
     if (input.customerId) {
       const status = await this.membershipTierService.ensureStatus(input.customerId);
-      const wallet = await this.walletService.getOrCreateWallet({ customerId: input.customerId });
+      const wallet = await this.walletLedger.getOrCreateWallet({ customerId: input.customerId });
       return {
         segment: UserSegment.RETAIL,
         tier: status.currentTier,

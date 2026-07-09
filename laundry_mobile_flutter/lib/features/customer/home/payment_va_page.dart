@@ -199,15 +199,14 @@ class _PaymentVaPageState extends State<_PaymentVaPage> {
   Widget _errorView() => Padding(
         padding: const EdgeInsets.all(24),
         child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_error!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: _textMuted)),
-              const SizedBox(height: 16),
-              AppPrimaryButton(label: 'Coba Lagi', onTap: _createPayment),
-            ],
+          child: MascotMessageCard(
+            mascotAsset: AppMascotAssets.paymentFailedReceipt,
+            variant: MascotMessageVariant.error,
+            fullWidth: false,
+            title: 'Pembayaran belum berhasil',
+            message: _error!,
+            primaryButtonText: 'Coba Lagi',
+            onPrimaryPressed: _createPayment,
           ),
         ),
       );

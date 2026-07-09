@@ -163,9 +163,20 @@ class _OrderPageState extends State<_OrderPage> {
 
   Widget _buildToday(List<MachineBooking> bookings, List<OrderSummary> orders) {
     if (bookings.isEmpty && orders.isEmpty) {
-      return _emptyState(
-        icon: Icons.local_laundry_service_outlined,
-        message: 'Belum ada booking atau order hari ini',
+      return RefreshIndicator(
+        onRefresh: _refresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 40, 20, 24),
+          children: const [
+            MascotMessageCard(
+              mascotAsset: AppMascotAssets.emptyPageSweeping,
+              variant: MascotMessageVariant.empty,
+              title: 'Belum ada booking atau order hari ini',
+              message: 'Belum ada aktivitas hari ini. Mulai cucianmu sekarang.',
+            ),
+          ],
+        ),
       );
     }
 
@@ -205,9 +216,20 @@ class _OrderPageState extends State<_OrderPage> {
 
   Widget _buildHistory(List<OrderSummary> orders) {
     if (orders.isEmpty) {
-      return _emptyState(
-        icon: Icons.history,
-        message: 'Belum ada riwayat order',
+      return RefreshIndicator(
+        onRefresh: _refresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 40, 20, 24),
+          children: const [
+            MascotMessageCard(
+              mascotAsset: AppMascotAssets.emptyHistorySitting,
+              variant: MascotMessageVariant.empty,
+              title: 'Belum ada riwayat order',
+              message: 'Belum ada transaksi. Mulai cucian pertamamu hari ini.',
+            ),
+          ],
+        ),
       );
     }
 
@@ -229,32 +251,6 @@ class _OrderPageState extends State<_OrderPage> {
     );
   }
 
-  Widget _emptyState({required IconData icon, required String message}) {
-    return RefreshIndicator(
-      onRefresh: _refresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          SizedBox(
-            height: 420,
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 64, color: AppColors.textMutedLight),
-                  const SizedBox(height: 12),
-                  Text(
-                    message,
-                    style: const TextStyle(fontSize: 15, color: _textMuted),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _OrderSectionTitle extends StatelessWidget {

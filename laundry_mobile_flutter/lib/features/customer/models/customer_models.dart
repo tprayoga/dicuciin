@@ -655,6 +655,262 @@ class UserVoucher {
   }
 }
 
+class MemberSummary {
+  MemberSummary({
+    required this.customer,
+    required this.membership,
+    required this.wallet,
+    required this.vouchers,
+    required this.promos,
+  });
+
+  final MemberSummaryCustomer customer;
+  final MembershipInfo membership;
+  final WalletSummary wallet;
+  final MemberVoucherSummary vouchers;
+  final MemberPromoSummary promos;
+
+  factory MemberSummary.fromJson(Map<String, dynamic> json) {
+    return MemberSummary(
+      customer: MemberSummaryCustomer.fromJson(
+        json['customer'] as Map<String, dynamic>? ?? const {},
+      ),
+      membership: MembershipInfo.fromJson(
+        json['membership'] as Map<String, dynamic>? ?? const {},
+      ),
+      wallet: WalletSummary.fromJson(
+        json['wallet'] as Map<String, dynamic>? ?? const {},
+      ),
+      vouchers: MemberVoucherSummary.fromJson(
+        json['vouchers'] as Map<String, dynamic>? ?? const {},
+      ),
+      promos: MemberPromoSummary.fromJson(
+        json['promos'] as Map<String, dynamic>? ?? const {},
+      ),
+    );
+  }
+}
+
+class MemberSummaryCustomer {
+  MemberSummaryCustomer({
+    required this.id,
+    required this.name,
+    this.phone,
+    this.memberCode,
+  });
+
+  final String id;
+  final String name;
+  final String? phone;
+  final String? memberCode;
+
+  factory MemberSummaryCustomer.fromJson(Map<String, dynamic> json) {
+    return MemberSummaryCustomer(
+      id: (json['id'] as String?) ?? '',
+      name: (json['name'] as String?) ?? 'Member',
+      phone: json['phone'] as String?,
+      memberCode: json['memberCode'] as String?,
+    );
+  }
+}
+
+class MembershipInfo {
+  MembershipInfo({
+    required this.tier,
+    required this.currentPoints,
+    required this.lifetimePoints,
+    required this.lifetimeSpending,
+    required this.lifetimeTransactions,
+    required this.nextTier,
+    required this.pointsToNextTier,
+    required this.tierProgressPercent,
+  });
+
+  final String tier;
+  final int currentPoints;
+  final int lifetimePoints;
+  final double lifetimeSpending;
+  final int lifetimeTransactions;
+  final String nextTier;
+  final int pointsToNextTier;
+  final int tierProgressPercent;
+
+  factory MembershipInfo.fromJson(Map<String, dynamic> json) {
+    return MembershipInfo(
+      tier: (json['tier'] as String?) ?? 'Silver',
+      currentPoints: (json['currentPoints'] as num?)?.toInt() ?? 0,
+      lifetimePoints: (json['lifetimePoints'] as num?)?.toInt() ?? 0,
+      lifetimeSpending: _toDouble(json['lifetimeSpending']),
+      lifetimeTransactions:
+          (json['lifetimeTransactions'] as num?)?.toInt() ?? 0,
+      nextTier: (json['nextTier'] as String?) ?? '',
+      pointsToNextTier: (json['pointsToNextTier'] as num?)?.toInt() ?? 0,
+      tierProgressPercent:
+          ((json['tierProgressPercent'] as num?)?.toInt() ?? 0).clamp(0, 100),
+    );
+  }
+}
+
+class WalletSummary {
+  WalletSummary({
+    this.id,
+    required this.balance,
+    required this.bonusBalance,
+    required this.pointBalance,
+  });
+
+  final String? id;
+  final double balance;
+  final double bonusBalance;
+  final int pointBalance;
+
+  factory WalletSummary.fromJson(Map<String, dynamic> json) {
+    return WalletSummary(
+      id: json['id'] as String?,
+      balance: _toDouble(json['balance']),
+      bonusBalance: _toDouble(json['bonusBalance']),
+      pointBalance: (json['pointBalance'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class MemberVoucherSummary {
+  MemberVoucherSummary({
+    required this.activeCount,
+    required this.usedCount,
+    required this.expiredCount,
+    required this.active,
+  });
+
+  final int activeCount;
+  final int usedCount;
+  final int expiredCount;
+  final List<UserVoucher> active;
+
+  factory MemberVoucherSummary.fromJson(Map<String, dynamic> json) {
+    final activeRaw = json['active'];
+    return MemberVoucherSummary(
+      activeCount: (json['activeCount'] as num?)?.toInt() ?? 0,
+      usedCount: (json['usedCount'] as num?)?.toInt() ?? 0,
+      expiredCount: (json['expiredCount'] as num?)?.toInt() ?? 0,
+      active: activeRaw is List
+          ? activeRaw
+                .whereType<Map<String, dynamic>>()
+                .map(UserVoucher.fromJson)
+                .toList()
+          : const [],
+    );
+  }
+}
+
+class MemberPromoSummary {
+  MemberPromoSummary({
+    required this.availableCount,
+    required this.happyHourActive,
+    required this.available,
+  });
+
+  final int availableCount;
+  final bool happyHourActive;
+  final List<PromoSummary> available;
+
+  factory MemberPromoSummary.fromJson(Map<String, dynamic> json) {
+    final availableRaw = json['available'];
+    return MemberPromoSummary(
+      availableCount: (json['availableCount'] as num?)?.toInt() ?? 0,
+      happyHourActive: json['happyHourActive'] == true,
+      available: availableRaw is List
+          ? availableRaw
+                .whereType<Map<String, dynamic>>()
+                .map(PromoSummary.fromJson)
+                .toList()
+          : const [],
+    );
+  }
+}
+
+class MemberVoucherGroups {
+  MemberVoucherGroups({
+    required this.active,
+    required this.used,
+    required this.expired,
+  });
+
+  final List<UserVoucher> active;
+  final List<UserVoucher> used;
+  final List<UserVoucher> expired;
+
+  List<UserVoucher> get all => [...active, ...used, ...expired];
+
+  factory MemberVoucherGroups.fromJson(Map<String, dynamic> json) {
+    List<UserVoucher> parse(String key) {
+      final raw = json[key];
+      if (raw is! List) return const [];
+      return raw
+          .whereType<Map<String, dynamic>>()
+          .map(UserVoucher.fromJson)
+          .toList();
+    }
+
+    return MemberVoucherGroups(
+      active: parse('active'),
+      used: parse('used'),
+      expired: parse('expired'),
+    );
+  }
+}
+
+class MemberPointLedger {
+  MemberPointLedger({
+    required this.id,
+    required this.direction,
+    required this.points,
+    required this.balanceAfter,
+    required this.createdAt,
+    this.description,
+  });
+
+  final String id;
+  final String direction;
+  final int points;
+  final int balanceAfter;
+  final DateTime createdAt;
+  final String? description;
+
+  factory MemberPointLedger.fromJson(Map<String, dynamic> json) {
+    return MemberPointLedger(
+      id: (json['id'] as String?) ?? '',
+      direction: (json['direction'] as String?) ?? 'CREDIT',
+      points: (json['points'] as num?)?.toInt() ?? 0,
+      balanceAfter: (json['balanceAfter'] as num?)?.toInt() ?? 0,
+      createdAt:
+          DateTime.tryParse((json['createdAt'] as String?) ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      description: json['description'] as String?,
+    );
+  }
+}
+
+class MemberPoints {
+  MemberPoints({required this.currentPoints, required this.ledger});
+
+  final int currentPoints;
+  final List<MemberPointLedger> ledger;
+
+  factory MemberPoints.fromJson(Map<String, dynamic> json) {
+    final rawLedger = json['ledger'];
+    return MemberPoints(
+      currentPoints: (json['currentPoints'] as num?)?.toInt() ?? 0,
+      ledger: rawLedger is List
+          ? rawLedger
+                .whereType<Map<String, dynamic>>()
+                .map(MemberPointLedger.fromJson)
+                .toList()
+          : const [],
+    );
+  }
+}
+
 class VoucherEligibility {
   VoucherEligibility({
     required this.voucher,

@@ -172,6 +172,19 @@ export class KiosksController {
     );
   }
 
+  @Public()
+  @Get('device/orders/:orderId/machine-status')
+  @ApiOperation({ summary: 'Poll machine activation status for a kiosk order' })
+  async deviceMachineStatus(
+    @Param('orderId') orderId: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.kiosksService.deviceMachineStatus(
+      this.deviceToken(authorization),
+      orderId,
+    );
+  }
+
   @Get()
   @ApiOperation({ summary: 'Get all kiosks' })
   @ApiQuery({ name: 'page', required: false, type: Number })

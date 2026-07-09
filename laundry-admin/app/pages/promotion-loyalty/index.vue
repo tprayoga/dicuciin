@@ -805,7 +805,7 @@ onMounted(loadData)
               <tr><th class="p-2">Kode</th><th class="p-2">Nama</th><th class="p-2">Segment</th><th class="p-2">Type</th><th class="p-2">Quota</th><th class="p-2">Issued</th><th class="p-2">Expiry</th><th class="p-2">Restriction</th><th class="p-2">Status</th><th class="p-2">Aksi</th></tr>
             </thead>
             <tbody>
-              <tr v-if="filteredTemplates.length === 0"><td colspan="10" class="p-4 text-center text-[#6f809f]">Belum ada template voucher.</td></tr>
+              <tr v-if="filteredTemplates.length === 0"><td colspan="10" class="p-4"><CommonMascotEmptyState image="/mascot/06_app_flow_home_outlet_promo_history/08_promo_empty_waiting.png" title="Belum ada voucher" description="Voucher campaign akan muncul di sini setelah dibuat." /></td></tr>
               <tr v-for="item in filteredTemplates" :key="item.id" class="border-b border-[#e1e8f2]">
                 <td class="p-2 font-semibold">{{ item.code }}</td>
                 <td class="p-2">{{ item.name }}</td>

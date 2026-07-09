@@ -263,6 +263,15 @@ onMounted(load)
           <tr v-if="loading">
             <td colspan="9" class="px-3 py-4 text-[#6f809f]">Memuat data member...</td>
           </tr>
+          <tr v-else-if="!filteredCustomers.length">
+            <td colspan="9" class="px-3 py-4">
+              <CommonMascotEmptyState
+                image="/mascot/09_error_kiosk_pack/03_empty_page_sweeping.png"
+                title="Belum ada member"
+                description="Data member akan muncul di sini setelah pelanggan mendaftar."
+              />
+            </td>
+          </tr>
           <tr
             v-for="(item, idx) in filteredCustomers"
             :key="item.id"

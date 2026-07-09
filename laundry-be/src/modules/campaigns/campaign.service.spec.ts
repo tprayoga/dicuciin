@@ -2,7 +2,7 @@ import { Test } from '@nestjs/testing';
 import { CampaignService } from './campaign.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { VoucherService } from '../vouchers/voucher.service';
-import { WalletService } from '../wallets/wallet.service';
+import { WalletLedgerService } from '../wallets/wallet-ledger.service';
 
 describe('CampaignService — idempotency & anti double-execution', () => {
   let service: CampaignService;
@@ -36,7 +36,7 @@ describe('CampaignService — idempotency & anti double-execution', () => {
         CampaignService,
         { provide: PrismaService, useValue: prisma },
         { provide: VoucherService, useValue: voucherService },
-        { provide: WalletService, useValue: walletService },
+        { provide: WalletLedgerService, useValue: walletService },
       ],
     }).compile();
     service = moduleRef.get(CampaignService);

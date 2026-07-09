@@ -15,7 +15,7 @@ import {
 } from '@prisma/client';
 import { D, money } from '../../common/utils/money.util';
 import { VoucherService } from '../vouchers/voucher.service';
-import { WalletService } from '../wallets/wallet.service';
+import { WalletLedgerService } from '../wallets/wallet-ledger.service';
 
 type PrismaTx = Prisma.TransactionClient;
 
@@ -64,7 +64,7 @@ export class CampaignService {
   constructor(
     private prisma: PrismaService,
     private voucherService: VoucherService,
-    private walletService: WalletService,
+    private walletLedger: WalletLedgerService,
   ) {}
 
   // ===================== Admin CRUD =====================
@@ -174,7 +174,7 @@ export class CampaignService {
       } else if (reward.rewardType === 'CASHBACK' && reward.rewardCashback) {
         let wallet = await tx.wallet.findUnique({ where: { customerId } });
         if (!wallet) wallet = await tx.wallet.create({ data: { customerId } });
-        await this.walletService.creditCashback({
+        await this.walletLedger.creditCashback({
           walletId: wallet.id,
           amount: reward.rewardCashback,
           referenceType: `CAMPAIGN_${campaign.type}`,
@@ -237,7 +237,7 @@ export class CampaignService {
       const exists = await tx.campaignIssuance.findUnique({ where: { idempotencyKey: key } });
       if (exists) continue;
 
-      await this.walletService.creditCashback({
+      await this.walletLedger.creditCashback({
         walletId: input.walletId,
         amount,
         referenceType: 'CASHBACK_TOPUP',

@@ -75,14 +75,32 @@ class CustomerService {
 
   Future<List<UserVoucher>> getMyVouchers({required String accessToken}) async {
     final payload = await _apiClient.get(
-      '/vouchers/mine',
+      '/mobile/me/vouchers',
       headers: {'Authorization': 'Bearer $accessToken'},
     );
-    final list = _asList(payload);
-    return list
+    if (payload is Map<String, dynamic>) {
+      return MemberVoucherGroups.fromJson(payload).all;
+    }
+    return _asList(payload)
         .whereType<Map<String, dynamic>>()
         .map(UserVoucher.fromJson)
         .toList();
+  }
+
+  Future<MemberSummary> getMemberSummary({required String accessToken}) async {
+    final payload = await _apiClient.get(
+      '/mobile/me/summary',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return MemberSummary.fromJson(payload as Map<String, dynamic>);
+  }
+
+  Future<MemberPoints> getMemberPoints({required String accessToken}) async {
+    final payload = await _apiClient.get(
+      '/mobile/me/points',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return MemberPoints.fromJson(payload as Map<String, dynamic>);
   }
 
   Future<MembershipStatus?> getMembershipStatus({

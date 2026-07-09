@@ -60,6 +60,7 @@ describe('KiosksService enrollment', () => {
         paymentsService as any,
         transactionService as any,
         config as any,
+        { getMachineStatusForOrder: jest.fn() } as any,
       ),
     };
   }

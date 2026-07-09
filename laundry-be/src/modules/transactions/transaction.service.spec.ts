@@ -5,7 +5,7 @@ import { TransactionService } from './transaction.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { OrdersService } from '../orders/orders.service';
 import { PricingService } from '../pricing/pricing.service';
-import { WalletService } from '../wallets/wallet.service';
+import { WalletLedgerService } from '../wallets/wallet-ledger.service';
 import { VoucherService } from '../vouchers/voucher.service';
 import { PointService } from '../points/point.service';
 import { MembershipTierService } from '../memberships/membership-tier.service';
@@ -13,6 +13,7 @@ import { B2BPartnerService } from '../partners/b2b-partner.service';
 import { PromosService } from '../promos/promos.service';
 import { CampaignService } from '../campaigns/campaign.service';
 import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
+import { IotMachineService } from '../iot/iot-machine.service';
 
 jest.mock('../../common/utils/sequence.util', () => ({
   generateDailySequence: jest.fn().mockResolvedValue('ORD-TEST-001'),
@@ -94,6 +95,7 @@ describe('TransactionService', () => {
         handleTopupCashback: jest.fn(),
         consumeHappyHourQuota: jest.fn(),
       },
+      iotMachineService: { activateMachineForOrder: jest.fn() },
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -102,13 +104,14 @@ describe('TransactionService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: OrdersService, useValue: mocks.ordersService },
         { provide: PricingService, useValue: mocks.pricingService },
-        { provide: WalletService, useValue: mocks.walletService },
+        { provide: WalletLedgerService, useValue: mocks.walletService },
         { provide: VoucherService, useValue: mocks.voucherService },
         { provide: PointService, useValue: mocks.pointService },
         { provide: MembershipTierService, useValue: mocks.membershipTierService },
         { provide: B2BPartnerService, useValue: mocks.b2bPartnerService },
         { provide: PromosService, useValue: mocks.promosService },
         { provide: CampaignService, useValue: mocks.campaignService },
+        { provide: IotMachineService, useValue: mocks.iotMachineService },
         LoyaltyConfigService,
       ],
     }).compile();

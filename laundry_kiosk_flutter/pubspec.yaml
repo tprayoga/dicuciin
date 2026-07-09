@@ -65,6 +65,16 @@ flutter:
   assets:
     - assets/branding/
     - assets/mockups/
+    # Maskot Di.Cuciin — registrasi per-folder (Flutter tidak rekursif).
+    - assets/mascot/01_core_pose_pack/
+    - assets/mascot/02_emotion_pack/
+    - assets/mascot/03_action_pack_navigation/
+    - assets/mascot/04_action_pack_laundry_payment/
+    - assets/mascot/05_app_flow_registration_permissions/
+    - assets/mascot/06_app_flow_home_outlet_promo_history/
+    - assets/mascot/07_app_flow_scan_machine_payment/
+    - assets/mascot/08_notification_feedback_pack/
+    - assets/mascot/09_error_kiosk_pack/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -51,6 +51,7 @@ describe('PaymentsService loyalty settlement', () => {
     };
     const b2bPartnerService = { recordSuccessfulTransaction: jest.fn() };
     const campaignService = { qualifyReferralOnFirstTransaction: jest.fn() };
+    const iotMachineService = { activateMachineForOrder: jest.fn() };
     const service = new PaymentsService(
       prisma,
       gateway as any,
@@ -61,6 +62,7 @@ describe('PaymentsService loyalty settlement', () => {
       b2bPartnerService as any,
       campaignService as any,
       new LoyaltyConfigService(),
+      iotMachineService as any,
     );
     return {
       service,
@@ -71,6 +73,7 @@ describe('PaymentsService loyalty settlement', () => {
         pointService,
         membershipTierService,
         campaignService,
+        iotMachineService,
       },
     };
   }
@@ -110,5 +113,7 @@ describe('PaymentsService loyalty settlement', () => {
       'cust-1',
       'order-1',
     );
+    // Hook aktivasi mesin dipanggil setelah PAID (di luar transaksi finansial).
+    expect(mocks.iotMachineService.activateMachineForOrder).toHaveBeenCalledWith('order-1');
   });
 });

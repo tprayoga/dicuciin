@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { UserSegment } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { OrdersService } from '../orders/orders.service';
-import { WalletService } from '../wallets/wallet.service';
+import { WalletLedgerService } from '../wallets/wallet-ledger.service';
 import { MembershipTierService } from '../memberships/membership-tier.service';
 import { PricingService } from './pricing.service';
 import { CalculatePricingDto } from './dto/calculate-pricing.dto';
@@ -12,7 +12,7 @@ export class PricingCalculationService {
   constructor(
     private prisma: PrismaService,
     private ordersService: OrdersService,
-    private walletService: WalletService,
+    private walletLedger: WalletLedgerService,
     private membershipTierService: MembershipTierService,
     private pricingService: PricingService,
   ) {}
@@ -49,7 +49,7 @@ export class PricingCalculationService {
       if (partner.status !== 'ACTIVE') {
         throw new BadRequestException('Partner B2B belum approved/aktif');
       }
-      await this.walletService.getOrCreateWallet({ partnerId: partner.id });
+      await this.walletLedger.getOrCreateWallet({ partnerId: partner.id });
       return {
         segment: UserSegment.B2B,
         tier: null,
@@ -59,7 +59,7 @@ export class PricingCalculationService {
 
     if (input.customerId) {
       const status = await this.membershipTierService.ensureStatus(input.customerId);
-      await this.walletService.getOrCreateWallet({ customerId: input.customerId });
+      await this.walletLedger.getOrCreateWallet({ customerId: input.customerId });
       return {
         segment: UserSegment.RETAIL,
         tier: status.currentTier,
