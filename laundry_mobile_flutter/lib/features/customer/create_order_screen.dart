@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_spacing.dart';
 import '../auth/auth_controller.dart';
 import 'customer_controller.dart';
 import 'models/customer_models.dart';
@@ -60,7 +62,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         child: _loadingInit
             ? const Center(child: CircularProgressIndicator())
             : SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(AppSpacing.xl),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -68,13 +70,12 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                       initialValue: _selectedOutletId,
                       decoration: const InputDecoration(
                         labelText: 'Pilih Outlet',
-                        border: OutlineInputBorder(),
                       ),
                       items: _outlets
                           .map(
                             (outlet) => DropdownMenuItem<String>(
                               value: outlet.id,
-                              child: Text(outlet.name),
+                              child: Text(outlet.name, overflow: TextOverflow.ellipsis),
                             ),
                           )
                           .toList(),
@@ -89,12 +90,11 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                         _loadServices(value);
                       },
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
                     DropdownButtonFormField<String>(
                       initialValue: _selectedServiceId,
                       decoration: const InputDecoration(
                         labelText: 'Pilih Layanan',
-                        border: OutlineInputBorder(),
                       ),
                       items: _services
                           .map(
@@ -113,7 +113,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                               setState(() => _selectedServiceId = value);
                             },
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
                     Row(
                       children: [
                         Expanded(
@@ -122,11 +122,10 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             decoration: const InputDecoration(
                               labelText: 'Jumlah',
-                              border: OutlineInputBorder(),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: AppSpacing.sm),
                         FilledButton.icon(
                           onPressed: _addToCart,
                           icon: const Icon(Icons.add),
@@ -135,28 +134,32 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                       ],
                     ),
                     if (selectedService != null) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppSpacing.sm),
                       Text(
                         'Harga layanan: ${currency.format(selectedService.price)} / ${selectedService.unit}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.lg),
                     Card(
                       child: Padding(
-                        padding: const EdgeInsets.all(14),
+                        padding: const EdgeInsets.all(AppSpacing.lg),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text('Keranjang Layanan', style: Theme.of(context).textTheme.titleMedium),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: AppSpacing.sm),
                             if (_cartItems.isEmpty)
                               const Text('Belum ada item. Tambahkan layanan dulu.')
                             else
                               ..._cartItems.asMap().entries.map(
                                     (entry) => ListTile(
                                       contentPadding: EdgeInsets.zero,
-                                      title: Text(entry.value.serviceName),
+                                      title: Text(
+                                        entry.value.serviceName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                       subtitle: Text(
                                         '${entry.value.quantity} ${entry.value.unit} x ${currency.format(entry.value.price)}',
                                       ),
@@ -191,32 +194,30 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
                     TextFormField(
                       controller: _promoController,
                       decoration: const InputDecoration(
                         labelText: 'Kode Promo (opsional)',
-                        border: OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
                     TextFormField(
                       controller: _notesController,
                       maxLines: 3,
                       decoration: const InputDecoration(
                         labelText: 'Catatan Order (opsional)',
-                        border: OutlineInputBorder(),
                       ),
                     ),
                     if (customer.errorMessage != null) ...[
-                      const SizedBox(height: 12),
-                      Text(customer.errorMessage!, style: const TextStyle(color: Colors.red)),
+                      const SizedBox(height: AppSpacing.md),
+                      Text(customer.errorMessage!, style: const TextStyle(color: AppColors.error)),
                     ],
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.lg),
                     FilledButton(
                       onPressed: customer.isSubmittingOrder ? null : _submit,
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
                         child: customer.isSubmittingOrder
                             ? const SizedBox(
                                 width: 18,

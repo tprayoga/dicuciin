@@ -48,7 +48,6 @@ class _OrderPageState extends State<_OrderPage> {
               decoration: const InputDecoration(
                 labelText: 'Alasan refund',
                 hintText: 'Contoh: salah memilih layanan',
-                border: OutlineInputBorder(),
               ),
             ),
           ],
@@ -301,9 +300,9 @@ class _BackendOrderCard extends StatelessWidget {
                   ),
                 ),
               ),
-              _statusDot(
+              StatusBadge(
                 _statusLabel(order.status),
-                _statusColor(order.status),
+                type: _statusType(order.status),
               ),
             ],
           ),
@@ -365,12 +364,12 @@ class _BackendOrderCard extends StatelessWidget {
     _ => status,
   };
 
-  static Color _statusColor(String status) => switch (status) {
-    'COMPLETED' => AppColors.success,
-    'CANCELLED' => AppColors.error,
-    'REFUNDED' => AppColors.success,
-    'DRAFT' => AppColors.warning,
-    _ => _primary,
+  static StatusBadgeType _statusType(String status) => switch (status) {
+    'COMPLETED' => StatusBadgeType.success,
+    'CANCELLED' => StatusBadgeType.error,
+    'REFUNDED' => StatusBadgeType.success,
+    'DRAFT' => StatusBadgeType.warning,
+    _ => StatusBadgeType.brand,
   };
 }
 
@@ -404,11 +403,11 @@ class _BookingOrderCard extends StatelessWidget {
                   ),
                 ),
               ),
-              _statusDot(
+              StatusBadge(
                 booking.status == 'IN_USE' ? 'Sedang Dipakai' : 'Dibooking',
-                booking.status == 'IN_USE'
-                    ? AppColors.success
-                    : AppColors.warning,
+                type: booking.status == 'IN_USE'
+                    ? StatusBadgeType.success
+                    : StatusBadgeType.warning,
               ),
             ],
           ),

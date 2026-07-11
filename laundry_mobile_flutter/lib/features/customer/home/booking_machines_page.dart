@@ -720,24 +720,14 @@ class _OccupancyChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (bg, fg) = switch (level) {
-      'low' => (AppColors.successBg, AppColors.success),
-      'medium' => (AppColors.tintBlue, _primary),
-      'high' => (AppColors.warningBg, AppColors.warning),
-      'full' => (AppColors.errorBg, AppColors.error),
-      _ => (AppColors.surfaceAlt, _textMuted),
+    final type = switch (level) {
+      'low' => StatusBadgeType.success,
+      'medium' => StatusBadgeType.brand,
+      'high' => StatusBadgeType.warning,
+      'full' => StatusBadgeType.error,
+      _ => StatusBadgeType.info,
     };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        remark,
-        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: fg),
-      ),
-    );
+    return StatusBadge(remark, type: type);
   }
 }
 
@@ -748,22 +738,12 @@ class _MachineStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (label, bg, fg) = switch (status) {
-      'AVAILABLE' => ('Tersedia', AppColors.successBg, AppColors.success),
-      'RESERVED' => ('Dibooking', AppColors.warningBg, AppColors.warning),
-      'IN_USE' => ('Dipakai', AppColors.errorBg, AppColors.error),
-      _ => ('Offline', AppColors.surfaceAlt, _textMuted),
+    final (label, type) = switch (status) {
+      'AVAILABLE' => ('Tersedia', StatusBadgeType.success),
+      'RESERVED' => ('Dibooking', StatusBadgeType.warning),
+      'IN_USE' => ('Dipakai', StatusBadgeType.error),
+      _ => ('Offline', StatusBadgeType.info),
     };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: fg),
-      ),
-    );
+    return StatusBadge(label, type: type);
   }
 }

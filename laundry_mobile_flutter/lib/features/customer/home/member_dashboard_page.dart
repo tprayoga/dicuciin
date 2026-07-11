@@ -643,33 +643,27 @@ class _MemberDashboardPage extends StatelessWidget {
 
   /// Baris voucher milik customer (UserVoucher) dengan badge status.
   Widget _myVoucherRow(UserVoucher v) {
-    Color badgeBg;
-    Color badgeFg;
+    StatusBadgeType badgeType;
     String badgeLabel;
     switch (v.status) {
       case 'ACTIVE':
-        badgeBg = AppColors.successBg;
-        badgeFg = AppColors.success;
+        badgeType = StatusBadgeType.success;
         badgeLabel = 'Aktif';
         break;
       case 'USED':
-        badgeBg = AppColors.tintBlueAlt;
-        badgeFg = _textMuted;
+        badgeType = StatusBadgeType.info;
         badgeLabel = 'Terpakai';
         break;
       case 'EXPIRED':
-        badgeBg = AppColors.errorBg;
-        badgeFg = AppColors.error;
+        badgeType = StatusBadgeType.error;
         badgeLabel = 'Kedaluwarsa';
         break;
       case 'CANCELLED':
-        badgeBg = AppColors.errorBg;
-        badgeFg = AppColors.error;
+        badgeType = StatusBadgeType.error;
         badgeLabel = 'Dibatalkan';
         break;
       default:
-        badgeBg = AppColors.tintBlueAlt;
-        badgeFg = _textMuted;
+        badgeType = StatusBadgeType.info;
         badgeLabel = v.status;
     }
     final inactive = v.status != 'ACTIVE';
@@ -720,21 +714,7 @@ class _MemberDashboardPage extends StatelessWidget {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: badgeBg,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              badgeLabel,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: badgeFg,
-              ),
-            ),
-          ),
+          StatusBadge(badgeLabel, type: badgeType),
         ],
       ),
     );

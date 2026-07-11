@@ -5,6 +5,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/theme/app_spacing.dart';
+import '../../shared/widgets/status_badge.dart';
 import '../auth/auth_controller.dart';
 import 'customer_controller.dart';
 import 'models/customer_models.dart';
@@ -54,29 +56,38 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     : RefreshIndicator(
                         onRefresh: _loadDetail,
                         child: ListView(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(AppSpacing.lg),
                           children: [
                             Card(
                               child: Padding(
-                                padding: const EdgeInsets.all(16),
+                                padding: const EdgeInsets.all(AppSpacing.lg),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       '#${_detail!.orderNumber}',
                                       style: Theme.of(context).textTheme.titleLarge,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text('Status: ${_detail!.status}'),
+                                    const SizedBox(height: AppSpacing.sm),
+                                    Row(
+                                      children: [
+                                        const Text('Status'),
+                                        const SizedBox(width: AppSpacing.sm),
+                                        _orderStatusBadge(_detail!.status),
+                                      ],
+                                    ),
+                                    const SizedBox(height: AppSpacing.xs),
                                     Text('Tanggal: ${date.format(_detail!.orderDate)}'),
                                   ],
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: AppSpacing.md),
                             Card(
                               child: Padding(
-                                padding: const EdgeInsets.all(16),
+                                padding: const EdgeInsets.all(AppSpacing.lg),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -99,7 +110,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                           ),
                                       ],
                                     ),
-                                    if (_canCancel(_detail!.status)) const SizedBox(height: 8),
+                                    if (_canCancel(_detail!.status)) const SizedBox(height: AppSpacing.sm),
                                     Align(
                                       alignment: Alignment.centerRight,
                                       child: FilledButton.icon(
@@ -116,13 +127,17 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                         label: const Text('Upload Bukti Bayar'),
                                       ),
                                     ),
-                                    const SizedBox(height: 12),
+                                    const SizedBox(height: AppSpacing.md),
                                     Text('Item Layanan', style: Theme.of(context).textTheme.titleMedium),
-                                    const SizedBox(height: 8),
+                                    const SizedBox(height: AppSpacing.sm),
                                     ..._detail!.items.map(
                                       (item) => ListTile(
                                         contentPadding: EdgeInsets.zero,
-                                        title: Text(item.serviceName),
+                                        title: Text(
+                                          item.serviceName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                         subtitle: Text('${item.quantity} ${item.unit} x ${money.format(item.pricePerUnit)}'),
                                         trailing: Text(money.format(item.subtotal)),
                                       ),
@@ -131,7 +146,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                     _PriceRow(label: 'Subtotal', value: money.format(_detail!.subtotal)),
                                     _PriceRow(label: 'Diskon', value: '-${money.format(_detail!.discountAmount)}'),
                                     _PriceRow(label: 'Delivery', value: money.format(_detail!.deliveryFee)),
-                                    const SizedBox(height: 6),
+                                    const SizedBox(height: AppSpacing.sm),
                                     _PriceRow(
                                       label: 'Total',
                                       value: money.format(_detail!.totalAmount),
@@ -141,15 +156,15 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: AppSpacing.md),
                             Card(
                               child: Padding(
-                                padding: const EdgeInsets.all(16),
+                                padding: const EdgeInsets.all(AppSpacing.lg),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text('Timeline Status', style: Theme.of(context).textTheme.titleMedium),
-                                    const SizedBox(height: 8),
+                                    const SizedBox(height: AppSpacing.sm),
                                     if (_detail!.statusLogs.isEmpty)
                                       const Text('Belum ada status log')
                                     else
@@ -157,7 +172,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                         (log) => ListTile(
                                           contentPadding: EdgeInsets.zero,
                                           leading: const Icon(Icons.check_circle_outline),
-                                          title: Text(log.status),
+                                          title: Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: _orderStatusBadge(log.status),
+                                          ),
                                           subtitle: Text(
                                             '${date.format(log.createdAt)}${log.notes == null ? '' : '\n${log.notes}'}',
                                           ),
@@ -270,7 +288,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           maxLines: 3,
           decoration: const InputDecoration(
             hintText: 'Masukkan alasan pembatalan',
-            border: OutlineInputBorder(),
           ),
         ),
         actions: [
@@ -341,6 +358,25 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   }
 }
 
+/// Merender status order sebagai [StatusBadge]. Label = status apa adanya
+/// (tidak diterjemahkan), hanya WARNA yang diturunkan dari nilai status.
+StatusBadge _orderStatusBadge(String status) {
+  final s = status.toUpperCase();
+  final type = switch (s) {
+    'COMPLETED' || 'DONE' || 'FINISHED' => StatusBadgeType.success,
+    'CANCELLED' ||
+    'CANCELED' ||
+    'REFUNDED' ||
+    'FAILED' => StatusBadgeType.error,
+    'PENDING' ||
+    'PENDING_PAYMENT' ||
+    'WAITING_PAYMENT' ||
+    'UNPAID' => StatusBadgeType.warning,
+    _ => StatusBadgeType.info,
+  };
+  return StatusBadge(status, type: type);
+}
+
 class _PriceRow extends StatelessWidget {
   const _PriceRow({required this.label, required this.value, this.isStrong = false});
 
@@ -355,7 +391,7 @@ class _PriceRow extends StatelessWidget {
         : Theme.of(context).textTheme.bodyMedium;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [

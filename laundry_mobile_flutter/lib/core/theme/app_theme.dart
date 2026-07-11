@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
 import 'app_spacing.dart';
+import 'app_text_styles.dart';
 
 /// Tema aplikasi terpusat. Dipakai di `MaterialApp(theme: AppTheme.light)`.
 class AppTheme {
@@ -24,11 +25,19 @@ class AppTheme {
         bodyColor: AppColors.textDark,
         displayColor: AppColors.textDark,
       ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textDark,
+      // AppBar default: brand oranye, teks/ikon putih, tanpa elevation, judul
+      // di tengah (parity dengan kiosk). Screen auth yang memakai AppBar terang
+      // menyetel backgroundColor sendiri sehingga tidak terpengaruh.
+      appBarTheme: AppBarTheme(
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
-        centerTitle: false,
+        scrolledUnderElevation: 0,
+        centerTitle: true,
+        titleTextStyle: AppTextStyles.titleLarge.copyWith(
+          color: AppColors.onPrimary,
+        ),
+        iconTheme: const IconThemeData(color: AppColors.onPrimary),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,

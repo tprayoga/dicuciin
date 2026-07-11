@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_spacing.dart';
 import 'auth_controller.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -41,7 +43,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       appBar: AppBar(title: const Text('Edit Profil')),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(AppSpacing.xl),
           child: Form(
             key: _formKey,
             child: Column(
@@ -49,10 +51,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               children: [
                 TextFormField(
                   controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Nama',
-                    border: OutlineInputBorder(),
-                  ),
+                  decoration: const InputDecoration(labelText: 'Nama'),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Nama wajib diisi';
@@ -60,33 +59,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    border: OutlineInputBorder(),
-                  ),
+                  decoration: const InputDecoration(labelText: 'Email'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 TextFormField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    labelText: 'Nomor HP',
-                    border: OutlineInputBorder(),
-                  ),
+                  decoration: const InputDecoration(labelText: 'Nomor HP'),
                 ),
                 if (auth.errorMessage != null) ...[
-                  const SizedBox(height: 12),
-                  Text(auth.errorMessage!, style: const TextStyle(color: Colors.red)),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(auth.errorMessage!, style: const TextStyle(color: AppColors.error)),
                 ],
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 FilledButton(
                   onPressed: auth.isProfileUpdating ? null : _submit,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
                     child: auth.isProfileUpdating
                         ? const SizedBox(
                             width: 18,

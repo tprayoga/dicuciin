@@ -13,6 +13,7 @@ import '../../shared/widgets/app_buttons.dart';
 import '../../shared/widgets/app_toast.dart';
 import '../../shared/widgets/mascot_message_card.dart';
 import '../../shared/widgets/pin_pad.dart';
+import '../../shared/widgets/status_badge.dart';
 import '../../shared/widgets/user_avatar.dart';
 import '../auth/auth_controller.dart';
 import 'customer_controller.dart';
