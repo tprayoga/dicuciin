@@ -1,9 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import '../core/theme/app_colors.dart';
+import '../core/theme/app_radius.dart';
+import '../core/theme/app_spacing.dart';
+import '../core/theme/app_text_styles.dart';
+import '../core/theme/app_theme.dart';
+import '../core/widgets/mascot_state_view.dart';
 import 'core/assets/kiosk_mascot_assets.dart';
 import 'features/member/member_login_screen.dart';
 import 'kiosk_controller.dart';
@@ -40,43 +45,10 @@ class KioskApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: primary,
-      primary: primary,
-      secondary: accent,
-      error: errorColor,
-      surface: Colors.white,
-    );
-
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Dicuciin Kiosk',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: colorScheme,
-        scaffoldBackgroundColor: background,
-        textTheme: GoogleFonts.poppinsTextTheme().apply(
-          bodyColor: textDark,
-          displayColor: textDark,
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: surfaceAlt,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: line),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: line),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: primary, width: 1.5),
-          ),
-        ),
-        dividerColor: borderLight,
-      ),
+      theme: AppTheme.light,
       home: const PortraitFrame(child: KioskRouter()),
     );
   }
@@ -286,7 +258,7 @@ class WelcomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<KioskController>();
     return Material(
-      color: Colors.white,
+      color: AppColors.background,
       child: SafeArea(
         child: Column(
           children: [
@@ -294,35 +266,40 @@ class WelcomeScreen extends StatelessWidget {
               flex: 6,
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.lg,
+                  vertical: AppSpacing.xxl,
+                ),
                 decoration: const BoxDecoration(
-                  color: primaryDark,
+                  color: AppColors.primary,
                   borderRadius: BorderRadius.only(
-                    bottomLeft: Radius.circular(36),
-                    bottomRight: Radius.circular(36),
+                    bottomLeft: Radius.circular(AppRadius.xl),
+                    bottomRight: Radius.circular(AppRadius.xl),
                   ),
                 ),
-                child: const Column(
+                child: Column(
                   children: [
-                    Brand(),
-                    Spacer(),
-                    CircleIllustration(),
-                    Spacer(),
+                    const Brand(),
+                    const Spacer(),
+                    const CircleIllustration(),
+                    const Spacer(),
                     Text(
                       'Laundry Jadi\nLebih Mudah',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white,
+                      // Override lokal khusus hero: 30px lebih besar dari
+                      // displayLarge (24) untuk penekanan judul hero saja.
+                      style: AppTextStyles.displayLarge.copyWith(
+                        color: AppColors.onPrimary,
                         fontSize: 30,
-                        height: 1.15,
-                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    SizedBox(height: 10),
+                    const SizedBox(height: AppSpacing.sm),
                     Text(
                       'Pilih mesin, bayar, lalu mesin siap dipakai.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.onPrimaryMuted,
+                      ),
                     ),
                   ],
                 ),
@@ -331,55 +308,37 @@ class WelcomeScreen extends StatelessWidget {
             Expanded(
               flex: 4,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 14),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.xl,
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                ),
                 child: Column(
                   children: [
-                    const Text(
-                      'Selamat Datang!',
-                      style: TextStyle(
-                        color: textDark,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
+                    Text('Selamat Datang!', style: AppTextStyles.titleLarge),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
                       'Login sebagai member untuk pakai wallet, voucher, dan loyalty point.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: textMuted,
-                        fontSize: 13,
-                        height: 1.35,
-                      ),
+                      style: AppTextStyles.bodyMedium,
                     ),
                     const Spacer(),
                     // CTA utama: login member. Guest tetap tersedia di bawah.
-                    PrimaryButton(
-                      label: 'Login Member',
-                      icon: Icons.badge_rounded,
-                      height: 60,
+                    FilledButton.icon(
                       onPressed: controller.goToMemberLogin,
+                      icon: const Icon(Icons.badge_rounded),
+                      label: const Text('Login Member'),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
+                    // Hierarki disetujui: guest jadi TextButton (tersier),
+                    // tetap tinggi >=48, label & callback (startOrder) sama.
                     SizedBox(
-                      height: 52,
                       width: double.infinity,
-                      child: OutlinedButton(
+                      height: 48,
+                      child: TextButton(
                         onPressed: controller.startOrder,
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: primary),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text(
-                          'Lanjut sebagai Guest',
-                          style: TextStyle(
-                            color: primary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                        child: const Text('Lanjut sebagai Guest'),
                       ),
                     ),
                   ],
@@ -1681,12 +1640,14 @@ class RefreshableEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return KioskMascotPanel(
-      mascotAsset: KioskMascotAssets.machineOfflineCable,
+    // Demo pemakaian layer komponen baru (Fase 2). Visual-only; pesan & aksi
+    // tetap sama, tidak ada perubahan logika/alur.
+    return MascotStateView(
+      state: MascotState.empty,
       title: 'Mesin belum tersedia',
       message: message,
-      primaryButtonText: 'Coba Lagi',
-      onPrimaryPressed: onRetry,
+      actionLabel: 'Coba Lagi',
+      onAction: onRetry,
     );
   }
 }
@@ -1836,11 +1797,14 @@ class CircleIllustration extends StatelessWidget {
       width: 185,
       height: 185,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.14),
+        color: AppColors.onPrimary.withValues(alpha: 0.14),
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white24, width: 2),
+        border: Border.all(
+          color: AppColors.onPrimary.withValues(alpha: 0.24),
+          width: 2,
+        ),
       ),
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       // Maskot idle Di.Cuciin; fallback ke ikon laundry bila aset gagal dimuat.
       child: Image.asset(
         KioskMascotAssets.kioskIdleCleaning,
@@ -1848,7 +1812,7 @@ class CircleIllustration extends StatelessWidget {
         errorBuilder: (context, error, stack) => const Icon(
           Icons.local_laundry_service_rounded,
           size: 100,
-          color: Colors.white,
+          color: AppColors.onPrimary,
         ),
       ),
     );
