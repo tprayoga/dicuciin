@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Di.Cuciin — Laundry Self-Service Modern</title>
+    <meta name="description" content="Di.Cuciin adalah platform laundry self-service modern dengan aplikasi mobile dan kiosk. Cuci pakaian jadi mudah, cepat, dan praktis." />
+    <meta name="keywords" content="laundry, self-service, cuci baju, Di.Cuciin, laundry modern, laundry terdekat" />
+    <meta name="author" content="Di.Cuciin" />
+    <meta property="og:title" content="Di.Cuciin — Laundry Self-Service Modern" />
+    <meta property="og:description" content="Platform laundry self-service modern dengan aplikasi mobile dan kiosk." />
+    <meta property="og:image" content="assets/logo.png" />
+    <meta property="og:type" content="website" />
+    <link rel="icon" type="image/png" href="assets/logo.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- ═══════════════════════════════════════════ NAV ═══════════════ -->
+    <nav class="nav" id="nav">
+      <div class="nav__inner container">
+        <a href="#" class="nav__logo">
+          <img src="assets/logo.png" alt="Di.Cuciin" height="40" />
+        </a>
+        <div class="nav__links">
+          <a href="#fitur">Fitur</a>
+          <a href="#cara-kerja">Cara Kerja</a>
+          <a href="#layanan">Layanan</a>
+          <a href="#kontak">Kontak</a>
+        </div>
+        <a href="#download" class="btn btn--primary btn--sm nav__cta">Download App</a>
+        <button class="nav__hamburger" id="hamburger" aria-label="Menu"><span></span><span></span><span></span></button>
+      </div>
+      <!-- Mobile menu -->
+      <div class="nav__mobile" id="mobileMenu">
+        <a href="#fitur">Fitur</a>
+        <a href="#cara-kerja">Cara Kerja</a>
+        <a href="#layanan">Layanan</a>
+        <a href="#kontak">Kontak</a>
+        <a href="#download" class="btn btn--primary">Download App</a>
+      </div>
+    </nav>
+
+    <!-- ═══════════════════════════════════════════ HERO ══════════════ -->
+    <section class="hero">
+      <div class="hero__bg-blobs">
+        <div class="blob blob--1"></div>
+        <div class="blob blob--2"></div>
+        <div class="blob blob--3"></div>
+      </div>
+      <div class="hero__inner container">
+        <div class="hero__text">
+          <div class="hero__badge">🚀 Self-Service Laundry #1 Indonesia</div>
+          <h1 class="hero__title">Cuci Pakaian Jadi <span class="gradient-text">Mudah & Modern</span></h1>
+          <p class="hero__subtitle">Di.Cuciin memudahkan kamu mencuci pakaian kapan saja lewat aplikasi mobile dan mesin kiosk self-service. Scan, cuci, selesai!</p>
+          <div class="hero__actions">
+            <a href="#download" class="btn btn--primary btn--lg">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Download Aplikasi
+            </a>
+            <a href="#cara-kerja" class="btn btn--outline btn--lg"> Lihat Cara Kerja → </a>
+          </div>
+          <div class="hero__stats">
+            <div class="stat">
+              <span class="stat__num">500+</span>
+              <span class="stat__label">Pengguna Aktif</span>
+            </div>
+            <div class="stat__divider"></div>
+            <div class="stat">
+              <span class="stat__num">15+</span>
+              <span class="stat__label">Outlet</span>
+            </div>
+            <div class="stat__divider"></div>
+            <div class="stat">
+              <span class="stat__num">4.8★</span>
+              <span class="stat__label">Rating App</span>
+            </div>
+          </div>
+        </div>
+        <div class="hero__visual">
+          <div class="hero__phone">
+            <div class="phone-mockup">
+              <div class="phone-mockup__screen">
+                <div class="app-screen">
+                  <div class="app-screen__header">
+                    <img src="assets/logo.png" alt="" class="app-screen__logo" />
+                    <span>Hai, Budi! 👋</span>
+                  </div>
+                  <div class="app-screen__balance">
+                    <div class="app-screen__balance-label">Saldo DiCuciin</div>
+                    <div class="app-screen__balance-amount">Rp 350.000</div>
+                  </div>
+                  <div class="app-screen__actions-grid">
+                    <div class="app-screen__action-item">
+                      <div class="app-screen__action-icon" style="background: #05dcf3">🧺</div>
+                      <span>Cuci</span>
+                    </div>
+                    <div class="app-screen__action-item">
+                      <div class="app-screen__action-icon" style="background: #fd6a01">📍</div>
+                      <span>Outlet</span>
+                    </div>
+                    <div class="app-screen__action-item">
+                      <div class="app-screen__action-icon" style="background: #0360da">🎫</div>
+                      <span>Promo</span>
+                    </div>
+                    <div class="app-screen__action-item">
+                      <div class="app-screen__action-icon" style="background: #272526">📋</div>
+                      <span>Riwayat</span>
+                    </div>
+                  </div>
+                  <div class="app-screen__promo-card">
+                    <span class="app-screen__promo-tag">PROMO</span>
+                    <span>Diskon 20% Cuci Pertama!</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <img src="assets/mascot_thumb_up.png" alt="Di.Cuciin Mascot" class="hero__mascot floating" />
+          </div>
+        </div>
+      </div>
+      <div class="hero__wave">
+        <svg viewBox="0 0 1440 120" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+          <path
+            d="M0 60L48 55C96 50 192 40 288 42C384 44 480 58 576 65C672 72 768 72 864 65C960 58 1056 44 1152 40C1248 36 1344 42 1392 45L1440 48V120H1392C1344 120 1248 120 1152 120C1056 120 960 120 864 120C768 120 672 120 576 120C480 120 384 120 288 120C192 120 96 120 48 120H0V60Z"
+            fill="white"
+          />
+        </svg>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════ FITUR ═════════════ -->
+    <section class="features" id="fitur">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-badge">Fitur Unggulan</span>
+          <h2 class="section-title">Kenapa Pilih <span class="gradient-text">Di.Cuciin</span>?</h2>
+          <p class="section-subtitle">Semua yang kamu butuhkan untuk pengalaman laundry yang modern dan mudah</p>
+        </div>
+        <div class="features__grid">
+          <div class="feature-card feature-card--accent">
+            <div class="feature-card__icon">📱</div>
+            <h3 class="feature-card__title">Aplikasi Mobile</h3>
+            <p class="feature-card__desc">Pesan, bayar, dan pantau cucian kamu langsung dari smartphone. Tersedia di Android & iOS.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card__icon">🖥️</div>
+            <h3 class="feature-card__title">Kiosk Self-Service</h3>
+            <p class="feature-card__desc">Langsung datang ke outlet, pilih layanan di kiosk, dan mulai cuci tanpa antri.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card__icon">📷</div>
+            <h3 class="feature-card__title">Scan QR Mesin</h3>
+            <p class="feature-card__desc">Scan kode QR di mesin cuci untuk booking dan aktifkan mesin secara otomatis.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card__icon">💳</div>
+            <h3 class="feature-card__title">Bayar Digital</h3>
+            <p class="feature-card__desc">Bayar dengan QRIS, Virtual Account, atau saldo DiCuciin. Aman dan praktis.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card__icon">🎁</div>
+            <h3 class="feature-card__title">Promo & Voucher</h3>
+            <p class="feature-card__desc">Nikmati promo menarik, voucher diskon, dan cashback tiap transaksi.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card__icon">⭐</div>
+            <h3 class="feature-card__title">Program Loyalty</h3>
+            <p class="feature-card__desc">Kumpulkan poin dari setiap cuci, naik tier, dan dapatkan benefit eksklusif.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════ CARA KERJA ════════ -->
+    <section class="how-it-works" id="cara-kerja">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-badge">Cara Kerja</span>
+          <h2 class="section-title">Cuci Pakaian Dalam <span class="gradient-text">3 Langkah</span></h2>
+          <p class="section-subtitle">Sesimpel itu — tidak perlu menunggu, tidak perlu ribet</p>
+        </div>
+        <div class="steps">
+          <div class="step">
+            <div class="step__number">1</div>
+            <div class="step__visual">
+              <img src="assets/mascot_scan.png" alt="Scan QR" class="step__img" />
+            </div>
+            <h3 class="step__title">Pilih & Scan</h3>
+            <p class="step__desc">Buka app, pilih outlet terdekat, dan scan QR mesin cuci yang tersedia.</p>
+          </div>
+          <div class="step__connector">
+            <svg width="40" height="2" fill="none"><line x1="0" y1="1" x2="40" y2="1" stroke="#05DCF3" stroke-width="2" stroke-dasharray="6 4" /></svg>
+          </div>
+          <div class="step">
+            <div class="step__number">2</div>
+            <div class="step__visual">
+              <img src="assets/mascot_payment.png" alt="Bayar" class="step__img" />
+            </div>
+            <h3 class="step__title">Bayar</h3>
+            <p class="step__desc">Bayar lewat QRIS, Virtual Account bank, atau saldo Di.Cuciin kamu.</p>
+          </div>
+          <div class="step__connector">
+            <svg width="40" height="2" fill="none"><line x1="0" y1="1" x2="40" y2="1" stroke="#05DCF3" stroke-width="2" stroke-dasharray="6 4" /></svg>
+          </div>
+          <div class="step">
+            <div class="step__number">3</div>
+            <div class="step__visual">
+              <img src="assets/mascot_thumb_up.png" alt="Selesai" class="step__img" />
+            </div>
+            <h3 class="step__title">Selesai!</h3>
+            <p class="step__desc">Mesin mulai otomatis. Santai sambil tunggu notifikasi cucian selesai.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════ LAYANAN ═══════════ -->
+    <section class="services" id="layanan">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-badge">Layanan Kami</span>
+          <h2 class="section-title">Tersedia Berbagai <span class="gradient-text">Layanan Cuci</span></h2>
+        </div>
+        <div class="services__grid">
+          <div class="service-card">
+            <div class="service-card__icon">👕</div>
+            <h3>Cuci Reguler</h3>
+            <p>Cuci pakaian sehari-hari dengan mesin modern dan detergen premium.</p>
+            <span class="service-card__price">Mulai Rp 15.000</span>
+          </div>
+          <div class="service-card">
+            <div class="service-card__icon">👟</div>
+            <h3>Cuci Sepatu</h3>
+            <p>Sepatu kotor jadi bersih kembali dengan teknik cuci khusus sepatu.</p>
+            <span class="service-card__price">Mulai Rp 25.000</span>
+          </div>
+          <div class="service-card">
+            <div class="service-card__icon">🧸</div>
+            <h3>Cuci Boneka</h3>
+            <p>Boneka dan bantal dicuci bersih, wangi, dan aman untuk anak.</p>
+            <span class="service-card__price">Mulai Rp 20.000</span>
+          </div>
+          <div class="service-card">
+            <div class="service-card__icon">🛏️</div>
+            <h3>Cuci Bedcover</h3>
+            <p>Sprei dan bedcover bersih, segar, dan harum setiap hari.</p>
+            <span class="service-card__price">Mulai Rp 30.000</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════ SOCIAL PROOF ═══ -->
+    <section class="social-proof" aria-label="Testimoni dan kepercayaan pelanggan">
+      <div class="container">
+        <div class="social-proof__bar">
+          <div class="social-proof__item">
+            <strong>4.8/5</strong>
+            <span>rating pengguna</span>
+          </div>
+          <div class="social-proof__item">
+            <strong>15+</strong>
+            <span>outlet aktif</span>
+          </div>
+          <div class="social-proof__item">
+            <strong>24/7</strong>
+            <span>akses layanan</span>
+          </div>
+          <div class="social-proof__item">
+            <strong>100%</strong>
+            <span>pembayaran digital aman</span>
+          </div>
+        </div>
+
+        <div class="testimonials">
+          <article class="testimonial-card">
+            <p>“Cuci jadi cepat, praktis, dan nggak perlu antre. Saya pakai tiap minggu.”</p>
+            <div class="testimonial-card__person">
+              <strong>Rina, Mahasiswa</strong>
+              <span>Pengguna setia</span>
+            </div>
+          </article>
+          <article class="testimonial-card">
+            <p>“Bisa cek status cucian dari HP, jadi lebih tenang dan nggak bingung.”</p>
+            <div class="testimonial-card__person">
+              <strong>Bimo, Karyawan</strong>
+              <span>Pengguna aktif</span>
+            </div>
+          </article>
+          <article class="testimonial-card">
+            <p>“Promo dan loyalty-nya bikin cuci jadi lebih hemat. Sangat worth it.”</p>
+            <div class="testimonial-card__person">
+              <strong>Dewi, Ibu Rumah Tangga</strong>
+              <span>Pengguna loyal</span>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════ PAYMENT SECTION ═══ -->
+    <section class="payment-section">
+      <div class="container">
+        <div class="payment-section__inner">
+          <div class="payment-section__text">
+            <span class="section-badge section-badge--light">Pembayaran Aman</span>
+            <h2 class="payment-section__title">Bayar Dengan Cara Favoritmu</h2>
+            <p class="payment-section__desc">Di.Cuciin mendukung berbagai metode pembayaran digital yang aman dan mudah. Semua transaksi terenkripsi dan diproses melalui payment gateway terpercaya.</p>
+            <div class="payment-methods">
+              <div class="payment-method">
+                <div class="payment-method__icon">📱</div>
+                <div>
+                  <strong>QRIS</strong>
+                  <span>Scan dari e-wallet manapun</span>
+                </div>
+              </div>
+              <div class="payment-method">
+                <div class="payment-method__icon">🏦</div>
+                <div>
+                  <strong>Virtual Account</strong>
+                  <span>BCA, BRI, BNI, Mandiri, BSI</span>
+                </div>
+              </div>
+              <div class="payment-method">
+                <div class="payment-method__icon">💰</div>
+                <div>
+                  <strong>Saldo DiCuciin</strong>
+                  <span>Top up & bayar instan</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="payment-section__visual">
+            <img src="assets/mascot_basket.png" alt="Pembayaran aman Di.Cuciin" class="payment-section__mascot" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════ DOWNLOAD CTA ═════ -->
+    <section class="download" id="download">
+      <div class="container">
+        <div class="download__inner">
+          <img src="assets/mascot_wave.png" alt="Di.Cuciin mascot" class="download__mascot floating" />
+          <div class="download__content">
+            <h2 class="download__title">Siap Cuci Pakaian dengan Mudah?</h2>
+            <p class="download__desc">Download aplikasi Di.Cuciin sekarang dan nikmati pengalaman laundry yang modern!</p>
+            <div class="download__buttons">
+              <a href="https://www.apple.com/id/app-store/" target="_blank" rel="noopener noreferrer" class="store-badge">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+                  <path
+                    d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"
+                  />
+                </svg>
+                <div>
+                  <small>Download di</small>
+                  <strong>App Store</strong>
+                </div>
+              </a>
+              <a href="https://play.google.com/store" target="_blank" rel="noopener noreferrer" class="store-badge">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+                  <path
+                    d="M3 20.5v-17c0-.83.52-1.28 1-1.5l10 10-10 10c-.48-.22-1-.67-1-1.5zm15.53-8.35l-2.8-1.6L13 13.25l2.73 2.7 2.8-1.6c.78-.44.78-1.76 0-2.2zM5.4 3.22L13.87 11.7 5.4 20.18l8.47-8.48-8.47-8.48zm8.47 8.48L15.07 10 7 5.35l8.47 8.48-1.6-2.13z"
+                  />
+                </svg>
+                <div>
+                  <small>Download di</small>
+                  <strong>Google Play</strong>
+                </div>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════ FOOTER ════════════ -->
+    <footer class="footer" id="kontak">
+      <div class="container">
+        <div class="footer__grid">
+          <div class="footer__brand">
+            <img src="assets/logo.png" alt="Di.Cuciin" height="48" />
+            <p>Platform laundry self-service modern dengan aplikasi mobile dan kiosk. Cuci pakaian jadi mudah, cepat, dan praktis.</p>
+          </div>
+          <div class="footer__links">
+            <h4>Navigasi</h4>
+            <a href="#fitur">Fitur</a>
+            <a href="#cara-kerja">Cara Kerja</a>
+            <a href="#layanan">Layanan</a>
+            <a href="#download">Download</a>
+          </div>
+          <div class="footer__links">
+            <h4>Layanan</h4>
+            <a href="#">Cuci Reguler</a>
+            <a href="#">Cuci Sepatu</a>
+            <a href="#">Cuci Boneka</a>
+            <a href="#">Cuci Bedcover</a>
+          </div>
+          <div class="footer__links">
+            <h4>Kontak</h4>
+            <a href="mailto:hello@dicuciin.com">hello@dicuciin.com</a>
+            <a href="https://wa.me/6281234567890" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+            <a href="https://www.instagram.com/" target="_blank" rel="noopener noreferrer">Instagram</a>
+          </div>
+        </div>
+        <div class="footer__bottom">
+          <p>&copy; 2026 Di.Cuciin. Hak cipta dilindungi.</p>
+          <div class="footer__legal">
+            <a href="#">Kebijakan Privasi</a>
+            <a href="#">Syarat & Ketentuan</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      // Scroll navbar background
+      const nav = document.getElementById("nav");
+      window.addEventListener("scroll", () => {
+        nav.classList.toggle("nav--scrolled", window.scrollY > 40);
+      });
+
+      // Hamburger menu
+      const hamburger = document.getElementById("hamburger");
+      const mobileMenu = document.getElementById("mobileMenu");
+      hamburger.addEventListener("click", () => {
+        hamburger.classList.toggle("active");
+        mobileMenu.classList.toggle("open");
+      });
+      mobileMenu.querySelectorAll("a").forEach((a) => {
+        a.addEventListener("click", () => {
+          hamburger.classList.remove("active");
+          mobileMenu.classList.remove("open");
+        });
+      });
+
+      // Smooth scroll
+      document.querySelectorAll('a[href^="#"]').forEach((a) => {
+        a.addEventListener("click", (e) => {
+          e.preventDefault();
+          const target = document.querySelector(a.getAttribute("href"));
+          if (target) {
+            target.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        });
+      });
+
+      // Intersection Observer for reveal animations
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("revealed");
+            }
+          });
+        },
+        { threshold: 0.1, rootMargin: "0px 0px -40px 0px" },
+      );
+
+      document.querySelectorAll(".feature-card, .step, .service-card, .payment-method").forEach((el) => {
+        el.classList.add("reveal");
+        observer.observe(el);
+      });
+    </script>
+  </body>
+</html>
