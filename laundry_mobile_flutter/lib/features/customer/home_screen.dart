@@ -108,10 +108,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openAccount() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const _AccountPage()));
+  Future<void> _openAccount() async {
+    // Halaman Akun bisa mengembalikan tab tujuan (dari bottom bar-nya) →
+    // kembali ke Home lalu pindah ke tab tersebut.
+    final tab = await Navigator.of(context).push<_MainTab>(
+      MaterialPageRoute(builder: (_) => const _AccountPage()),
+    );
+    if (!mounted || tab == null) return;
+    setState(() => _tab = tab);
   }
 
   void _openLocationDetail(OutletOption outlet) {

@@ -633,9 +633,17 @@ class _MainBottomBar extends StatelessWidget {
 }
 
 class _StaticBottomBar extends StatelessWidget {
-  const _StaticBottomBar({this.showCenterScan = false});
+  const _StaticBottomBar({
+    this.showCenterScan = false,
+    this.onTabSelected,
+    this.onScan,
+  });
 
   final bool showCenterScan;
+
+  /// Bila diisi, item tab akan aktif (mis. untuk kembali ke Home & pindah tab).
+  final ValueChanged<_MainTab>? onTabSelected;
+  final VoidCallback? onScan;
 
   @override
   Widget build(BuildContext context) {
@@ -654,6 +662,9 @@ class _StaticBottomBar extends StatelessWidget {
                 icon: Icons.home_outlined,
                 label: 'Beranda',
                 active: false,
+                onTap: onTabSelected == null
+                    ? null
+                    : () => onTabSelected!(_MainTab.home),
               ),
             ),
             Expanded(
@@ -661,6 +672,9 @@ class _StaticBottomBar extends StatelessWidget {
                 icon: Icons.local_offer_outlined,
                 label: 'Promo',
                 active: false,
+                onTap: onTabSelected == null
+                    ? null
+                    : () => onTabSelected!(_MainTab.promo),
               ),
             ),
             SizedBox(
@@ -682,26 +696,29 @@ class _StaticBottomBar extends StatelessWidget {
                         ),
                         Positioned(
                           top: -38,
-                          child: Container(
-                            width: 82,
-                            height: 82,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _bg,
-                              border: Border.all(color: _line),
-                            ),
-                            child: Center(
-                              child: Container(
-                                width: 62,
-                                height: 62,
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: _primary,
-                                ),
-                                child: const Icon(
-                                  Icons.qr_code_scanner_rounded,
-                                  color: Colors.white,
-                                  size: 30,
+                          child: GestureDetector(
+                            onTap: onScan,
+                            child: Container(
+                              width: 82,
+                              height: 82,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _bg,
+                                border: Border.all(color: _line),
+                              ),
+                              child: Center(
+                                child: Container(
+                                  width: 62,
+                                  height: 62,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: _primary,
+                                  ),
+                                  child: const Icon(
+                                    Icons.qr_code_scanner_rounded,
+                                    color: Colors.white,
+                                    size: 30,
+                                  ),
                                 ),
                               ),
                             ),
@@ -716,6 +733,9 @@ class _StaticBottomBar extends StatelessWidget {
                 icon: Icons.location_on_outlined,
                 label: 'Lokasi',
                 active: false,
+                onTap: onTabSelected == null
+                    ? null
+                    : () => onTabSelected!(_MainTab.location),
               ),
             ),
             Expanded(
@@ -723,6 +743,9 @@ class _StaticBottomBar extends StatelessWidget {
                 icon: Icons.receipt_long_outlined,
                 label: 'Order',
                 active: false,
+                onTap: onTabSelected == null
+                    ? null
+                    : () => onTabSelected!(_MainTab.order),
               ),
             ),
           ],

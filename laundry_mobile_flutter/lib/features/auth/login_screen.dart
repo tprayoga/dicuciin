@@ -32,69 +32,230 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = context.watch<AuthController>();
 
     return Scaffold(
-      backgroundColor: AppColors.primary,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            _buildHeader(context),
-            Expanded(child: _buildSheet(context, auth)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Panel biru atas ────────────────────────────────────────────
-  Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      backgroundColor: AppColors.background,
+      body: Stack(
         children: [
-          SizedBox(
-            height: 40,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: IconButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
+          // Dekorasi lembut brand (peach) di latar — memberi kehangatan.
+          Positioned(
+            top: -70,
+            right: -55,
+            child: _blob(230, AppColors.primaryLight),
+          ),
+          Positioned(
+            top: 120,
+            left: -60,
+            child: _blob(150, AppColors.primaryUltraLight),
+          ),
+          SafeArea(
+            bottom: false,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 4, 24, 28),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      height: 40,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: IconButton(
+                          onPressed: () => Navigator.of(context).maybePop(),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          icon: const Icon(
+                            Icons.arrow_back,
+                            color: AppColors.textStrong,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Image.asset(
+                      'assets/branding/logo-putih.png',
+                      height: 54,
+                      fit: BoxFit.contain,
+                      alignment: Alignment.centerLeft,
+                      errorBuilder: (_, _, _) => const Text(
+                        'dicuciin',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    const Text(
+                      'Hi, Selamat Datang 👋',
+                      style: TextStyle(
+                        color: AppColors.textStrong,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Masuk untuk lanjut ke layanan laundry\nyang lebih mudah & cepat.',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 14,
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Kartu form putih mengambang di atas cream.
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: AppColors.borderLight),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withValues(alpha: 0.07),
+                            blurRadius: 28,
+                            offset: const Offset(0, 12),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const _FieldLabel('Email atau Nomor HP'),
+                          const SizedBox(height: 8),
+                          _LoginField(
+                            controller: _identifierController,
+                            hint: 'cth: nama@email.com / 0812xxxx',
+                            prefixIcon: Icons.person_outline_rounded,
+                            keyboardType: TextInputType.emailAddress,
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'Wajib diisi'
+                                : null,
+                          ),
+                          const SizedBox(height: 18),
+                          const _FieldLabel('Password'),
+                          const SizedBox(height: 8),
+                          _LoginField(
+                            controller: _passwordController,
+                            hint: 'Masukkan password',
+                            prefixIcon: Icons.lock_outline_rounded,
+                            obscureText: _obscurePassword,
+                            suffixIcon: _obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                            onSuffixTap: () => setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            ),
+                            validator: (v) => (v == null || v.isEmpty)
+                                ? 'Password wajib diisi'
+                                : null,
+                            onSubmitted: (_) => _submit(),
+                          ),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: GestureDetector(
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const ForgotPasswordScreen(),
+                                ),
+                              ),
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 4),
+                                child: Text(
+                                  'Lupa password?',
+                                  style: TextStyle(
+                                    color: AppColors.primary,
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (auth.errorMessage != null) ...[
+                            const SizedBox(height: 12),
+                            _ErrorBanner(message: auth.errorMessage!),
+                          ],
+                          const SizedBox(height: 22),
+                          SizedBox(
+                            height: 54,
+                            width: double.infinity,
+                            child: FilledButton(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                disabledBackgroundColor: AppColors.borderLight,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              onPressed: auth.isLoading ? null : _submit,
+                              child: auth.isLoading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Masuk',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 22),
+                    Center(
+                      child: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            'Belum punya akun? ',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: AppColors.textMuted,
+                                  fontSize: 14,
+                                ),
+                          ),
+                          GestureDetector(
+                            onTap: auth.isLoading
+                                ? null
+                                : () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const PhoneInputScreen(
+                                        entryType: AuthEntryType.register,
+                                      ),
+                                    ),
+                                  ),
+                            child: const Text(
+                              'Daftar',
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          Image.asset(
-            'assets/branding/logo-putih.png',
-            height: 50,
-            fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => const Text(
-              'dicuciin',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 26,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.2,
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            'Hi, Selamat Datang 👋',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Masuk untuk lanjut ke layanan laundry\nyang lebih mudah & cepat.',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.85),
-              fontSize: 14,
-              height: 1.45,
             ),
           ),
         ],
@@ -102,164 +263,11 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // ── Kartu putih (form) ─────────────────────────────────────────
-  Widget _buildSheet(BuildContext context, AuthController auth) {
+  Widget _blob(double size, Color color) {
     return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 30, 24, 24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Masuk ke Akunmu',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: AppColors.textStrong,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 22,
-                    ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Senang melihatmu lagi.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textMuted,
-                      fontSize: 14,
-                    ),
-              ),
-              const SizedBox(height: 26),
-
-              const _FieldLabel('Email atau Nomor HP'),
-              const SizedBox(height: 8),
-              _LoginField(
-                controller: _identifierController,
-                hint: 'cth: nama@email.com / 0812xxxx',
-                prefixIcon: Icons.person_outline_rounded,
-                keyboardType: TextInputType.emailAddress,
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
-              ),
-              const SizedBox(height: 18),
-
-              const _FieldLabel('Password'),
-              const SizedBox(height: 8),
-              _LoginField(
-                controller: _passwordController,
-                hint: 'Masukkan password',
-                prefixIcon: Icons.lock_outline_rounded,
-                obscureText: _obscurePassword,
-                suffixIcon: _obscurePassword
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined,
-                onSuffixTap: () =>
-                    setState(() => _obscurePassword = !_obscurePassword),
-                validator: (v) =>
-                    (v == null || v.isEmpty) ? 'Password wajib diisi' : null,
-                onSubmitted: (_) => _submit(),
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: GestureDetector(
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const ForgotPasswordScreen(),
-                    ),
-                  ),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 4),
-                    child: Text(
-                      'Lupa password?',
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              if (auth.errorMessage != null) ...[
-                const SizedBox(height: 12),
-                _ErrorBanner(message: auth.errorMessage!),
-              ],
-
-              const SizedBox(height: 22),
-              SizedBox(
-                height: 52,
-                width: double.infinity,
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    disabledBackgroundColor: AppColors.borderLight,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: auth.isLoading ? null : _submit,
-                  child: auth.isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'Masuk',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Center(
-                child: Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      'Belum punya akun? ',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textMuted,
-                            fontSize: 14,
-                          ),
-                    ),
-                    GestureDetector(
-                      onTap: auth.isLoading
-                          ? null
-                          : () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const PhoneInputScreen(
-                                    entryType: AuthEntryType.register,
-                                  ),
-                                ),
-                              ),
-                      child: const Text(
-                        'Daftar',
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
 
