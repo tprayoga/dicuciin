@@ -103,17 +103,36 @@ describe('PaymentsService loyalty settlement', () => {
         idempotencyKey: 'cashback-tier-order-1',
       }),
     );
-    expect(mocks.membershipTierService.recordSuccessfulTransaction).toHaveBeenCalledWith(
-      tx,
-      'cust-1',
-      50000,
-    );
-    expect(mocks.campaignService.qualifyReferralOnFirstTransaction).toHaveBeenCalledWith(
-      tx,
-      'cust-1',
-      'order-1',
-    );
+    expect(
+      mocks.membershipTierService.recordSuccessfulTransaction,
+    ).toHaveBeenCalledWith(tx, 'cust-1', 50000);
+    expect(
+      mocks.campaignService.qualifyReferralOnFirstTransaction,
+    ).toHaveBeenCalledWith(tx, 'cust-1', 'order-1');
     // Hook aktivasi mesin dipanggil setelah PAID (di luar transaksi finansial).
-    expect(mocks.iotMachineService.activateMachineForOrder).toHaveBeenCalledWith('order-1');
+    expect(
+      mocks.iotMachineService.activateMachineForOrder,
+    ).toHaveBeenCalledWith('order-1');
+  });
+
+  it('webhook provider memverifikasi nominal sebelum settlement', async () => {
+    const { service } = setup();
+    const internal = service as any;
+    internal.gateway.parseWebhook = jest.fn().mockReturnValue({
+      paymentNumber: 'PG-ORD-1',
+      externalId: 'ext-1',
+      status: 'PAID',
+      grossAmount: 50001,
+    });
+    internal.prisma.payment.findFirst.mockResolvedValue({
+      id: 'pay-1',
+      amount: new Prisma.Decimal(50000),
+      status: PaymentStatus.PENDING,
+    });
+
+    await expect(service.handleProviderWebhook({})).rejects.toThrow(
+      'Nominal webhook tidak sama',
+    );
+    expect(internal.prisma.$transaction).not.toHaveBeenCalled();
   });
 });

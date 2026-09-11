@@ -6,7 +6,12 @@ import {
   UnauthorizedException,
   BadRequestException,
 } from '@nestjs/common';
-import { OrderStatus, PaymentMethod, PaymentStatus, Prisma } from '@prisma/client';
+import {
+  OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { toNum } from '../../common/utils/money.util';
 import {
@@ -58,7 +63,10 @@ export class PaymentsService {
    * Buat tagihan QRIS/VA untuk order kiosk (tamu, tanpa customer). Dipakai oleh
    * KiosksService setelah memvalidasi order milik kiosk yang ber-enroll.
    */
-  async createKioskGatewayPayment(orderId: string, dto: CreateGatewayPaymentDto) {
+  async createKioskGatewayPayment(
+    orderId: string,
+    dto: CreateGatewayPaymentDto,
+  ) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
     });
@@ -71,7 +79,12 @@ export class PaymentsService {
 
   /** Inti pembuatan tagihan gateway (idempoten) untuk sebuah order. */
   private async issueChargeForOrder(
-    order: { id: string; orderNumber: string; status: OrderStatus; totalAmount: Prisma.Decimal },
+    order: {
+      id: string;
+      orderNumber: string;
+      status: OrderStatus;
+      totalAmount: Prisma.Decimal;
+    },
     dto: CreateGatewayPaymentDto,
   ) {
     if (order.status === OrderStatus.PAID) {
@@ -154,6 +167,54 @@ export class PaymentsService {
     return { received: true };
   }
 
+  /** Webhook asli provider: signature diverifikasi oleh implementasi gateway. */
+  async handleProviderWebhook(payload: Record<string, unknown>) {
+    if (!this.gateway.parseWebhook) {
+      throw new BadRequestException(
+        `Gateway ${this.gateway.name} tidak mendukung webhook provider`,
+      );
+    }
+    const event = this.gateway.parseWebhook(payload);
+    const payment = await this.prisma.payment.findFirst({
+      where: {
+        OR: [
+          ...(event.paymentNumber
+            ? [{ paymentNumber: event.paymentNumber }]
+            : []),
+          ...(event.externalId ? [{ externalId: event.externalId }] : []),
+        ],
+      },
+    });
+    if (!payment) throw new NotFoundException('Payment not found');
+
+    if (
+      event.grossAmount !== undefined &&
+      !payment.amount.equals(event.grossAmount)
+    ) {
+      throw new BadRequestException(
+        'Nominal webhook tidak sama dengan nominal pembayaran',
+      );
+    }
+
+    if (event.status === 'PAID') {
+      await this.settlePaid(payment.id);
+    } else if (
+      event.status !== 'PENDING' &&
+      payment.status !== PaymentStatus.PAID
+    ) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status:
+            event.status === 'FAILED'
+              ? PaymentStatus.FAILED
+              : PaymentStatus.EXPIRED,
+        },
+      });
+    }
+    return { received: true };
+  }
+
   /** Dev-only: simulasikan gateway mengonfirmasi pembayaran berhasil. */
   async simulatePaid(paymentNumber: string) {
     const payment = await this.prisma.payment.findUnique({
@@ -163,7 +224,10 @@ export class PaymentsService {
     if (!payment.externalId) {
       throw new BadRequestException('Pembayaran ini bukan via gateway');
     }
-    return this.handleWebhook({ externalId: payment.externalId, status: 'PAID' });
+    return this.handleWebhook({
+      externalId: payment.externalId,
+      status: 'PAID',
+    });
   }
 
   /**
@@ -230,9 +294,15 @@ export class PaymentsService {
     );
 
     if (order.customerId) {
-      const status = await this.membershipTierService.ensureStatus(order.customerId);
-      const benefits = await this.membershipTierService.getBenefits(status.currentTier);
-      const wallet = await this.getOrCreateWalletInTx(tx, { customerId: order.customerId });
+      const status = await this.membershipTierService.ensureStatus(
+        order.customerId,
+      );
+      const benefits = await this.membershipTierService.getBenefits(
+        status.currentTier,
+      );
+      const wallet = await this.getOrCreateWalletInTx(tx, {
+        customerId: order.customerId,
+      });
       const pointsToEarn = Math.floor(
         Math.floor(toNum(spendingAmount) / this.loyaltyConfig.pointEarnRate) *
           toNum(benefits.pointMultiplier),

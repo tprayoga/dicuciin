@@ -1,0 +1,31 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Dependencies & build
+node_modules/
+dist/
+.output/
+.nuxt/
+build/
+
+# Environment — kredensial asli tidak pernah masuk Git.
+# Gunakan laundry-be/.env.example sebagai acuan variabel.
+.env
+.env.local
+.env.*.local
+*.env.backup
+
+# Logs & coverage
+*.log
+npm-debug.log*
+coverage/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Backup database hasil deploy-update.sh
+backups/

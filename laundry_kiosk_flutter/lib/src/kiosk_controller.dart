@@ -270,7 +270,8 @@ class KioskController extends ChangeNotifier {
                   ],
                   if (promoCode != null && promoCode.trim().isNotEmpty)
                     'promoCode': promoCode.trim(),
-                  if (customerLookup != null && customerLookup.trim().isNotEmpty)
+                  if (customerLookup != null &&
+                      customerLookup.trim().isNotEmpty)
                     'customerLookup': customerLookup.trim(),
                   'notes':
                       'Mesin ${selectedMachine!.name} (${selectedMachine!.deviceCode})',
@@ -371,6 +372,8 @@ class KioskController extends ChangeNotifier {
       // Abaikan error polling sesaat; percobaan berikutnya akan mengulang.
     }
   }
+
+  Future<void> checkPaymentNow() => _checkPayment();
 
   /// Dev-only: paksa pembayaran sukses (untuk pengujian tanpa gateway nyata).
   Future<void> simulatePayment() async {

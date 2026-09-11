@@ -4,6 +4,11 @@ class AppConfig {
     defaultValue: 'http://10.0.2.2:3000/api/v1',
   );
 
+  static const bool paymentSimulationEnabled = bool.fromEnvironment(
+    'ENABLE_PAYMENT_SIMULATION',
+    defaultValue: false,
+  );
+
   /// Origin server (tanpa path `/api/v1`) untuk memuat file statis seperti
   /// foto profil/banner yang disajikan di `/uploads/...`.
   static String get assetOrigin =>

@@ -6,6 +6,7 @@ import {
   Param,
   Request,
   Headers,
+  HttpCode,
   ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -41,12 +42,26 @@ export class PaymentsController {
   }
 
   @Public()
+  @Post('midtrans/webhook')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'HTTP notification Midtrans (signature SHA-512)' })
+  async midtransWebhook(@Body() payload: Record<string, unknown>) {
+    return this.paymentsService.handleProviderWebhook(payload);
+  }
+
+  @Public()
   @Post('webhook')
+  @HttpCode(200)
   @ApiOperation({ summary: 'Callback gateway (provider-agnostic)' })
   async webhook(
     @Body() dto: PaymentWebhookDto,
     @Headers('x-webhook-secret') secret?: string,
   ) {
+    if (this.config.get<string>('APP_ENV', 'development') === 'production') {
+      throw new ForbiddenException(
+        'Webhook simulasi tidak tersedia di produksi',
+      );
+    }
     // Verifikasi secret bila dikonfigurasi (di prod wajib di-set).
     const expected = this.config.get<string>('PAYMENT_WEBHOOK_SECRET');
     if (expected && secret !== expected) {
@@ -57,7 +72,9 @@ export class PaymentsController {
 
   @Post(':paymentNumber/simulate')
   @ApiBearerAuth()
-  @ApiOperation({ summary: '[DEV] Simulasikan pembayaran berhasil (mock gateway)' })
+  @ApiOperation({
+    summary: '[DEV] Simulasikan pembayaran berhasil (mock gateway)',
+  })
   async simulate(@Param('paymentNumber') paymentNumber: string) {
     if (this.config.get<string>('APP_ENV', 'development') === 'production') {
       throw new ForbiddenException('Tidak tersedia di produksi');

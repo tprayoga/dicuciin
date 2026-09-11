@@ -42,18 +42,14 @@ class _PaymentVaPageState extends State<_PaymentVaPage> {
     if (widget.bank.contains('BCA')) return 'BCA';
     if (widget.bank.contains('BRI')) return 'BRI';
     if (widget.bank.contains('BNI')) return 'BNI';
-    if (widget.bank.contains('Mandiri')) return 'Mandiri';
-    if (widget.bank.contains('BSI')) return 'BSI';
-    return 'CIMB';
+    return 'PERMATA';
   }
 
   Color get _bankColor {
     if (widget.bank.contains('BCA')) return PaymentBrandColors.bca;
     if (widget.bank.contains('BRI')) return PaymentBrandColors.bri;
     if (widget.bank.contains('BNI')) return PaymentBrandColors.bni;
-    if (widget.bank.contains('Mandiri')) return PaymentBrandColors.mandiri;
-    if (widget.bank.contains('BSI')) return PaymentBrandColors.permata;
-    return PaymentBrandColors.cimb;
+    return PaymentBrandColors.permata;
   }
 
   String get _vaNumber => _payment?.vaNumber ?? '-';
@@ -72,7 +68,9 @@ class _PaymentVaPageState extends State<_PaymentVaPage> {
       return;
     }
     try {
-      final payment = await context.read<CustomerController>().createGatewayPayment(
+      final payment = await context
+          .read<CustomerController>()
+          .createGatewayPayment(
             accessToken: token,
             orderId: widget.orderId,
             method: 'VA',
@@ -112,9 +110,9 @@ class _PaymentVaPageState extends State<_PaymentVaPage> {
     if (token == null || pn == null) return;
     try {
       final status = await context.read<CustomerController>().getPaymentStatus(
-            accessToken: token,
-            paymentNumber: pn,
-          );
+        accessToken: token,
+        paymentNumber: pn,
+      );
       if (!mounted) return;
       if (status.isPaid) {
         _poll?.cancel();
@@ -132,9 +130,9 @@ class _PaymentVaPageState extends State<_PaymentVaPage> {
     setState(() => _simulating = true);
     try {
       await context.read<CustomerController>().simulatePayment(
-            accessToken: token,
-            paymentNumber: pn,
-          );
+        accessToken: token,
+        paymentNumber: pn,
+      );
       await _checkStatus();
     } on ApiException catch (e) {
       if (mounted) AppToast.error(context, e.message);
@@ -168,26 +166,26 @@ class _PaymentVaPageState extends State<_PaymentVaPage> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
-                      ? _errorView()
-                      : ListView(
-                          padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
-                          children: [
-                            _summaryCard(),
-                            const SizedBox(height: 16),
-                            _vaCard(),
-                            const SizedBox(height: 16),
-                            const _PaymentInstructionCard(
-                              title: 'Petunjuk Pembayaran Virtual Account',
-                              items: [
-                                'Salin nomor Virtual Account terlebih dahulu.',
-                                'Buka aplikasi m-banking/ATM sesuai bank yang dipilih.',
-                                'Pilih menu Transfer atau Virtual Account.',
-                                'Masukkan nomor VA dan pastikan nominal sesuai.',
-                                'Status order akan diperbarui otomatis setelah berhasil.',
-                              ],
-                            ),
+                  ? _errorView()
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+                      children: [
+                        _summaryCard(),
+                        const SizedBox(height: 16),
+                        _vaCard(),
+                        const SizedBox(height: 16),
+                        const _PaymentInstructionCard(
+                          title: 'Petunjuk Pembayaran Virtual Account',
+                          items: [
+                            'Salin nomor Virtual Account terlebih dahulu.',
+                            'Buka aplikasi m-banking/ATM sesuai bank yang dipilih.',
+                            'Pilih menu Transfer atau Virtual Account.',
+                            'Masukkan nomor VA dan pastikan nominal sesuai.',
+                            'Status order akan diperbarui otomatis setelah berhasil.',
                           ],
                         ),
+                      ],
+                    ),
             ),
           ],
         ),
@@ -197,19 +195,19 @@ class _PaymentVaPageState extends State<_PaymentVaPage> {
   }
 
   Widget _errorView() => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Center(
-          child: MascotMessageCard(
-            mascotAsset: AppMascotAssets.paymentFailedReceipt,
-            variant: MascotMessageVariant.error,
-            fullWidth: false,
-            title: 'Pembayaran belum berhasil',
-            message: _error!,
-            primaryButtonText: 'Coba Lagi',
-            onPrimaryPressed: _createPayment,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.all(24),
+    child: Center(
+      child: MascotMessageCard(
+        mascotAsset: AppMascotAssets.paymentFailedReceipt,
+        variant: MascotMessageVariant.error,
+        fullWidth: false,
+        title: 'Pembayaran belum berhasil',
+        message: _error!,
+        primaryButtonText: 'Coba Lagi',
+        onPrimaryPressed: _createPayment,
+      ),
+    ),
+  );
 
   Widget _summaryCard() {
     return Container(
@@ -324,8 +322,10 @@ class _PaymentVaPageState extends State<_PaymentVaPage> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
               const SizedBox(width: 8),
-              Text('Menunggu pembayaran…',
-                  style: TextStyle(fontSize: 12, color: _textMuted)),
+              Text(
+                'Menunggu pembayaran…',
+                style: TextStyle(fontSize: 12, color: _textMuted),
+              ),
             ],
           ),
         ],
@@ -356,8 +356,12 @@ class _PaymentVaPageState extends State<_PaymentVaPage> {
                 child: _simulating
                     ? const AppDisabledButton(label: 'Memproses…')
                     : AppPrimaryButton(
-                        label: 'Simulasikan Bayar',
-                        onTap: _simulate,
+                        label: AppConfig.paymentSimulationEnabled
+                            ? 'Simulasikan Bayar'
+                            : 'Cek Status',
+                        onTap: AppConfig.paymentSimulationEnabled
+                            ? _simulate
+                            : _checkStatus,
                       ),
               ),
             ],

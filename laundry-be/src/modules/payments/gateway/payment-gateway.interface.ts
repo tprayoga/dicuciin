@@ -17,7 +17,7 @@ export interface CreateChargeInput {
 export interface CreateChargeResult {
   /** ID transaksi di sisi gateway (untuk korelasi webhook). */
   externalId: string;
-  /** Payload QRIS (string untuk render QR) — untuk method QRIS. */
+  /** URL gambar QRIS (atau payload QR provider lain) — untuk method QRIS. */
   qrString?: string;
   /** Nomor Virtual Account — untuk method VA. */
   vaNumber?: string;
@@ -25,7 +25,21 @@ export interface CreateChargeResult {
   expiresAt: Date;
 }
 
+export type GatewayWebhookStatus = 'PENDING' | 'PAID' | 'FAILED' | 'EXPIRED';
+
+export interface GatewayWebhookResult {
+  /** ID transaksi dari provider, bila tersedia. */
+  externalId?: string;
+  /** Nomor pembayaran/order yang dikirim ke provider. */
+  paymentNumber?: string;
+  status: GatewayWebhookStatus;
+  grossAmount?: number;
+  rawStatus?: string;
+}
+
 export interface PaymentGateway {
   readonly name: string;
   createCharge(input: CreateChargeInput): Promise<CreateChargeResult>;
+  /** Verifikasi autentisitas dan normalisasi webhook provider. */
+  parseWebhook?(payload: Record<string, unknown>): GatewayWebhookResult;
 }

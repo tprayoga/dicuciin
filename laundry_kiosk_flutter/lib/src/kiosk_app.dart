@@ -39,6 +39,10 @@ const warning = Color(0xFFF39800);
 const warningBg = Color(0xFFF5EFE2);
 const errorColor = Color(0xFFE1442F);
 const errorBg = Color(0xFFFCE7E5);
+const paymentSimulationEnabled = bool.fromEnvironment(
+  'ENABLE_PAYMENT_SIMULATION',
+  defaultValue: false,
+);
 
 class KioskApp extends StatelessWidget {
   const KioskApp({super.key});
@@ -599,7 +603,7 @@ class CheckoutScreen extends StatefulWidget {
 }
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
-  static const _banks = ['BCA', 'BRI', 'BNI', 'Mandiri', 'BSI', 'CIMB'];
+  static const _banks = ['BCA', 'BRI', 'BNI', 'PERMATA'];
 
   final voucher = TextEditingController();
   final customerLookup = TextEditingController();
@@ -987,7 +991,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        if (isQris) _qrisCard() else _vaCard(payment),
+                        if (isQris) _qrisCard(payment) else _vaCard(payment),
                         const SizedBox(height: 16),
                         const InstructionCard(
                           title: 'Petunjuk Pembayaran',
@@ -1008,13 +1012,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
           : TwoButtonBar(
               secondaryLabel: 'Ganti Metode',
               onSecondary: controller.backToCheckout,
-              primaryLabel: 'Simulasikan Bayar',
-              onPrimary: controller.simulatePayment,
+              primaryLabel: paymentSimulationEnabled
+                  ? 'Simulasikan Bayar'
+                  : 'Cek Status',
+              onPrimary: paymentSimulationEnabled
+                  ? controller.simulatePayment
+                  : controller.checkPaymentNow,
             ),
     );
   }
 
-  Widget _qrisCard() {
+  Widget _qrisCard(KioskPayment payment) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
       decoration: BoxDecoration(
@@ -1047,7 +1055,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
               color: Colors.white,
               border: Border.all(color: borderLight),
             ),
-            child: const Icon(Icons.qr_code_2_rounded, size: 180),
+            child: payment.qrString != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(11),
+                    child: Image.network(
+                      payment.qrString!,
+                      fit: BoxFit.contain,
+                      loadingBuilder: (_, child, progress) => progress == null
+                          ? child
+                          : const Center(child: CircularProgressIndicator()),
+                      errorBuilder: (_, _, _) => const Center(
+                        child: Text(
+                          'QR tidak dapat dimuat',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  )
+                : const Icon(Icons.qr_code_2_rounded, size: 180),
           ),
           const SizedBox(height: 10),
           _waiting(),

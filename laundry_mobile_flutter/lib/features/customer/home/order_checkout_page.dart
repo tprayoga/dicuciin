@@ -86,14 +86,7 @@ class _LoyaltySummaryCard extends StatelessWidget {
 }
 
 class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
-  static const _banks = [
-    'Bank BCA',
-    'Bank BRI',
-    'Bank BNI',
-    'Bank Mandiri',
-    'Bank BSI',
-    'Bank CIMB Niaga',
-  ];
+  static const _banks = ['Bank BCA', 'Bank BRI', 'Bank BNI', 'Bank Permata'];
 
   _PaymentMethod _method = _PaymentMethod.qris;
   String _selectedBank = 'Bank BCA';

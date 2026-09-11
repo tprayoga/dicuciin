@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/assets/app_mascot_assets.dart';
+import '../../core/config/app_config.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/app_buttons.dart';
@@ -111,9 +112,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _openAccount() async {
     // Halaman Akun bisa mengembalikan tab tujuan (dari bottom bar-nya) →
     // kembali ke Home lalu pindah ke tab tersebut.
-    final tab = await Navigator.of(context).push<_MainTab>(
-      MaterialPageRoute(builder: (_) => const _AccountPage()),
-    );
+    final tab = await Navigator.of(
+      context,
+    ).push<_MainTab>(MaterialPageRoute(builder: (_) => const _AccountPage()));
     if (!mounted || tab == null) return;
     setState(() => _tab = tab);
   }

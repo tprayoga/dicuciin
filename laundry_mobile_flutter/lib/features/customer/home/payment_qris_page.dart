@@ -50,7 +50,9 @@ class _PaymentQrisPageState extends State<_PaymentQrisPage> {
       return;
     }
     try {
-      final payment = await context.read<CustomerController>().createGatewayPayment(
+      final payment = await context
+          .read<CustomerController>()
+          .createGatewayPayment(
             accessToken: token,
             orderId: widget.orderId,
             method: 'QRIS',
@@ -89,9 +91,9 @@ class _PaymentQrisPageState extends State<_PaymentQrisPage> {
     if (token == null || pn == null) return;
     try {
       final status = await context.read<CustomerController>().getPaymentStatus(
-            accessToken: token,
-            paymentNumber: pn,
-          );
+        accessToken: token,
+        paymentNumber: pn,
+      );
       if (!mounted) return;
       if (status.isPaid) {
         _poll?.cancel();
@@ -111,9 +113,9 @@ class _PaymentQrisPageState extends State<_PaymentQrisPage> {
     setState(() => _simulating = true);
     try {
       await context.read<CustomerController>().simulatePayment(
-            accessToken: token,
-            paymentNumber: pn,
-          );
+        accessToken: token,
+        paymentNumber: pn,
+      );
       await _checkStatus();
     } on ApiException catch (e) {
       if (mounted) AppToast.error(context, e.message);
@@ -147,24 +149,24 @@ class _PaymentQrisPageState extends State<_PaymentQrisPage> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
-                      ? _errorView()
-                      : ListView(
-                          padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
-                          children: [
-                            _summaryCard(),
-                            const SizedBox(height: 16),
-                            _qrisCard(),
-                            const SizedBox(height: 16),
-                            const _PaymentInstructionCard(
-                              title: 'Petunjuk Pembayaran QRIS',
-                              items: [
-                                'Scan QR dari m-banking, e-wallet, atau aplikasi pembayaran lain.',
-                                'Pastikan nama merchant dan nominal sudah sesuai.',
-                                'Status akan diperbarui otomatis setelah pembayaran berhasil.',
-                              ],
-                            ),
+                  ? _errorView()
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+                      children: [
+                        _summaryCard(),
+                        const SizedBox(height: 16),
+                        _qrisCard(),
+                        const SizedBox(height: 16),
+                        const _PaymentInstructionCard(
+                          title: 'Petunjuk Pembayaran QRIS',
+                          items: [
+                            'Scan QR dari m-banking, e-wallet, atau aplikasi pembayaran lain.',
+                            'Pastikan nama merchant dan nominal sudah sesuai.',
+                            'Status akan diperbarui otomatis setelah pembayaran berhasil.',
                           ],
                         ),
+                      ],
+                    ),
             ),
           ],
         ),
@@ -174,19 +176,19 @@ class _PaymentQrisPageState extends State<_PaymentQrisPage> {
   }
 
   Widget _errorView() => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Center(
-          child: MascotMessageCard(
-            mascotAsset: AppMascotAssets.paymentFailedReceipt,
-            variant: MascotMessageVariant.error,
-            fullWidth: false,
-            title: 'Pembayaran belum berhasil',
-            message: _error!,
-            primaryButtonText: 'Coba Lagi',
-            onPrimaryPressed: _createPayment,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.all(24),
+    child: Center(
+      child: MascotMessageCard(
+        mascotAsset: AppMascotAssets.paymentFailedReceipt,
+        variant: MascotMessageVariant.error,
+        fullWidth: false,
+        title: 'Pembayaran belum berhasil',
+        message: _error!,
+        primaryButtonText: 'Coba Lagi',
+        onPrimaryPressed: _createPayment,
+      ),
+    ),
+  );
 
   Widget _summaryCard() {
     return Container(
@@ -254,7 +256,24 @@ class _PaymentQrisPageState extends State<_PaymentQrisPage> {
               color: Colors.white,
               border: Border.all(color: AppColors.borderLight),
             ),
-            child: const Icon(Icons.qr_code_2_rounded, size: 192),
+            child: _payment?.qrString != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(11),
+                    child: Image.network(
+                      _payment!.qrString!,
+                      fit: BoxFit.contain,
+                      loadingBuilder: (_, child, progress) => progress == null
+                          ? child
+                          : const Center(child: CircularProgressIndicator()),
+                      errorBuilder: (_, _, _) => const Center(
+                        child: Text(
+                          'QR tidak dapat dimuat',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  )
+                : const Icon(Icons.qr_code_2_rounded, size: 192),
           ),
           const SizedBox(height: 8),
           // Menunggu pembayaran (status real dari gateway).
@@ -301,9 +320,12 @@ class _PaymentQrisPageState extends State<_PaymentQrisPage> {
                 child: _simulating
                     ? const AppDisabledButton(label: 'Memproses…')
                     : AppPrimaryButton(
-                        // Tombol dev: mensimulasikan callback gateway (mock).
-                        label: 'Simulasikan Bayar',
-                        onTap: _simulate,
+                        label: AppConfig.paymentSimulationEnabled
+                            ? 'Simulasikan Bayar'
+                            : 'Cek Status',
+                        onTap: AppConfig.paymentSimulationEnabled
+                            ? _simulate
+                            : _checkStatus,
                       ),
               ),
             ],
