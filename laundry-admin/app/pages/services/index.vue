@@ -130,7 +130,7 @@ onMounted(() => load())
 
 <template>
   <div class="space-y-4">
-    <div class="dc-page-card p-4 flex items-center justify-between gap-3">
+    <div class="dc-page-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div class="flex items-center gap-3">
         <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0360da] flex items-center justify-center">
           <UIcon name="i-heroicons-wrench-screwdriver" class="text-xl" />
@@ -140,12 +140,12 @@ onMounted(() => load())
           <p class="text-sm text-[#6f809f]">Tambah, Ubah atau Hapus layanan laundry milik Anda.</p>
         </div>
       </div>
-      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2" @click="openCreate">Tambah Layanan</UButton>
+      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2 justify-center" @click="openCreate">Tambah Layanan</UButton>
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-3">
       <p class="text-lg">Total: <span class="text-[#0360da] font-semibold">{{ filteredServices.length }} Layanan</span></p>
-      <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari Layanan" class="w-full max-w-xs dc-input-like" />
+      <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari Layanan" class="w-full sm:max-w-xs dc-input-like" />
     </div>
 
     <div v-if="loading" class="text-sm text-[#6f809f]">Memuat data layanan...</div>
@@ -172,7 +172,7 @@ onMounted(() => load())
           </div>
         </div>
 
-        <h3 class="text-[32px] font-semibold text-[#111d35] mb-3">{{ service.name }}</h3>
+        <h3 class="text-2xl sm:text-[32px] font-semibold text-[#111d35] mb-3 break-words">{{ service.name }}</h3>
         <p class="text-sm text-[#6f809f]">Tipe Mesin</p>
         <p class="font-medium">{{ service.machineType || (serviceTypeItems.find(i => i.value === service.serviceType)?.label || service.serviceType) }}</p>
 
@@ -223,7 +223,7 @@ onMounted(() => load())
             <USelect v-model="form.isActive" :items="[{ label: 'Aktif', value: true }, { label: 'Nonaktif', value: false }]" class="w-full" />
           </UFormField>
           <div class="flex justify-end pt-2">
-            <UButton type="submit" class="dc-btn-primary px-4 py-2">Simpan</UButton>
+            <UButton type="submit" class="dc-btn-primary px-4 py-2 justify-center">Simpan</UButton>
           </div>
         </form>
       </template>

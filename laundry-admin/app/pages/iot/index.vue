@@ -111,7 +111,7 @@ onMounted(load)
 
 <template>
   <div class="space-y-4">
-    <div class="dc-page-card p-4 flex items-center justify-between gap-3">
+    <div class="dc-page-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div class="flex items-center gap-3">
         <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0360da] flex items-center justify-center">
           <UIcon name="i-heroicons-computer-desktop" class="text-xl" />
@@ -121,14 +121,14 @@ onMounted(load)
           <p class="text-sm text-[#6f809f]">Tambah dan monitoring kesehatan mesin dari cabang laundry milik Anda.</p>
         </div>
       </div>
-      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2" @click="openCreate">Tambah Mesin</UButton>
+      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2 justify-center" @click="openCreate">Tambah Mesin</UButton>
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-3">
       <p class="text-lg">Total Mesin: <span class="text-[#0360da] font-semibold">{{ filteredDevices.length }} Mesin</span></p>
-      <div class="flex gap-2">
-        <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari Mesin" class="w-[280px] dc-input-like" />
-        <USelect :items="[{ label: 'Semua Cabang', value: 'all' }]" model-value="all" class="w-[170px] dc-input-like" />
+      <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari Mesin" class="w-full sm:w-[280px] dc-input-like" />
+        <USelect :items="[{ label: 'Semua Cabang', value: 'all' }]" model-value="all" class="w-full sm:w-[170px] dc-input-like" />
       </div>
     </div>
 
@@ -201,7 +201,7 @@ onMounted(load)
           </UFormField>
 
           <div class="flex justify-end pt-2">
-            <UButton type="submit" class="dc-btn-primary px-4 py-2">Simpan</UButton>
+            <UButton type="submit" class="dc-btn-primary px-4 py-2 justify-center">Simpan</UButton>
           </div>
         </form>
       </template>

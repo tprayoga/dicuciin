@@ -136,7 +136,7 @@ onMounted(() => load())
 
 <template>
   <div class="space-y-4">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <p class="text-sm text-gray-500">{{ meta.total }} kiosk terdaftar</p>
       <UButton icon="i-heroicons-plus" @click="openCreate">Tambah Kiosk</UButton>
     </div>

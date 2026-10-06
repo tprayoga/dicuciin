@@ -170,14 +170,14 @@ onMounted(loadDashboard)
           </div>
           <p class="text-xs font-semibold text-[#272526]">{{ card.title }}</p>
         </div>
-        <p class="text-[38px] font-bold" :class="card.valueClass">{{ card.value }}</p>
+        <p class="text-[28px] sm:text-[38px] font-bold break-words" :class="card.valueClass">{{ card.value }}</p>
         <p class="text-xs text-[#6f809f] mt-2">{{ card.caption }}</p>
       </div>
     </div>
 
     <div class="dc-page-card p-4">
       <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <h3 class="text-[22px] font-semibold text-[#272526]">Omzet vs Laba 30 Hari</h3>
+        <h3 class="text-lg sm:text-[22px] font-semibold text-[#272526]">Omzet vs Laba 30 Hari</h3>
         <p class="text-sm text-[#6f809f]">Pendapatan = pembayaran terkonfirmasi, Laba = pendapatan - Beban Operasional</p>
       </div>
       <div v-if="loading" class="h-[260px] rounded-xl border border-[#d7e0ee] flex items-center justify-center text-sm text-[#6f809f]">
@@ -318,7 +318,7 @@ onMounted(loadDashboard)
     </div>
 
     <div class="dc-page-card p-4">
-      <h3 class="text-[22px] font-semibold text-[#272526] mb-4">Riwayat Transaksi hari ini</h3>
+      <h3 class="text-lg sm:text-[22px] font-semibold text-[#272526] mb-4">Riwayat Transaksi hari ini</h3>
 
       <div v-if="loading" class="text-sm text-[#6f809f]">Memuat data...</div>
 
@@ -342,7 +342,7 @@ onMounted(loadDashboard)
             <p class="text-base font-semibold text-[#272526]">Outlet {{ order.outlet?.name || '-' }}</p>
             <p class="text-sm text-[#4f607f]">{{ order.status }}</p>
           </div>
-          <div class="xl:col-span-2 text-right">
+          <div class="xl:col-span-2 xl:text-right">
             <p class="text-lg font-semibold text-[#19984d]">Rp {{ order.totalAmount.toLocaleString('id-ID') }}</p>
           </div>
         </div>

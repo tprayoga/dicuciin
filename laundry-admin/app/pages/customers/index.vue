@@ -203,7 +203,7 @@ onMounted(load)
 
 <template>
   <div class="space-y-4">
-    <div class="dc-page-card p-4 flex items-center justify-between gap-3">
+    <div class="dc-page-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div class="flex items-center gap-3">
         <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0360da] flex items-center justify-center">
           <UIcon name="i-heroicons-user-group" class="text-xl" />
@@ -213,35 +213,35 @@ onMounted(load)
           <p class="text-sm text-[#6f809f]">Kelola data pelanggan dan aktivitas member laundry Anda.</p>
         </div>
       </div>
-      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2" @click="openCreate">Tambah Member</UButton>
+      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2 justify-center" @click="openCreate">Tambah Member</UButton>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
       <div class="dc-page-card p-4">
         <p class="text-xs font-semibold">TOTAL MEMBER</p>
-        <p class="text-4xl font-bold mt-2">{{ filteredCustomers.length }}</p>
+        <p class="text-3xl sm:text-4xl font-bold break-words mt-2">{{ filteredCustomers.length }}</p>
         <p class="text-sm text-[#6f809f] mt-2">Total seluruh member yang terdaftar di aplikasi</p>
       </div>
       <div class="dc-page-card p-4">
         <p class="text-xs font-semibold">MEMBER BARU BULAN INI</p>
-        <p class="text-4xl font-bold mt-2">{{ filteredCustomers.length }}</p>
+        <p class="text-3xl sm:text-4xl font-bold break-words mt-2">{{ filteredCustomers.length }}</p>
         <p class="text-sm text-[#6f809f] mt-2">Total jumlah member baru bulan ini</p>
       </div>
       <div class="dc-page-card p-4">
         <p class="text-xs font-semibold">MEMBER AKTIF</p>
-        <p class="text-4xl font-bold mt-2">{{ filteredCustomers.length }}</p>
+        <p class="text-3xl sm:text-4xl font-bold break-words mt-2">{{ filteredCustomers.length }}</p>
         <p class="text-sm text-[#6f809f] mt-2">Member yang aktif dalam 30 hari terakhir</p>
       </div>
       <div class="dc-page-card p-4">
         <p class="text-xs font-semibold">TOTAL SALDO MEMBER</p>
-        <p class="text-4xl font-bold text-[#19984d] mt-2">Rp {{ totalBalance.toLocaleString('id-ID') }}</p>
+        <p class="text-3xl sm:text-4xl font-bold break-words text-[#19984d] mt-2">Rp {{ totalBalance.toLocaleString('id-ID') }}</p>
         <p class="text-sm text-[#6f809f] mt-2">Total saldo seluruh member yang menggunakan aplikasi</p>
       </div>
     </div>
 
     <div class="flex flex-wrap gap-2 justify-between">
-      <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari nama / nomor telepon" class="w-full max-w-xl dc-input-like" />
-      <USelect :items="[{ label: 'Semua member', value: 'all' }]" model-value="all" class="w-[180px] dc-input-like" />
+      <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari nama / nomor telepon" class="w-full sm:max-w-xl dc-input-like" />
+      <USelect :items="[{ label: 'Semua member', value: 'all' }]" model-value="all" class="w-full sm:w-[180px] dc-input-like" />
     </div>
 
     <div class="dc-page-card p-4 overflow-x-auto">
@@ -335,7 +335,7 @@ onMounted(load)
           </UFormField>
 
           <div class="flex justify-end pt-2">
-            <UButton type="submit" class="dc-btn-primary px-4 py-2" :loading="savingCreate">Simpan</UButton>
+            <UButton type="submit" class="dc-btn-primary px-4 py-2 justify-center" :loading="savingCreate">Simpan</UButton>
           </div>
         </form>
       </template>

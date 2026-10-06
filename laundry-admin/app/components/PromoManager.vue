@@ -205,8 +205,8 @@ onMounted(load)
 <template>
   <div class="space-y-4">
     <div class="flex items-center justify-between gap-3 flex-wrap">
-      <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari promo" class="w-full max-w-xs dc-input-like" />
-      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2" @click="openCreate">Tambah Promo</UButton>
+      <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari promo" class="w-full sm:max-w-xs dc-input-like" />
+      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2 justify-center" @click="openCreate">Tambah Promo</UButton>
     </div>
 
     <div v-if="loading" class="text-sm text-[#6f809f]">Memuat data promo...</div>
@@ -227,7 +227,7 @@ onMounted(load)
           <span v-if="!promo.bannerUrl">Banner Promo</span>
         </div>
         <div class="p-4">
-          <h3 class="text-2xl font-semibold text-[#111d35]">{{ promo.name }}</h3>
+          <h3 class="text-xl sm:text-2xl font-semibold text-[#111d35] break-words">{{ promo.name }}</h3>
           <p class="text-sm text-[#6f809f] mt-1">{{ promo.description || 'Deskripsi singkat promo' }}</p>
           <p class="text-sm text-[#0360da] mt-2">{{ promoPeriod(promo) }}</p>
 
@@ -299,7 +299,7 @@ onMounted(load)
           <p class="text-xs text-[#6f809f]">Isi URL gambar agar banner tampil di halaman promo</p>
 
           <div class="flex justify-end pt-2">
-            <UButton type="submit" :disabled="uploading" class="dc-btn-primary px-4 py-2">Simpan</UButton>
+            <UButton type="submit" :disabled="uploading" class="dc-btn-primary px-4 py-2 justify-center">Simpan</UButton>
           </div>
         </form>
       </template>

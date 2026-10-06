@@ -44,8 +44,8 @@ onMounted(load)
       Belum ada transaksi yang terhubung ke staff. Order yang dibuat staff di kiosk/kasir akan muncul di sini.
     </div>
 
-    <div v-else class="dc-page-card overflow-hidden">
-      <table class="w-full text-sm">
+    <div v-else class="dc-page-card overflow-x-auto">
+      <table class="w-full min-w-[640px] text-sm">
         <thead>
           <tr class="text-left text-[#6f809f] border-b border-[#d7e0ee]">
             <th class="p-3 font-medium">Staff</th>

@@ -240,7 +240,7 @@ onMounted(load)
   <div class="space-y-4">
     <div class="flex items-center justify-between gap-3 flex-wrap">
       <p class="text-sm text-[#6f809f]">Pop-up saat masuk app & carousel di halaman utama pelanggan</p>
-      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2" @click="openCreate">Tambah Banner</UButton>
+      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2 justify-center" @click="openCreate">Tambah Banner</UButton>
     </div>
 
     <div v-if="loading" class="text-sm text-[#6f809f]">Memuat data banner...</div>
@@ -351,7 +351,7 @@ onMounted(load)
           </div>
 
           <div class="flex justify-end pt-2">
-            <UButton type="submit" :disabled="uploading" class="dc-btn-primary px-4 py-2">Simpan</UButton>
+            <UButton type="submit" :disabled="uploading" class="dc-btn-primary px-4 py-2 justify-center">Simpan</UButton>
           </div>
         </form>
       </template>

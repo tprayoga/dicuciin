@@ -148,12 +148,12 @@ onMounted(() => load())
 
 <template>
   <div class="space-y-4">
-    <div class="dc-page-card p-4 flex items-center justify-between gap-3">
+    <div class="dc-page-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div>
         <h2 class="text-lg font-semibold">Transaksi/Order</h2>
         <p class="text-sm text-[#6f809f]">Pantau transaksi pesanan laundry dari seluruh cabang.</p>
       </div>
-      <USelect v-model="statusFilter" :items="statusItems" class="w-56 dc-input-like" />
+      <USelect v-model="statusFilter" :items="statusItems" class="w-full sm:w-56 dc-input-like" />
     </div>
 
     <div class="dc-page-card p-4">
@@ -175,7 +175,7 @@ onMounted(() => load())
     <UModal v-model:open="showDetail" title="Detail Pesanan" size="lg">
       <template #body>
         <div v-if="selectedOrder" class="space-y-4">
-          <div class="grid grid-cols-2 gap-3 text-sm">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             <div>
               <p class="text-[#6f809f]">No. Pesanan</p>
               <p class="font-medium">{{ selectedOrder.orderNumber }}</p>

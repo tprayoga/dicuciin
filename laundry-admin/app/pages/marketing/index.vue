@@ -20,11 +20,11 @@ const tabs = [
         </div>
       </div>
 
-      <div class="mt-4 flex gap-2">
+      <div class="mt-4 flex gap-2 overflow-x-auto pb-1">
         <button
           v-for="t in tabs"
           :key="t.key"
-          class="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition"
+          class="shrink-0 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition"
           :class="tab === t.key ? 'bg-[#0360da] text-white' : 'bg-[#f2f6fc] text-[#4f607f] hover:bg-[#e6eefb]'"
           @click="tab = t.key"
         >

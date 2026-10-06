@@ -168,7 +168,7 @@ onMounted(load)
 
 <template>
   <div class="space-y-4">
-    <div class="dc-page-card p-4 flex items-center justify-between gap-3">
+    <div class="dc-page-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div class="flex items-center gap-3">
         <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0360da] flex items-center justify-center">
           <UIcon name="i-heroicons-users" class="text-xl" />
@@ -178,14 +178,14 @@ onMounted(load)
           <p class="text-sm text-[#6f809f]">Tambahkan data staf dan admin ke sistem laundry milik Anda.</p>
         </div>
       </div>
-      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2" @click="openCreate">Tambah Staff</UButton>
+      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2 justify-center" @click="openCreate">Tambah Staff</UButton>
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-3">
       <p class="text-lg">Total: <span class="text-[#0360da] font-semibold">{{ filteredUsers.length }} Staff</span></p>
-      <div class="flex flex-wrap gap-2">
-        <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari nama staff" class="w-[280px] dc-input-like" />
-        <USelect v-model="selectedOutletFilter" :items="outletFilterItems" class="w-[170px] dc-input-like" />
+      <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari nama staff" class="w-full sm:w-[280px] dc-input-like" />
+        <USelect v-model="selectedOutletFilter" :items="outletFilterItems" class="w-full sm:w-[170px] dc-input-like" />
       </div>
     </div>
 
@@ -267,7 +267,7 @@ onMounted(load)
           </UFormField>
 
           <div class="flex justify-end pt-2">
-            <UButton type="submit" class="dc-btn-primary px-4 py-2">Simpan</UButton>
+            <UButton type="submit" class="dc-btn-primary px-4 py-2 justify-center">Simpan</UButton>
           </div>
         </form>
       </template>

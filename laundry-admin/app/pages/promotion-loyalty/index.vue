@@ -705,13 +705,13 @@ onMounted(loadData)
 
 <template>
   <div class="space-y-4">
-    <div class="dc-page-card p-4 flex flex-wrap items-center justify-between gap-3">
+    <div class="dc-page-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div>
         <h2 class="text-lg font-semibold">Promotion & Loyalty Engine</h2>
         <p class="text-sm text-[#6f809f]">Kelola voucher, campaign, wallet ledger, membership, B2B, dan laporan promo.</p>
       </div>
-      <div class="flex flex-wrap gap-2">
-        <UInput v-model="month" type="month" class="w-[160px] dc-input-like" />
+      <div class="flex gap-2 w-full sm:w-auto">
+        <UInput v-model="month" type="month" class="flex-1 sm:flex-none sm:w-[160px] dc-input-like" />
         <UButton icon="i-heroicons-arrow-path" variant="outline" class="dc-btn-outline" :loading="loading" @click="loadData">Refresh</UButton>
       </div>
     </div>
@@ -732,8 +732,8 @@ onMounted(loadData)
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari data" class="w-full max-w-xs dc-input-like" />
-      <USelect v-model="statusFilter" :items="['ALL', 'ACTIVE', 'DRAFT', 'PAUSED', 'USED', 'EXPIRED', 'SUSPENDED'].map(v => ({ label: v === 'ALL' ? 'Semua status' : v, value: v }))" class="w-48 dc-input-like" />
+      <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari data" class="w-full sm:max-w-xs dc-input-like" />
+      <USelect v-model="statusFilter" :items="['ALL', 'ACTIVE', 'DRAFT', 'PAUSED', 'USED', 'EXPIRED', 'SUSPENDED'].map(v => ({ label: v === 'ALL' ? 'Semua status' : v, value: v }))" class="w-full sm:w-48 dc-input-like" />
     </div>
 
     <UAlert v-if="errorMessage" color="error" variant="soft" title="Sebagian data gagal dimuat" :description="errorMessage" />

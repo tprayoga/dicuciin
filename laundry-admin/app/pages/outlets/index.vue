@@ -270,7 +270,7 @@ onMounted(() => load())
 
 <template>
   <div class="space-y-4">
-    <div class="dc-page-card p-4 flex items-center justify-between gap-3">
+    <div class="dc-page-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div class="flex items-center gap-3">
         <div class="h-10 w-10 rounded-xl bg-[#dce9f8] text-[#0360da] flex items-center justify-center">
           <UIcon name="i-heroicons-building-storefront" class="text-xl" />
@@ -280,12 +280,12 @@ onMounted(() => load())
           <p class="text-sm text-[#6f809f]">Tambah, ubah, atau hapus cabang laundry milik Anda. Semua data tetap aman</p>
         </div>
       </div>
-      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2" @click="openCreate">Tambah Cabang</UButton>
+      <UButton icon="i-heroicons-plus" class="dc-btn-primary px-4 py-2 justify-center" @click="openCreate">Tambah Cabang</UButton>
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-3">
       <p class="text-lg">Total: <span class="text-[#0360da] font-semibold">{{ filteredOutlets.length }} Outlet/ Cabang</span></p>
-      <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari nama outlet" class="w-full max-w-xs dc-input-like" />
+      <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari nama outlet" class="w-full sm:max-w-xs dc-input-like" />
     </div>
 
     <div v-if="loading" class="text-sm text-[#6f809f]">Memuat data outlet...</div>
@@ -307,11 +307,11 @@ onMounted(() => load())
           </div>
         </div>
 
-        <h3 class="text-2xl font-semibold text-[#111d35]">{{ outlet.name }}</h3>
+        <h3 class="text-xl sm:text-2xl font-semibold text-[#111d35] break-words">{{ outlet.name }}</h3>
         <p class="text-[#6f809f] text-sm mt-1">{{ outlet.address }}</p>
         <p class="text-xs text-[#6f809f] mt-1">Jam operasional: {{ outlet.openTime || '-' }} - {{ outlet.closeTime || '-' }}</p>
 
-        <div class="mt-3 pt-3 border-t border-[#d7e0ee] grid grid-cols-3 gap-2">
+        <div class="mt-3 pt-3 border-t border-[#d7e0ee] grid grid-cols-3 gap-2 text-xs sm:text-sm">
           <div>
             <p class="text-sm text-[#6f809f]">Staff Cabang</p>
             <p class="font-semibold text-[#272526]">-</p>
@@ -365,7 +365,7 @@ onMounted(() => load())
             <UInput v-model="form.phone" placeholder="Masukkan nomor telepon" class="w-full" required />
           </UFormField>
           <div class="flex justify-end pt-2">
-            <UButton type="submit" class="dc-btn-primary px-4 py-2">{{ editTarget ? 'Simpan' : 'Tambah Cabang' }}</UButton>
+            <UButton type="submit" class="dc-btn-primary px-4 py-2 justify-center">{{ editTarget ? 'Simpan' : 'Tambah Cabang' }}</UButton>
           </div>
         </form>
       </template>

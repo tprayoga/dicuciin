@@ -96,34 +96,34 @@ watch([month, selectedOutlet], () => {
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="flex flex-wrap gap-2">
-        <UInput v-model="month" type="month" class="w-[180px] dc-input-like" />
-        <USelect v-model="selectedOutlet" :items="outletOptions" class="w-[220px] dc-input-like" />
+      <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <UInput v-model="month" type="month" class="w-full sm:w-[180px] dc-input-like" />
+        <USelect v-model="selectedOutlet" :items="outletOptions" class="w-full sm:w-[220px] dc-input-like" />
       </div>
-      <UButton class="dc-btn-primary px-4 py-2" @click="exportReport">Export Laporan</UButton>
+      <UButton class="dc-btn-primary px-4 py-2 w-full sm:w-auto justify-center" @click="exportReport">Export Laporan</UButton>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div class="dc-page-card p-4">
         <p class="text-xs font-semibold text-[#272526]">PENDAPATAN BULAN INI</p>
-        <p class="text-[38px] font-bold text-[#19984d] mt-2">Rp {{ totalRevenue.toLocaleString('id-ID') }}</p>
+        <p class="text-[28px] sm:text-[38px] font-bold break-words text-[#19984d] mt-2">Rp {{ totalRevenue.toLocaleString('id-ID') }}</p>
         <p class="text-sm text-[#6f809f] mt-2">Dari semua pembayaran terkonfirmasi</p>
       </div>
       <div class="dc-page-card p-4">
         <p class="text-xs font-semibold text-[#272526]">BEBAN OPERASIONAL</p>
-        <p class="text-[38px] font-bold text-[#da2d14] mt-2">Rp {{ operationalCost.toLocaleString('id-ID') }}</p>
+        <p class="text-[28px] sm:text-[38px] font-bold break-words text-[#da2d14] mt-2">Rp {{ operationalCost.toLocaleString('id-ID') }}</p>
         <p class="text-sm text-[#6f809f] mt-2">Estimasi beban operasional dari pendapatan berjalan</p>
       </div>
       <div class="dc-page-card p-4">
         <p class="text-xs font-semibold text-[#272526]">LABA BERSIH (ESTIMASI)</p>
-        <p class="text-[38px] font-bold text-[#0360da] mt-2">Rp {{ estimatedProfit.toLocaleString('id-ID') }}</p>
+        <p class="text-[28px] sm:text-[38px] font-bold break-words text-[#0360da] mt-2">Rp {{ estimatedProfit.toLocaleString('id-ID') }}</p>
         <p class="text-sm text-[#6f809f] mt-2">Sudah dihitung setelah beban operasional</p>
       </div>
     </div>
 
     <div class="dc-page-card p-4">
-      <div class="flex items-center justify-between gap-2 mb-3">
-        <h3 class="text-[22px] font-semibold text-[#272526]">Omzet vs Laba 30 Hari</h3>
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h3 class="text-lg sm:text-[22px] font-semibold text-[#272526]">Omzet vs Laba 30 Hari</h3>
         <p class="text-sm text-[#6f809f]">Pendapatan = pembayaran terkonfirmasi, Laba = pendapatan - Beban Operasional</p>
       </div>
 
