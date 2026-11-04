@@ -1376,3 +1376,111 @@ a {
     font-size: 15px;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   HALAMAN KEBIJAKAN (S&K, Privasi, Refund, Cara Pemesanan)
+   ═══════════════════════════════════════════════════════════════════ */
+.legal-header {
+  border-bottom: 1px solid var(--gray-200);
+  background: white;
+}
+.legal-header .container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 72px;
+}
+.legal-header img {
+  height: 40px;
+  width: auto;
+}
+.legal-header a.legal-back {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--blue);
+}
+.legal {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+}
+.legal h1 {
+  font-size: 32px;
+  line-height: 1.25;
+  color: var(--black);
+  margin-bottom: 8px;
+}
+.legal__updated {
+  color: var(--gray-600);
+  font-size: 14px;
+  margin-bottom: 32px;
+}
+.legal h2 {
+  font-size: 20px;
+  color: var(--black);
+  margin: 32px 0 12px;
+}
+.legal p,
+.legal li {
+  color: var(--gray-700);
+  margin-bottom: 10px;
+}
+.legal ol,
+.legal ul {
+  padding-left: 22px;
+  margin-bottom: 12px;
+}
+.legal a {
+  color: var(--blue);
+  text-decoration: underline;
+}
+.legal__note {
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin: 20px 0;
+}
+.legal table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0 20px;
+  font-size: 15px;
+}
+.legal th,
+.legal td {
+  border: 1px solid var(--gray-200);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.legal th {
+  background: var(--gray-50);
+  color: var(--black);
+}
+@media (max-width: 640px) {
+  .legal {
+    padding: 32px 16px 64px;
+  }
+  .legal h1 {
+    font-size: 26px;
+  }
+}
+.how-it-works__more {
+  text-align: center;
+  margin-top: 40px;
+}
+.services__note {
+  text-align: center;
+  margin-top: 24px;
+  font-size: 14px;
+  color: var(--gray-600);
+}
+.store-badge--soon {
+  opacity: 0.75;
+  cursor: default;
+}
+.store-badge--soon:hover {
+  transform: none;
+  box-shadow: none;
+}
