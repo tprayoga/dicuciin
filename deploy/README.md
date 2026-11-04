@@ -128,3 +128,19 @@ bash deploy/scripts/deploy-update.sh
 - Jangan expose port 5432/6379/1883 ke publik
 - Gunakan firewall (ufw/security group): buka hanya 22,80,443
 - Simpan secret di vault/secret manager jika memungkinkan
+
+## 12) Deploy Landing Page (dicuciin.com)
+
+Landing (`dicuciin-landing/`) adalah file statis yang disajikan nginx. Untuk update:
+
+```bash
+cd /opt/dicuciin
+bash deploy/scripts/deploy-landing.sh
+```
+
+Script akan `git pull`, mencari folder `root` nginx untuk `dicuciin.com`, membackup isinya
+ke `backups/`, menyalin file landing, lalu mengecek halaman kebijakan. Jika folder web tidak
+terdeteksi, isi manual: `WEB_ROOT=/var/www/dicuciin bash deploy/scripts/deploy-landing.sh`.
+
+Opsional purge cache Cloudflare: tambahkan `CF_ZONE_ID=<zone-id> CF_API_TOKEN=<token>`
+(token cukup izin *Zone → Cache Purge*).
