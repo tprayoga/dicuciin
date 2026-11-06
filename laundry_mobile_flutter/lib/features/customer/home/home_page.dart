@@ -84,19 +84,19 @@ class _HomePageState extends State<_HomePage> {
               _ContactRow(
                 icon: Icons.chat,
                 label: 'WhatsApp',
-                value: '+62 812-3456-7890',
+                value: '+62 811-888-2908',
               ),
               SizedBox(height: 12),
               _ContactRow(
                 icon: Icons.email_outlined,
                 label: 'Email',
-                value: 'cs@dicuciin.com',
+                value: 'di.cuciin.hq@gmail.com',
               ),
               SizedBox(height: 12),
               _ContactRow(
                 icon: Icons.headset_mic_outlined,
                 label: 'Call Center',
-                value: '0800-1234-5678',
+                value: '0811-888-2908',
               ),
             ],
           ),

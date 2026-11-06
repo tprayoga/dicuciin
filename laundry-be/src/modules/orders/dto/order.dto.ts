@@ -16,6 +16,11 @@ class OrderItemDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  machineType?: string;
 }
 
 export class CreateOrderDto {

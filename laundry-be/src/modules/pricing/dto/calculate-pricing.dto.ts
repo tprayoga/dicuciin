@@ -69,4 +69,9 @@ export class CalculatePricingDto {
   @IsDateString()
   @IsOptional()
   at?: string;
+
+  @ApiProperty({ required: false, description: 'MOBILE_APP / KIOSK' })
+  @IsString()
+  @IsOptional()
+  sourcePlatform?: string;
 }
