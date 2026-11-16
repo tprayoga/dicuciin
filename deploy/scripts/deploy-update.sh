@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="${ROOT_DIR:-/opt/dicuciin}"
+# Lokasi repo di VM (samakan dengan deploy/ecosystem.config.cjs).
+ROOT_DIR="${ROOT_DIR:-/opt/dicuciin/dicuciin}"
 BRANCH="${BRANCH:-main}"
 RUN_SEED="${RUN_SEED:-false}"
 

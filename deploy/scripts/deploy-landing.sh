@@ -10,7 +10,8 @@ set -euo pipefail
 # Opsional purge cache Cloudflare setelah deploy:
 #   CF_ZONE_ID=<zone-id> CF_API_TOKEN=<token-purge-cache> bash deploy/scripts/deploy-landing.sh
 
-ROOT_DIR="${ROOT_DIR:-/opt/dicuciin}"
+# Lokasi repo di VM (samakan dengan deploy/ecosystem.config.cjs).
+ROOT_DIR="${ROOT_DIR:-/opt/dicuciin/dicuciin}"
 BRANCH="${BRANCH:-main}"
 DOMAIN="${DOMAIN:-dicuciin.com}"
 WEB_ROOT="${WEB_ROOT:-}"
