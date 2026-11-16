@@ -135,4 +135,22 @@ describe('PaymentsService loyalty settlement', () => {
     );
     expect(internal.prisma.$transaction).not.toHaveBeenCalled();
   });
+
+  it('webhook provider untuk pembayaran tak dikenal dibalas sukses tanpa perubahan', async () => {
+    const { service } = setup();
+    const internal = service as any;
+    internal.gateway.parseWebhook = jest.fn().mockReturnValue({
+      paymentNumber: 'payment_notif_test_M509118050',
+      externalId: 'ext-unknown',
+      status: 'PAID',
+      grossAmount: 10000,
+    });
+    internal.prisma.payment.findFirst.mockResolvedValue(null);
+
+    await expect(service.handleProviderWebhook({})).resolves.toEqual({
+      received: true,
+      ignored: true,
+    });
+    expect(internal.prisma.$transaction).not.toHaveBeenCalled();
+  });
 });

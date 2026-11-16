@@ -1,6 +1,7 @@
 import {
   Injectable,
   Inject,
+  Logger,
   NotFoundException,
   ConflictException,
   UnauthorizedException,
@@ -30,6 +31,8 @@ import { IotMachineService } from '../iot/iot-machine.service';
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
     private prisma: PrismaService,
     @Inject(PAYMENT_GATEWAY) private gateway: PaymentGateway,
@@ -185,7 +188,15 @@ export class PaymentsService {
         ],
       },
     });
-    if (!payment) throw new NotFoundException('Payment not found');
+    if (!payment) {
+      // Signature sudah sah (diverifikasi di parseWebhook), tapi transaksinya
+      // bukan milik kita — mis. "Test notification URL" dari dashboard Midtrans.
+      // Balas 200 agar tidak dianggap gagal / dikirim ulang; tidak ada yang diubah.
+      this.logger.warn(
+        `Webhook untuk pembayaran tak dikenal diabaikan (order_id=${event.paymentNumber ?? '-'}, transaction_id=${event.externalId ?? '-'})`,
+      );
+      return { received: true, ignored: true };
+    }
 
     if (
       event.grossAmount !== undefined &&
