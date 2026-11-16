@@ -1,5 +1,9 @@
 import { ConfigService } from '@nestjs/config';
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  UnauthorizedException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { createHash } from 'crypto';
 import { MidtransPaymentGateway } from './midtrans-payment-gateway';
 
@@ -115,6 +119,92 @@ describe('MidtransPaymentGateway', () => {
         signature_key: 'invalid',
       }),
     ).toThrow(UnauthorizedException);
+  });
+
+  it('memverifikasi signature dengan MIDTRANS_SIGNATURE_KEY bila diisi', () => {
+    const signatureSecret = 'Mid-server-signature-secret';
+    const payload = {
+      order_id: 'PG-ORD-6',
+      status_code: '200',
+      gross_amount: '10000.00',
+      transaction_status: 'settlement',
+    };
+    const sign = (key: string) =>
+      createHash('sha512')
+        .update(
+          `${payload.order_id}${payload.status_code}${payload.gross_amount}${key}`,
+        )
+        .digest('hex');
+    const gw = gateway({ MIDTRANS_SIGNATURE_KEY: signatureSecret });
+
+    expect(
+      gw.parseWebhook({ ...payload, signature_key: sign(signatureSecret) }),
+    ).toMatchObject({ status: 'PAID' });
+    // Signature yang dibuat dengan Server Key tidak lagi diterima.
+    expect(() =>
+      gw.parseWebhook({ ...payload, signature_key: sign(serverKey) }),
+    ).toThrow(UnauthorizedException);
+  });
+
+  it('memakai Signature Secret Key untuk verifikasi, Server Key untuk API', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        transaction_id: 'trx-7',
+        va_numbers: [{ bank: 'bni', va_number: '999' }],
+      }),
+    } as Response);
+
+    await gateway({ MIDTRANS_SIGNATURE_KEY: 'sig-only' }).createCharge({
+      orderNumber: 'ORD-7',
+      amount: 10000,
+      method: 'VA',
+      bank: 'BNI',
+    });
+
+    const headers = (fetchMock.mock.calls[0][1] as RequestInit)
+      .headers as Record<string, string>;
+    expect(headers.Authorization).toBe(
+      `Basic ${Buffer.from(`${serverKey}:`).toString('base64')}`,
+    );
+  });
+
+  it('penolakan channel (402 di body) dibalas 422 dengan pesan ramah', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status_code: '402',
+        status_message: 'Payment channel is not activated.',
+      }),
+    } as Response);
+
+    const promise = gateway().createCharge({
+      orderNumber: 'ORD-8',
+      amount: 10000,
+      method: 'QRIS',
+    });
+    await expect(promise).rejects.toBeInstanceOf(UnprocessableEntityException);
+    await expect(promise).rejects.toThrow('Metode pembayaran ini belum tersedia');
+  });
+
+  it('key ditolak (HTTP 401) dibalas 422, bukan 5xx', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'Unauthorized' }),
+    } as unknown as Response);
+
+    await expect(
+      gateway().createCharge({ orderNumber: 'ORD-9', amount: 10000, method: 'QRIS' }),
+    ).rejects.toThrow('Pembayaran sedang tidak dapat diproses');
+  });
+
+  it('gagal koneksi ke Midtrans dibalas 422', async () => {
+    jest.spyOn(global, 'fetch').mockRejectedValue(new Error('ECONNRESET'));
+
+    await expect(
+      gateway().createCharge({ orderNumber: 'ORD-10', amount: 10000, method: 'QRIS' }),
+    ).rejects.toThrow('Gagal terhubung ke layanan pembayaran');
   });
 
   it('mewajibkan Server Key', () => {

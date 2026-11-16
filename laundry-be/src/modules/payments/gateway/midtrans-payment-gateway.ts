@@ -1,8 +1,9 @@
 import {
-  BadGatewayException,
   BadRequestException,
   Injectable,
+  Logger,
   UnauthorizedException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, timingSafeEqual } from 'crypto';
@@ -37,16 +38,41 @@ const SUPPORTED_VA_BANKS: Record<string, string> = {
   PERMATA: 'permata',
 };
 
+/**
+ * Pesan untuk pengguna per status_code Midtrans. Penolakan Midtrans dibalas
+ * 422 (bukan 5xx): Cloudflare mengganti body respons 5xx dari origin dengan
+ * halaman errornya sendiri, sehingga pesan tidak pernah sampai ke aplikasi.
+ */
+const USER_MESSAGES: Record<string, string> = {
+  '401':
+    'Pembayaran sedang tidak dapat diproses. Silakan coba lagi nanti.',
+  '402':
+    'Metode pembayaran ini belum tersedia. Silakan pilih metode lain.',
+};
+const DEFAULT_USER_MESSAGE =
+  'Pembayaran gagal dibuat. Silakan coba lagi atau pilih metode lain.';
+
 @Injectable()
 export class MidtransPaymentGateway implements PaymentGateway {
   readonly name = 'midtrans';
 
+  private readonly logger = new Logger(MidtransPaymentGateway.name);
+  /** Server Key: autentikasi saat memanggil API Midtrans (charge, dll). */
   private readonly serverKey: string;
+  /**
+   * Signature Secret Key: memverifikasi signature HTTP notification.
+   * Dashboard Midtrans baru memisahkannya dari Server Key; bila tidak diisi,
+   * pakai Server Key (perilaku dashboard lama, keduanya sama).
+   */
+  private readonly signatureKey: string;
   private readonly baseUrl: string;
   private readonly expiryMinutes: number;
 
   constructor(private readonly config: ConfigService) {
     this.serverKey = this.config.get<string>('MIDTRANS_SERVER_KEY', '').trim();
+    this.signatureKey =
+      this.config.get<string>('MIDTRANS_SIGNATURE_KEY', '').trim() ||
+      this.serverKey;
     const isProduction =
       this.config.get<string>('MIDTRANS_IS_PRODUCTION', 'false') === 'true';
     this.expiryMinutes = Number(
@@ -102,9 +128,10 @@ export class MidtransPaymentGateway implements PaymentGateway {
       payload,
     );
     if (!response.transaction_id) {
-      throw new BadGatewayException(
-        response.status_message ||
-          'Respons Midtrans tidak memiliki transaction_id',
+      // Midtrans kadang menolak dengan HTTP 200 + status_code di body (mis. 402).
+      throw this.rejected(
+        response.status_code,
+        response.status_message || 'Respons tidak memiliki transaction_id',
       );
     }
 
@@ -116,7 +143,7 @@ export class MidtransPaymentGateway implements PaymentGateway {
         ) ??
         response.actions?.find((action) => action.name === 'generate-qr-code');
       if (!qrAction?.url) {
-        throw new BadGatewayException('Midtrans tidak mengembalikan URL QRIS');
+        throw this.rejected(undefined, 'Midtrans tidak mengembalikan URL QRIS');
       }
       return {
         externalId: response.transaction_id,
@@ -128,7 +155,8 @@ export class MidtransPaymentGateway implements PaymentGateway {
     const va = response.va_numbers?.[0];
     const vaNumber = va?.va_number ?? response.permata_va_number;
     if (!vaNumber) {
-      throw new BadGatewayException(
+      throw this.rejected(
+        undefined,
         'Midtrans tidak mengembalikan nomor Virtual Account',
       );
     }
@@ -150,7 +178,7 @@ export class MidtransPaymentGateway implements PaymentGateway {
       'transaction_status',
     ).toLowerCase();
     const expected = createHash('sha512')
-      .update(`${orderId}${statusCode}${grossAmount}${this.serverKey}`)
+      .update(`${orderId}${statusCode}${grossAmount}${this.signatureKey}`)
       .digest('hex');
 
     const signatureBuffer = Buffer.from(signature, 'utf8');
@@ -213,18 +241,32 @@ export class MidtransPaymentGateway implements PaymentGateway {
       });
       const data = (await response.json()) as MidtransChargeResponse;
       if (!response.ok) {
-        throw new BadGatewayException(
-          `Midtrans menolak transaksi: ${data.status_message ?? response.status}`,
+        throw this.rejected(
+          data.status_code ?? String(response.status),
+          data.status_message ?? `HTTP ${response.status}`,
         );
       }
       return data as T;
     } catch (error) {
-      if (error instanceof BadGatewayException) throw error;
+      if (error instanceof UnprocessableEntityException) throw error;
       const message = error instanceof Error ? error.message : 'Unknown error';
-      throw new BadGatewayException(`Gagal terhubung ke Midtrans: ${message}`);
+      this.logger.error(`Gagal terhubung ke Midtrans: ${message}`);
+      throw new UnprocessableEntityException(
+        'Gagal terhubung ke layanan pembayaran. Silakan coba lagi.',
+      );
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  /** Catat detail penolakan Midtrans di log; kembalikan pesan ramah ke klien. */
+  private rejected(statusCode: string | undefined, detail: string) {
+    this.logger.warn(
+      `Midtrans menolak charge (status_code=${statusCode ?? '-'}): ${detail}`,
+    );
+    return new UnprocessableEntityException(
+      (statusCode && USER_MESSAGES[statusCode]) || DEFAULT_USER_MESSAGE,
+    );
   }
 
   private requiredString(
