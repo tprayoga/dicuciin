@@ -25,87 +25,25 @@ class _OrderPageState extends State<_OrderPage> {
     );
   }
 
-  Future<void> _requestRefund(OrderSummary order) async {
-    final reasonController = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Ajukan Refund'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${order.orderNumber} senilai '
-              '${_formatRupiah(order.totalAmount.round())} akan dikembalikan '
-              'ke saldo wallet.',
-              style: const TextStyle(color: _textMuted, height: 1.4),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: reasonController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Alasan refund',
-                hintText: 'Contoh: salah memilih layanan',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Refund'),
-          ),
-        ],
-      ),
+  /// K3: refund tidak lagi bisa dilakukan sendiri. Pelanggan menghubungi
+  /// layanan pelanggan (WhatsApp) dengan nomor order; refund diproses admin
+  /// sesuai kebijakan.
+  Future<void> _requestHelp(OrderSummary order) async {
+    final text = Uri.encodeComponent(
+      'Halo Di.Cuciin, saya butuh bantuan untuk order ${order.orderNumber} '
+      '(${_formatRupiah(order.totalAmount.round())}).',
     );
-    final reason = reasonController.text.trim();
-    reasonController.dispose();
-    if (confirmed != true || !mounted) return;
-    if (reason.length < 3) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Alasan refund minimal 3 karakter.')),
-      );
-      return;
-    }
-
-    final auth = context.read<AuthController>();
-    final user = auth.user;
-    final token = auth.accessToken;
-    if (user == null || token == null) return;
-
-    final controller = context.read<CustomerController>();
-    final balance = await controller.refundOrder(
-      user: user,
-      accessToken: token,
-      orderId: order.id,
-      reason: reason,
+    final uri = Uri.parse(
+      'https://wa.me/${AppConfig.supportWhatsApp}?text=$text',
     );
-    if (!mounted) return;
-    if (balance == null) {
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(controller.errorMessage ?? 'Refund gagal diproses.'),
+        const SnackBar(
+          content: Text('Tidak bisa membuka WhatsApp. Hubungi 0811-888-2908.'),
         ),
       );
-      return;
     }
-
-    await context.read<WalletController>().loadBalance();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Refund berhasil. Saldo sekarang ${_formatRupiah(balance)}.',
-        ),
-        backgroundColor: AppColors.success,
-      ),
-    );
   }
 
   @override
@@ -203,7 +141,7 @@ class _OrderPageState extends State<_OrderPage> {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _BackendOrderCard(
                   order: order,
-                  onRefund: () => _requestRefund(order),
+                  onHelp: () => _requestHelp(order),
                 ),
               ),
             ),
@@ -243,7 +181,7 @@ class _OrderPageState extends State<_OrderPage> {
           final order = orders[index];
           return _BackendOrderCard(
             order: order,
-            onRefund: () => _requestRefund(order),
+            onHelp: () => _requestHelp(order),
           );
         },
       ),
@@ -271,10 +209,10 @@ class _OrderSectionTitle extends StatelessWidget {
 }
 
 class _BackendOrderCard extends StatelessWidget {
-  const _BackendOrderCard({required this.order, required this.onRefund});
+  const _BackendOrderCard({required this.order, required this.onHelp});
 
   final OrderSummary order;
-  final VoidCallback onRefund;
+  final VoidCallback onHelp;
 
   @override
   Widget build(BuildContext context) {
@@ -331,15 +269,9 @@ class _BackendOrderCard extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: context.watch<CustomerController>().isRefundingOrder
-                    ? null
-                    : onRefund,
-                icon: const Icon(Icons.currency_exchange),
-                label: const Text('Refund ke Saldo'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.error,
-                  side: const BorderSide(color: AppColors.error),
-                ),
+                onPressed: onHelp,
+                icon: const Icon(Icons.support_agent),
+                label: const Text('Butuh bantuan?'),
               ),
             ),
           ],

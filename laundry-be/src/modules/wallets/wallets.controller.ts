@@ -8,6 +8,7 @@ import {
   Request,
   UseGuards,
   ParseIntPipe,
+  NotFoundException,
 } from '@nestjs/common';
 import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import {
@@ -25,19 +26,26 @@ import {
 } from './dto/wallet.dto';
 import { WalletPinDto } from './dto/wallet-pin.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { assertCustomerAccess } from '../../common/auth/access-policy';
 
 @ApiTags('Wallets')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('wallets')
 export class WalletsController {
-  constructor(private readonly walletsService: WalletsService) {}
+  constructor(
+    private readonly walletsService: WalletsService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Get('customer/:customerId')
-  @ApiOperation({ summary: 'Get customer wallet' })
-  async getWallet(@Param('customerId') customerId: string) {
+  @ApiOperation({ summary: 'Get customer wallet (pemilik atau staf)' })
+  async getWallet(@Param('customerId') customerId: string, @Request() req: any) {
+    await assertCustomerAccess(this.prisma, req.user, customerId);
     return this.walletsService.getWallet(customerId);
   }
 
@@ -47,14 +55,19 @@ export class WalletsController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getTransactions(
     @Param('customerId') customerId: string,
+    @Request() req: any,
     @Query('page', new ParseOptionalIntPipe(1)) page?: number,
     @Query('limit', new ParseOptionalIntPipe(10)) limit?: number,
   ) {
+    await assertCustomerAccess(this.prisma, req.user, customerId);
     return this.walletsService.getTransactions(customerId, page, limit);
   }
 
+  // K1: kredit saldo langsung TANPA pembayaran → hanya admin (top-up manual).
+  // Top-up pelanggan lewat Midtrans dibuat di Fase 2.
   @Post('customer/:customerId/topup')
-  @ApiOperation({ summary: 'Top-up wallet' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER)
+  @ApiOperation({ summary: 'Top-up wallet manual (admin)' })
   async topup(
     @Param('customerId') customerId: string,
     @Body() topupWalletDto: TopupWalletDto,
@@ -63,25 +76,40 @@ export class WalletsController {
   }
 
   @Post('customer/:customerId/pay')
-  @ApiOperation({ summary: 'Pay with wallet' })
+  @ApiOperation({ summary: 'Pay with wallet (nominal = total order dari server)' })
   async pay(
     @Param('customerId') customerId: string,
     @Body() payWithWalletDto: PayWithWalletDto,
+    @Request() req: any,
   ) {
+    await assertCustomerAccess(this.prisma, req.user, customerId);
     return this.walletsService.pay(customerId, payWithWalletDto);
   }
 
+  // K3: refund mandiri oleh customer ditutup; refund lewat admin
+  // (POST /wallets/orders/:orderId/refund) sesuai kebijakan owner.
   @Post('customer/:customerId/refund')
-  @ApiOperation({ summary: 'Refund paid order to customer wallet' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER, UserRole.ADMIN_OUTLET)
+  @ApiOperation({ summary: 'Refund paid order to customer wallet (admin)' })
   async refund(
     @Param('customerId') customerId: string,
     @Request() req: any,
     @Body() refundWalletDto: RefundWalletDto,
   ) {
-    return this.walletsService.refund(
-      customerId,
+    // Rute lama dipertahankan untuk kompatibilitas, tetapi kini hanya admin
+    // dan memakai alur refund admin (cek outlet + idempoten). Order harus milik
+    // customer di URL agar tidak salah sasaran.
+    const order = await this.prisma.order.findUnique({
+      where: { id: refundWalletDto.orderId },
+      select: { customerId: true },
+    });
+    if (!order || order.customerId !== customerId) {
+      throw new NotFoundException('Order tidak ditemukan untuk customer ini');
+    }
+    return this.walletsService.refundByAdmin(
+      refundWalletDto.orderId,
       req.user.userId,
-      refundWalletDto,
+      refundWalletDto.description ?? 'Refund oleh admin',
     );
   }
 

@@ -8,11 +8,6 @@ class CustomerService {
 
   final ApiClient _apiClient;
 
-  int _moneyToInt(Object? value) {
-    if (value is num) return value.round();
-    return double.tryParse(value?.toString() ?? '')?.round() ?? 0;
-  }
-
   /// Ambil list dari payload, tahan dua bentuk respons paginated:
   /// (a) sudah berupa List (interceptor menaikkan `data` ke atas), atau
   /// (b) Map `{data: [...], meta}`.
@@ -528,19 +523,4 @@ class CustomerService {
     return OrderDetail.fromJson(payload as Map<String, dynamic>);
   }
 
-  Future<int> refundOrderToWallet({
-    required String accessToken,
-    required String customerId,
-    required String orderId,
-    required String reason,
-  }) async {
-    final payload = await _apiClient.post(
-      '/wallets/customer/$customerId/refund',
-      headers: {'Authorization': 'Bearer $accessToken'},
-      body: jsonEncode({'orderId': orderId, 'description': reason}),
-    );
-    final wallet =
-        (payload as Map<String, dynamic>)['wallet'] as Map<String, dynamic>?;
-    return _moneyToInt(wallet?['balance']);
-  }
 }

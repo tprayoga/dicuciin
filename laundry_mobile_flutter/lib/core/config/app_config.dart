@@ -9,6 +9,16 @@ class AppConfig {
     defaultValue: false,
   );
 
+  /// Top up saldo oleh pelanggan. Dimatikan sampai top-up lewat Midtrans
+  /// (Fase 2) selesai — endpoint top-up langsung kini khusus admin (K1).
+  static const bool walletTopUpEnabled = bool.fromEnvironment(
+    'ENABLE_WALLET_TOPUP',
+    defaultValue: false,
+  );
+
+  /// Nomor WhatsApp layanan pelanggan (format internasional tanpa '+').
+  static const String supportWhatsApp = '628118882908';
+
   /// Origin server (tanpa path `/api/v1`) untuk memuat file statis seperti
   /// foto profil/banner yang disajikan di `/uploads/...`.
   static String get assetOrigin =>

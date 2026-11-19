@@ -1,4 +1,15 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
+import { AuthUser, isStaff } from '../../common/auth/access-policy';
+import {
+  FINAL_STATUSES,
+  UNPAID_STATUSES,
+  assertManualTransition,
+} from './order-status.policy';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateOrderDto, UpdateOrderStatusDto, CancelOrderDto } from './dto/order.dto';
 import { OrderStatus, UserRole, Prisma } from '@prisma/client';
@@ -416,6 +427,7 @@ export class OrdersService {
     }
 
     const { status, notes } = updateOrderStatusDto;
+    assertManualTransition(order.status, status);
 
     const updatedOrder = await this.prisma.order.update({
       where: { id },
@@ -439,14 +451,38 @@ export class OrdersService {
     return updatedOrder;
   }
 
-  async cancel(id: string, cancelOrderDto: CancelOrderDto, cancelledBy?: string) {
-    const order = await this.prisma.order.findUnique({ where: { id } });
+  /**
+   * Batalkan order. [actor] wajib dari controller:
+   * - customer: hanya order miliknya yang belum dibayar;
+   * - staf: order apa pun yang belum final.
+   */
+  async cancel(
+    id: string,
+    cancelOrderDto: CancelOrderDto,
+    cancelledBy?: string,
+    actor?: AuthUser,
+  ) {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: { customer: { select: { userId: true } } },
+    });
     if (!order) {
       throw new NotFoundException('Order not found');
     }
 
-    if (order.status === OrderStatus.COMPLETED || order.status === OrderStatus.CANCELLED) {
+    if (FINAL_STATUSES.has(order.status)) {
       throw new BadRequestException('Cannot cancel this order');
+    }
+
+    if (actor && !isStaff(actor)) {
+      if (order.customer?.userId !== actor.userId) {
+        throw new ForbiddenException('Tidak boleh membatalkan order ini');
+      }
+      if (!UNPAID_STATUSES.has(order.status)) {
+        throw new BadRequestException(
+          'Order yang sudah dibayar tidak bisa dibatalkan sendiri. Hubungi admin.',
+        );
+      }
     }
 
     const cancelledOrder = await this.prisma.order.update({

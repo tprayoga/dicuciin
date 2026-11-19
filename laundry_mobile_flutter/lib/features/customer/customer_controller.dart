@@ -44,7 +44,6 @@ class CustomerController extends ChangeNotifier {
   bool _isSubmittingOrder = false;
   bool _isUploadingPaymentProof = false;
   bool _isCancellingOrder = false;
-  bool _isRefundingOrder = false;
   String? _errorMessage;
   WalletData? _wallet;
   List<OrderSummary> _orders = const [];
@@ -63,7 +62,6 @@ class CustomerController extends ChangeNotifier {
   bool get isSubmittingOrder => _isSubmittingOrder;
   bool get isUploadingPaymentProof => _isUploadingPaymentProof;
   bool get isCancellingOrder => _isCancellingOrder;
-  bool get isRefundingOrder => _isRefundingOrder;
   String? get errorMessage => _errorMessage;
   WalletData? get wallet => _wallet;
   List<OrderSummary> get orders => _orders;
@@ -678,41 +676,4 @@ class CustomerController extends ChangeNotifier {
     }
   }
 
-  Future<int?> refundOrder({
-    required AppUser user,
-    required String accessToken,
-    required String orderId,
-    required String reason,
-  }) async {
-    final customerId = user.customer?.id;
-    if (customerId == null) {
-      _errorMessage = 'Akun ini belum terhubung ke profil customer.';
-      notifyListeners();
-      return null;
-    }
-
-    _isRefundingOrder = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      final balance = await _customerService.refundOrderToWallet(
-        accessToken: accessToken,
-        customerId: customerId,
-        orderId: orderId,
-        reason: reason,
-      );
-      await refreshOrdersAndBookings(user: user, accessToken: accessToken);
-      return balance;
-    } on ApiException catch (e) {
-      _errorMessage = e.message;
-      return null;
-    } catch (_) {
-      _errorMessage = 'Refund gagal diproses.';
-      return null;
-    } finally {
-      _isRefundingOrder = false;
-      notifyListeners();
-    }
-  }
 }

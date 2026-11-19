@@ -579,6 +579,7 @@ class _HomePageState extends State<_HomePage> {
                           ],
                         ),
                       ),
+                      if (AppConfig.walletTopUpEnabled)
                       OutlinedButton.icon(
                         onPressed: () => Navigator.of(context).push(
                           MaterialPageRoute(

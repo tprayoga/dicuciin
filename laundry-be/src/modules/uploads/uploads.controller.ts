@@ -15,6 +15,8 @@ import { extname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { UploadsService } from './uploads.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { ADMIN_ROLES, assertOrderAccess } from '../../common/auth/access-policy';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { NotFoundException } from '@nestjs/common';
 
@@ -109,6 +111,7 @@ export class UploadsController {
   }
 
   @Post('image')
+  @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Upload gambar umum (banner/pop-up) — kembalikan URL' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -158,8 +161,10 @@ export class UploadsController {
   async uploadPaymentProof(
     @Param('orderId') orderId: string,
     @UploadedFile() file: Express.Multer.File,
+    @Request() req: any,
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
+    await assertOrderAccess(this.prisma, req.user, orderId);
 
     this.uploadsService.validateImageFile(file);
 

@@ -29,10 +29,7 @@ export class PayWithWalletDto {
   @IsString()
   orderId: string;
 
-  @ApiProperty()
-  @IsNumber()
-  @Min(0)
-  amount: number;
+  // `amount` sengaja dihapus (K4): nominal diambil dari total order di server.
 
   @ApiProperty({ required: false })
   @IsString()

@@ -107,13 +107,10 @@ class WalletController extends ChangeNotifier {
 
   bool canPay(int amount) => amount <= _balance;
 
-  /// Bayar [amount] untuk [orderId] memakai saldo. Backend memotong saldo,
-  /// membuat Payment, dan menandai order PAID. Saldo lokal diperbarui dari
-  /// respons server. Melempar [ApiException] bila gagal (mis. saldo kurang).
-  Future<void> payOrder({
-    required String orderId,
-    required int amount,
-  }) async {
+  /// Bayar [orderId] memakai saldo. Backend menentukan nominal dari total
+  /// order, memotong saldo, membuat Payment, dan menandai order PAID.
+  /// Melempar [ApiException] bila gagal (mis. saldo kurang).
+  Future<void> payOrder({required String orderId}) async {
     final token = _accessToken;
     final customerId = _customerId;
     if (token == null || customerId == null) {
@@ -123,7 +120,6 @@ class WalletController extends ChangeNotifier {
       accessToken: token,
       customerId: customerId,
       orderId: orderId,
-      amount: amount,
     );
     notifyListeners();
   }

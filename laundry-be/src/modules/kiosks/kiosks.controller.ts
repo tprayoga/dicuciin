@@ -25,6 +25,7 @@ import {
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { STAFF_ROLES } from '../../common/auth/access-policy';
 import { UserRole } from '@prisma/client';
 import { Public } from '../../common/decorators/public.decorator';
 import { CreateOrderDto } from '../orders/dto/order.dto';
@@ -186,6 +187,7 @@ export class KiosksController {
   }
 
   @Get()
+  @Roles(...STAFF_ROLES)
   @ApiOperation({ summary: 'Get all kiosks' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -199,6 +201,7 @@ export class KiosksController {
   }
 
   @Get('assigned')
+  @Roles(...STAFF_ROLES)
   @ApiOperation({ summary: 'Get active kiosks assigned to the staff outlet' })
   async findAssigned(@Req() req: any) {
     return this.kiosksService.findAssigned(req.user.userId);
@@ -219,6 +222,7 @@ export class KiosksController {
   }
 
   @Get(':id')
+  @Roles(...STAFF_ROLES)
   @ApiOperation({ summary: 'Get kiosk by ID' })
   async findOne(@Param('id') id: string) {
     return this.kiosksService.findOne(id);
@@ -239,6 +243,7 @@ export class KiosksController {
   }
 
   @Post(':id/session/start')
+  @Roles(...STAFF_ROLES)
   @ApiOperation({ summary: 'Start kiosk session' })
   async startSession(
     @Param('id') id: string,
@@ -253,6 +258,7 @@ export class KiosksController {
   }
 
   @Post('session/:sessionId/end')
+  @Roles(...STAFF_ROLES)
   @ApiOperation({ summary: 'End kiosk session' })
   async endSession(@Param('sessionId') sessionId: string) {
     return this.kiosksService.endSession(sessionId);

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateReviewDto } from './dto/review.dto';
@@ -34,6 +35,9 @@ export class ReviewsService {
     if (orderId) {
       const order = await this.prisma.order.findUnique({ where: { id: orderId } });
       if (!order) throw new NotFoundException('Order not found');
+      if (customerId && order.customerId && order.customerId !== customerId) {
+        throw new ForbiddenException('Tidak boleh mengulas order milik orang lain');
+      }
       const existing = await this.prisma.review.findUnique({ where: { orderId } });
       if (existing) throw new ConflictException('Order ini sudah diulas');
       // Tautkan ke staff yang membuat order (kiosk/kasir) bila belum diisi.

@@ -240,7 +240,6 @@ class AuthController extends ChangeNotifier {
   Future<bool> updateProfile({
     required String name,
     String? email,
-    String? phone,
   }) async {
     if (_user == null || _accessToken == null) return false;
 
@@ -251,10 +250,8 @@ class AuthController extends ChangeNotifier {
     try {
       _user = await _authService.updateProfile(
         accessToken: _accessToken!,
-        userId: _user!.id,
         name: name,
         email: email,
-        phone: phone,
       );
       _isProfileUpdating = false;
       notifyListeners();

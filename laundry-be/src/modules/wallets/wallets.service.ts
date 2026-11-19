@@ -24,6 +24,7 @@ import {
 import { PromosService } from '../promos/promos.service';
 import { WalletLedgerService } from './wallet-ledger.service';
 import { mapLedgerToTransaction } from './wallet-history.mapper';
+import { toNum } from '../../common/utils/money.util';
 
 /**
  * Service fitur wallet yang menghadap HTTP/mobile: PIN, top-up, pembayaran, dan
@@ -205,7 +206,7 @@ export class WalletsService {
   }
 
   async pay(customerId: string, payWithWalletDto: PayWithWalletDto) {
-    const { orderId, amount, idempotencyKey } = payWithWalletDto;
+    const { orderId, idempotencyKey } = payWithWalletDto;
 
     const wallet = await this.getOrCreateWallet(customerId);
 
@@ -224,6 +225,20 @@ export class WalletsService {
 
     if (order.status === OrderStatus.PAID) {
       throw new ConflictException('Order sudah dibayar');
+    }
+    // K4: hanya order yang belum dibayar, dan nominal SELALU dari server
+    // (total order), bukan dari klien.
+    if (
+      order.status !== OrderStatus.DRAFT &&
+      order.status !== OrderStatus.WAITING_PAYMENT
+    ) {
+      throw new BadRequestException(
+        `Order berstatus ${order.status} tidak bisa dibayar`,
+      );
+    }
+    const amount = toNum(order.totalAmount);
+    if (!(amount > 0)) {
+      throw new BadRequestException('Total order tidak valid');
     }
 
     try {

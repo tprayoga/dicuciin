@@ -95,11 +95,13 @@ describe('WalletsService', () => {
   });
 
   describe('pay', () => {
-    const dto = { orderId: 'ord-1', amount: 68400 };
+    // K4: DTO tidak lagi membawa `amount`; nominal diambil dari total order.
+    const dto = { orderId: 'ord-1' };
 
     function setup(opts: {
       orderStatus?: OrderStatus;
       orderCustomerId?: string | null;
+      totalAmount?: string;
     }) {
       prisma.wallet.findUnique.mockResolvedValue({ id: 'w-1' });
       prisma.order.findUnique.mockResolvedValue({
@@ -107,6 +109,7 @@ describe('WalletsService', () => {
         orderNumber: 'ORD-1',
         customerId: opts.orderCustomerId ?? 'cust-1',
         status: opts.orderStatus ?? OrderStatus.WAITING_PAYMENT,
+        totalAmount: dec(opts.totalAmount ?? '68400'),
       });
       ledger.debit.mockResolvedValue(
         fullLedger({
@@ -177,6 +180,32 @@ describe('WalletsService', () => {
         NotFoundException,
       );
     });
+
+    it('K4: nominal yang dipotong SELALU total order dari server', async () => {
+      setup({ totalAmount: '20000' });
+      // Klien jahat menyisipkan amount kecil — diabaikan oleh service.
+      await service.pay('cust-1', { ...dto, amount: 1 } as any);
+      expect(ledger.debit).toHaveBeenCalledWith(
+        WalletType.MAIN_BALANCE,
+        expect.objectContaining({ amount: 20000 }),
+      );
+      expect(tx.payment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ amount: 20000 }),
+        }),
+      );
+    });
+
+    it.each([OrderStatus.CANCELLED, OrderStatus.REFUNDED, OrderStatus.COMPLETED])(
+      'K4: order berstatus %s tidak bisa dibayar',
+      async (status) => {
+        setup({ orderStatus: status });
+        await expect(service.pay('cust-1', dto)).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+        expect(ledger.debit).not.toHaveBeenCalled();
+      },
+    );
 
     it('bentrok unik (P2002) di transaksi → Conflict (double-pay)', async () => {
       setup({});

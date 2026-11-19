@@ -68,8 +68,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 const SizedBox(height: AppSpacing.md),
                 TextFormField(
                   controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'Nomor HP'),
+                  readOnly: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Nomor HP',
+                    helperText: 'Nomor HP diubah lewat verifikasi OTP.',
+                  ),
                 ),
                 if (auth.errorMessage != null) ...[
                   const SizedBox(height: AppSpacing.md),
@@ -101,18 +104,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final email = _emailController.text.trim();
-    final phone = _phoneController.text.trim();
-    if (email.isEmpty && phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email atau nomor HP wajib diisi.')),
-      );
-      return;
-    }
 
     final ok = await context.read<AuthController>().updateProfile(
           name: _nameController.text.trim(),
           email: email.isEmpty ? null : email,
-          phone: phone.isEmpty ? null : phone,
         );
 
     if (!mounted || !ok) return;

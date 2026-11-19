@@ -162,12 +162,12 @@ class AuthService {
     return _moneyToInt(map['balance']);
   }
 
-  /// Bayar order memakai saldo wallet. Mengembalikan saldo terbaru.
+  /// Bayar order memakai saldo wallet. Nominal ditentukan server dari total
+  /// order. Mengembalikan saldo terbaru.
   Future<int> payWithWallet({
     required String accessToken,
     required String customerId,
     required String orderId,
-    required int amount,
     String? idempotencyKey,
   }) async {
     final payload = await _apiClient.post(
@@ -175,7 +175,6 @@ class AuthService {
       headers: {'Authorization': 'Bearer $accessToken'},
       body: jsonEncode({
         'orderId': orderId,
-        'amount': amount,
         'idempotencyKey': ?idempotencyKey,
       }),
     );
@@ -230,17 +229,20 @@ class AuthService {
     );
   }
 
+  /// Ubah profil sendiri lewat PATCH /users/me (nama & email saja; nomor HP
+  /// diubah lewat alur OTP).
   Future<AppUser> updateProfile({
     required String accessToken,
-    required String userId,
     required String name,
     String? email,
-    String? phone,
   }) async {
     await _apiClient.patch(
-      '/users/$userId',
+      '/users/me',
       headers: {'Authorization': 'Bearer $accessToken'},
-      body: jsonEncode({'name': name, 'email': email, 'phone': phone}),
+      body: jsonEncode({
+        'name': name,
+        if (email != null && email.isNotEmpty) 'email': email,
+      }),
     );
 
     return getMe(accessToken);

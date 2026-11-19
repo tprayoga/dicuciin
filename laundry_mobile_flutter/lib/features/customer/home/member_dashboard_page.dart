@@ -191,6 +191,7 @@ class _MemberDashboardPage extends StatelessWidget {
               ),
             ],
           ),
+          if (AppConfig.walletTopUpEnabled) ...[
           const SizedBox(height: 14),
           Row(
             children: [
@@ -210,6 +211,7 @@ class _MemberDashboardPage extends StatelessWidget {
               ),
             ],
           ),
+          ],
         ],
       ),
     );

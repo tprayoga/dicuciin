@@ -6,28 +6,41 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { scopeCheckoutIdentity } from '../../common/auth/access-policy';
 
 @ApiTags('Transactions')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('transactions')
 export class TransactionsController {
-  constructor(private readonly transactionService: TransactionService) {}
+  constructor(
+    private readonly transactionService: TransactionService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Post('quote')
   @ApiOperation({ summary: 'Preview perhitungan harga (pricing breakdown)' })
-  async quote(@Body() dto: CheckoutDto) {
-    return this.transactionService.quote(dto);
+  async quote(@Body() dto: CheckoutDto, @Request() req: any) {
+    // K8: customer hanya atas nama sendiri; partner hanya partner miliknya.
+    return this.transactionService.quote(
+      await scopeCheckoutIdentity(this.prisma, req.user, dto),
+    );
   }
 
   @Post('checkout')
   @ApiOperation({ summary: 'Checkout: harga → order → bayar wallet → settle loyalty' })
-  async checkout(@Body() dto: CheckoutDto) {
-    return this.transactionService.checkout(dto);
+  async checkout(@Body() dto: CheckoutDto, @Request() req: any) {
+    // K8: mencegah memotong saldo customer/partner lain.
+    return this.transactionService.checkout(
+      await scopeCheckoutIdentity(this.prisma, req.user, dto),
+    );
   }
 
+  // K9: kredit saldo tanpa pembayaran → hanya admin (top-up manual).
   @Post('topup')
-  @ApiOperation({ summary: 'Top up MAIN_BALANCE + trigger cashback top up' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER)
+  @ApiOperation({ summary: 'Top up MAIN_BALANCE manual (admin) + trigger cashback top up' })
   async topUp(@Body() dto: TopUpDto) {
     return this.transactionService.topUp(dto);
   }

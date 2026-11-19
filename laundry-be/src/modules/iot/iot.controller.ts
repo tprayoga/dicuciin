@@ -10,6 +10,7 @@ import { CreateIotDeviceDto, UpdateIotDeviceDto } from './dto/iot.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { STAFF_ROLES } from '../../common/auth/access-policy';
 import { UserRole } from '@prisma/client';
 
 class SendCommandDto {
@@ -37,6 +38,7 @@ export class IotController {
   }
 
   @Get('devices')
+  @Roles(...STAFF_ROLES)
   @ApiOperation({ summary: 'Get all IoT devices' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -50,6 +52,7 @@ export class IotController {
   }
 
   @Get('devices/:id')
+  @Roles(...STAFF_ROLES)
   @ApiOperation({ summary: 'Get IoT device by ID' })
   async findOneDevice(@Param('id') id: string) {
     return this.iotService.findOneDevice(id);
@@ -69,19 +72,24 @@ export class IotController {
     return this.iotService.removeDevice(id);
   }
 
+  // K10: heartbeat manual hanya teknisi/admin (perangkat memakai MQTT).
   @Post('devices/:id/heartbeat')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER, UserRole.ADMIN_OUTLET, UserRole.TECHNICIAN)
   @ApiOperation({ summary: 'Update device heartbeat' })
   async updateHeartbeat(@Param('id') id: string) {
     return this.iotService.updateHeartbeat(id);
   }
 
+  // K10: perintah mesin (START/UNLOCK) tidak boleh dari customer.
   @Post('devices/:id/commands')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER, UserRole.ADMIN_OUTLET, UserRole.TECHNICIAN)
   @ApiOperation({ summary: 'Send command to device' })
   async sendCommand(@Param('id') id: string, @Body() sendCommandDto: SendCommandDto) {
     return this.iotService.sendCommand(id, sendCommandDto.command, sendCommandDto.payload);
   }
 
   @Get('devices/:id/events')
+  @Roles(...STAFF_ROLES)
   @ApiOperation({ summary: 'Get device events' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })

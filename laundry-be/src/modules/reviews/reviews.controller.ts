@@ -18,13 +18,18 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole, ReviewSource } from '@prisma/client';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { STAFF_ROLES, assertOrderAccess } from '../../common/auth/access-policy';
 
 @ApiTags('Reviews')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('reviews')
 export class ReviewsController {
-  constructor(private readonly reviewsService: ReviewsService) {}
+  constructor(
+    private readonly reviewsService: ReviewsService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Buat ulasan/feedback (app & kiosk)' })
@@ -57,6 +62,7 @@ export class ReviewsController {
   }
 
   @Get('focused')
+  @Roles(...STAFF_ROLES)
   @ApiOperation({ summary: 'Ulasan pilihan (dikurasi) untuk ditampilkan di app' })
   async findFocused() {
     return this.reviewsService.findFocused();
@@ -71,7 +77,8 @@ export class ReviewsController {
 
   @Get('order/:orderId')
   @ApiOperation({ summary: 'Ambil ulasan berdasarkan order (cek sudah diulas)' })
-  async findByOrder(@Param('orderId') orderId: string) {
+  async findByOrder(@Param('orderId') orderId: string, @Request() req: any) {
+    await assertOrderAccess(this.prisma, req.user, orderId);
     return this.reviewsService.findByOrder(orderId);
   }
 
