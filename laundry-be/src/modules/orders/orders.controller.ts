@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
@@ -9,9 +19,9 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { OrderStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
-  ADMIN_ROLES,
   STAFF_ROLES,
   assertOrderAccess,
+  resolveOutletScope,
   scopeCheckoutIdentity,
 } from '../../common/auth/access-policy';
 
@@ -34,37 +44,46 @@ export class OrdersController {
 
   @Get()
   @Roles(...STAFF_ROLES)
-  @ApiOperation({ summary: 'Get all orders (staf)' })
+  @ApiOperation({ summary: 'Get all orders (staf; non-owner hanya outlet yang ditugaskan)' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'status', required: false, enum: OrderStatus })
   @ApiQuery({ name: 'outletId', required: false, type: String })
   async findAll(
+    @Request() req: any,
     @Query('page', new ParseOptionalIntPipe(1)) page?: number,
     @Query('limit', new ParseOptionalIntPipe(10)) limit?: number,
     @Query('status') status?: OrderStatus,
     @Query('outletId') outletId?: string,
   ) {
-    return this.ordersService.findAll(page, limit, status, outletId);
+    const scope = await resolveOutletScope(this.prisma, req.user, outletId);
+    return this.ordersService.findAll(page, limit, status, undefined, scope);
   }
 
   @Get('summary/dashboard')
   @Roles(...STAFF_ROLES)
-  @ApiOperation({ summary: 'Get dashboard summary metrics (staf)' })
-  async getDashboardSummary() {
-    return this.ordersService.getDashboardSummary();
+  @ApiOperation({ summary: 'Get dashboard summary metrics (staf; terlingkup outlet)' })
+  async getDashboardSummary(@Request() req: any, @Query('outletId') outletId?: string) {
+    const scope = await resolveOutletScope(this.prisma, req.user, outletId);
+    return this.ordersService.getDashboardSummary(scope);
   }
 
   @Get('summary/finance')
-  @Roles(...ADMIN_ROLES)
-  @ApiOperation({ summary: 'Get finance summary metrics by month/outlet (admin)' })
+  @Roles(...STAFF_ROLES)
+  @ApiOperation({
+    summary: 'Ringkasan transaksi per bulan/outlet (owner: global; staf: hanya outlet yang ditugaskan)',
+  })
   @ApiQuery({ name: 'month', required: false, type: String, example: '2026-05' })
   @ApiQuery({ name: 'outletId', required: false, type: String })
   async getFinanceSummary(
+    @Request() req: any,
     @Query('month') month?: string,
     @Query('outletId') outletId?: string,
   ) {
-    return this.ordersService.getFinanceSummary(month, outletId);
+    // Owner/super admin: global (atau outlet yang dipilih). Staf lain: hanya
+    // gabungan outlet yang ditugaskan — tidak pernah global.
+    const scope = await resolveOutletScope(this.prisma, req.user, outletId);
+    return this.ordersService.getFinanceSummary(month, undefined, scope);
   }
 
   @Get(':id')
@@ -82,12 +101,14 @@ export class OrdersController {
     @Body() updateOrderStatusDto: UpdateOrderStatusDto,
     @Request() req: any,
   ) {
+    await assertOrderAccess(this.prisma, req.user, id);
     return this.ordersService.updateStatus(id, updateOrderStatusDto, req.user.userId);
   }
 
   @Post(':id/cancel')
   @ApiOperation({ summary: 'Cancel order (customer: hanya miliknya yang belum dibayar)' })
   async cancel(@Param('id') id: string, @Body() cancelOrderDto: CancelOrderDto, @Request() req: any) {
+    await assertOrderAccess(this.prisma, req.user, id);
     return this.ordersService.cancel(id, cancelOrderDto, req.user.userId, req.user);
   }
 }

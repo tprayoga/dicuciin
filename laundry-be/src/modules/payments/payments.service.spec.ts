@@ -25,6 +25,8 @@ describe('PaymentsService loyalty settlement', () => {
         update: jest.fn().mockResolvedValue({}),
       },
       orderStatusLog: { create: jest.fn().mockResolvedValue({}) },
+      // Order tanpa booking mesin (alur gateway biasa).
+      machineBooking: { findUnique: jest.fn().mockResolvedValue(null) },
       wallet: {
         findFirst: jest.fn().mockResolvedValue({ id: 'wallet-1' }),
         create: jest.fn(),

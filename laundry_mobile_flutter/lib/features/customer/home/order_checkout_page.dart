@@ -855,6 +855,8 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
         ),
       ],
       promoCode: _voucherApplied ? _appliedVoucherCode : null,
+      deviceId: widget.data.deviceId.isNotEmpty ? widget.data.deviceId : null,
+      scheduledAt: widget.data.scheduledAt,
     );
     if (created == null) {
       if (!mounted) return null;
@@ -929,12 +931,64 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
     final messenger = ScaffoldMessenger.of(context);
     final auth = context.read<AuthController>();
     final customerController = context.read<CustomerController>();
+    final deviceId = widget.data.deviceId.isNotEmpty ? widget.data.deviceId : null;
+
+    // Tanpa voucher/happy hour: bayar ORDER YANG SAMA dengan jalur QRIS/VA
+    // (order + booking mesin sudah dibuat atomik oleh server).
+    if (!_voucherApplied && (_quote?.happyHourDiscount ?? 0) <= 0) {
+      final order = await _ensureOrder();
+      if (order == null || !mounted) return;
+      final ok = await customerController.payOrderWithWallet(
+        user: auth.user!,
+        accessToken: auth.accessToken!,
+        orderId: order.id,
+      );
+      if (!ok || !mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(customerController.errorMessage ?? 'Pembayaran gagal.'),
+          ),
+        );
+        return;
+      }
+      await wallet.loadBalance();
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Pembayaran saldo berhasil.')),
+      );
+      navigator.pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => _OrderSuccessPage(
+            data: widget.data,
+            methodLabel: 'Saldo',
+            total: order.totalAmount.round(),
+            orderId: order.id,
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Voucher/happy hour: checkout atomik di server (order + booking + bayar).
+    // Order DRAFT dari percobaan QRIS/VA sebelumnya dibatalkan dulu agar tidak
+    // ada order/booking ganda.
+    final stale = _createdOrder;
+    if (stale != null) {
+      await customerController.cancelOrder(
+        accessToken: auth.accessToken!,
+        orderId: stale.id,
+        cancelReason: 'Diganti pembayaran saldo dengan voucher',
+      );
+      _createdOrder = null;
+    }
     final result = await customerController.checkoutLoyalty(
       user: auth.user!,
       accessToken: auth.accessToken!,
       outletId: widget.data.outletId,
       items: _items,
       voucherCode: _voucherApplied ? _appliedVoucherCode : null,
+      deviceId: deviceId,
+      scheduledAt: widget.data.scheduledAt,
     );
     if (result == null || !mounted) {
       messenger.showSnackBar(

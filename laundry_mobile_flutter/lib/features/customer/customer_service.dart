@@ -314,6 +314,8 @@ class CustomerService {
     String? voucherCode,
     String? promoCode,
     String? sourcePlatform,
+    String? deviceId,
+    DateTime? scheduledAt,
   }) {
     return {
       if (partnerId != null && partnerId.isNotEmpty)
@@ -337,6 +339,9 @@ class CustomerService {
       if (voucherCode != null && voucherCode.isNotEmpty)
         'voucherCode': voucherCode,
       if (promoCode != null && promoCode.isNotEmpty) 'promoCode': promoCode,
+      // Booking mesin: order + booking dibuat atomik di server.
+      if (deviceId != null && deviceId.isNotEmpty) 'deviceId': deviceId,
+      if (scheduledAt != null) 'scheduledAt': scheduledAt.toUtc().toIso8601String(),
     };
   }
 
@@ -398,6 +403,8 @@ class CustomerService {
     String? voucherCode,
     String? promoCode,
     String sourcePlatform = 'MOBILE_APP',
+    String? deviceId,
+    DateTime? scheduledAt,
   }) async {
     final payload = await _apiClient.post(
       '/transactions/checkout',
@@ -411,6 +418,8 @@ class CustomerService {
           voucherCode: voucherCode,
           promoCode: promoCode,
           sourcePlatform: sourcePlatform,
+          deviceId: deviceId,
+          scheduledAt: scheduledAt,
         ),
       ),
     );
@@ -455,6 +464,8 @@ class CustomerService {
     required List<CreateOrderItemInput> items,
     String? promoCode,
     String? notes,
+    String? deviceId,
+    DateTime? scheduledAt,
   }) async {
     final payloadItems = items
         .map(
@@ -479,10 +490,26 @@ class CustomerService {
         'items': payloadItems,
         if (promoCode != null && promoCode.isNotEmpty) 'promoCode': promoCode,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
+        if (deviceId != null && deviceId.isNotEmpty) 'deviceId': deviceId,
+        if (scheduledAt != null)
+          'scheduledAt': scheduledAt.toUtc().toIso8601String(),
       }),
     );
 
     return CreatedOrder.fromJson(payload as Map<String, dynamic>);
+  }
+
+  /// Bayar order yang SUDAH ADA memakai saldo (order yang sama dengan
+  /// QRIS/VA). Nominal ditentukan server dari total order.
+  Future<void> payOrderWithWallet({
+    required String accessToken,
+    required String orderId,
+  }) async {
+    await _apiClient.post(
+      '/payments/wallet',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({'orderId': orderId}),
+    );
   }
 
   Future<OrderDetail> getOrderDetail({

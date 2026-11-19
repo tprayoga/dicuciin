@@ -22,6 +22,7 @@ class _MachineData {
     this.price = 20000,
     this.serviceId = '',
     this.outletId = '',
+    this.deviceId = '',
   });
 
   final String name;
@@ -34,6 +35,9 @@ class _MachineData {
   /// ID layanan & outlet untuk membuat order nyata (kosong = data mock lama).
   final String serviceId;
   final String outletId;
+
+  /// ID mesin nyata (untuk booking terikat order).
+  final String deviceId;
 }
 
 /// Ringkasan order yang dibawa dari pilih mesin → checkout → pembayaran → sukses.
@@ -49,6 +53,8 @@ class _CheckoutData {
     required this.date,
     required this.serviceId,
     required this.outletId,
+    this.deviceId = '',
+    this.scheduledAt,
   });
 
   factory _CheckoutData.fromMachine(
@@ -66,6 +72,7 @@ class _CheckoutData {
       date: _formatDateId(DateTime.now()),
       serviceId: machine.serviceId,
       outletId: machine.outletId,
+      deviceId: machine.deviceId,
     );
   }
 
@@ -81,6 +88,11 @@ class _CheckoutData {
   /// ID layanan & outlet untuk membuat order nyata di checkout.
   final String serviceId;
   final String outletId;
+
+  /// Mesin yang dipesan & jadwalnya — order + booking dibuat atomik di server
+  /// (mesin hanya bisa dipakai setelah order lunas). `scheduledAt` null = sekarang.
+  final String deviceId;
+  final DateTime? scheduledAt;
 }
 
 const _idMonths = [

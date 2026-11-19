@@ -47,7 +47,8 @@ const USERS = {
   superAdmin: { userId: 'u-sa', role: 'SUPER_ADMIN' },
   owner: { userId: 'u-owner', role: 'OWNER' },
   adminOutlet: { userId: 'u-ao', role: 'ADMIN_OUTLET' },
-  cashier: { userId: 'u-cashier', role: 'CASHIER' },
+  cashier: { userId: 'u-cashier', role: 'CASHIER' }, // ditugaskan di outlet o-1
+  cashierNoOutlet: { userId: 'u-cashier-2', role: 'CASHIER' }, // belum ditugaskan
   custA: { userId: 'u-A', role: 'CUSTOMER' },
   custB: { userId: 'u-B', role: 'CUSTOMER' },
   partnerUser: { userId: 'u-P', role: 'CUSTOMER' },
@@ -70,11 +71,17 @@ const CUSTOMERS: Record<string, { id: string; userId: string }> = {
   'cust-A': { id: 'cust-A', userId: 'u-A' },
   'cust-B': { id: 'cust-B', userId: 'u-B' },
 };
-const ORDERS: Record<string, { id: string; customerId: string | null; status: OrderStatus }> = {
-  'ord-A': { id: 'ord-A', customerId: 'cust-A', status: OrderStatus.DRAFT },
-  'ord-A-paid': { id: 'ord-A-paid', customerId: 'cust-A', status: OrderStatus.PAID },
-  'ord-B': { id: 'ord-B', customerId: 'cust-B', status: OrderStatus.DRAFT },
+const ORDERS: Record<string, { id: string; customerId: string | null; status: OrderStatus; outletId: string }> = {
+  'ord-A': { id: 'ord-A', customerId: 'cust-A', status: OrderStatus.DRAFT, outletId: 'o-1' },
+  'ord-A-paid': { id: 'ord-A-paid', customerId: 'cust-A', status: OrderStatus.PAID, outletId: 'o-1' },
+  'ord-B': { id: 'ord-B', customerId: 'cust-B', status: OrderStatus.DRAFT, outletId: 'o-2' },
 };
+/** Penugasan outlet staf (OutletUser). */
+const OUTLET_USERS: { userId: string; outletId: string }[] = [
+  { userId: 'u-cashier', outletId: 'o-1' },
+  { userId: 'u-ao', outletId: 'o-1' },
+  { userId: 'u-ao', outletId: 'o-2' },
+];
 const PAYMENTS: Record<string, { orderId: string }> = { 'PG-ORD-B': { orderId: 'ord-B' } };
 
 function orderView(o: (typeof ORDERS)[string] | undefined) {
@@ -93,6 +100,12 @@ const prismaMock = {
   },
   order: { findUnique: jest.fn(async ({ where }: any) => orderView(ORDERS[where.id])) },
   payment: { findUnique: jest.fn(async ({ where }: any) => PAYMENTS[where.paymentNumber] ?? null) },
+  outletUser: {
+    findMany: jest.fn(async ({ where }: any) => OUTLET_USERS.filter((l) => l.userId === where.userId)),
+    findFirst: jest.fn(async ({ where }: any) =>
+      OUTLET_USERS.find((l) => l.userId === where.userId && l.outletId === where.outletId) ?? null,
+    ),
+  },
   b2BPartner: {
     findUnique: jest.fn(async ({ where }: any) =>
       where.id === 'partner-P' ? { userId: 'u-P' } : null,
@@ -197,9 +210,8 @@ describe('Otorisasi HTTP — security gate Fase 0', () => {
       await get('cashier', '/customers').expect(200);
       await get('cashier', '/orders').expect(200);
       await get('cashier', '/customers/cust-B/orders').expect(200);
-      await get('adminOutlet', '/orders/summary/finance').expect(200);
+      await get('adminOutlet', '/orders/summary/finance?outletId=o-2').expect(200);
     });
-    it('kasir tidak bisa membuka laporan keuangan', () => get('cashier', '/orders/summary/finance').expect(403));
   });
 
   // ── K7: status order ──────────────────────────────────────────────────────
@@ -208,8 +220,10 @@ describe('Otorisasi HTTP — security gate Fase 0', () => {
       await patch('custA', '/orders/ord-A/status', { status: 'PAID' }).expect(403);
       await patch('custA', '/orders/ord-A/status', { status: 'COMPLETED' }).expect(403);
     });
-    it('staf boleh memanggil endpoint (aturan transisi diuji di unit test)', () =>
+    it('staf outlet yang sama boleh memanggil endpoint (aturan transisi diuji di unit test)', () =>
       patch('cashier', '/orders/ord-A-paid/status', { status: 'WASHING' }).expect(200));
+    it('staf outlet lain tidak boleh mengubah status', () =>
+      patch('cashier', '/orders/ord-B/status', { status: 'WASHING' }).expect(403));
   });
 
   // ── K11: buat & batal order ───────────────────────────────────────────────
@@ -220,8 +234,10 @@ describe('Otorisasi HTTP — security gate Fase 0', () => {
       await post('custA', '/orders', { outletId: 'o-1', sourcePlatform: 'MOBILE_APP', items: [{ serviceId: 's', quantity: 1 }] }).expect(201);
       expect(ordersService.create.mock.calls.at(-1)[0].customerId).toBe('cust-A');
     });
-    it('pembatalan meneruskan identitas ke service (aturan pemilik diuji di unit test)', async () => {
-      await post('custA', '/orders/ord-B/cancel', { cancelReason: 'batal uji' }).expect(201);
+    it('customer tidak bisa membatalkan order orang lain', () =>
+      post('custA', '/orders/ord-B/cancel', { cancelReason: 'batal uji' }).expect(403));
+    it('pembatalan order sendiri meneruskan identitas ke service', async () => {
+      await post('custA', '/orders/ord-A/cancel', { cancelReason: 'batal uji' }).expect(201);
       expect(ordersService.cancel.mock.calls.at(-1)[3]).toEqual(USERS.custA);
     });
   });
@@ -278,6 +294,40 @@ describe('Otorisasi HTTP — security gate Fase 0', () => {
       await get('cashier', '/iot/devices').expect(200);
       await get('cashier', '/kiosks').expect(200);
     });
+  });
+
+  // ── Kebijakan role & outlet (Fase 1 Batch 1, poin 3) ─────────────────────
+  describe('Lingkup outlet staf', () => {
+    it('kasir: laporan transaksi outlet sendiri → 200, terlingkup ke o-1', async () => {
+      await get('cashier', '/orders/summary/finance').expect(200);
+      expect(ordersService.getFinanceSummary.mock.calls.at(-1)).toEqual([undefined, undefined, ['o-1']]);
+      await get('cashier', '/orders/summary/dashboard').expect(200);
+      expect(ordersService.getDashboardSummary.mock.calls.at(-1)).toEqual([['o-1']]);
+      await get('cashier', '/orders').expect(200);
+      expect(ordersService.findAll.mock.calls.at(-1)[4]).toEqual(['o-1']);
+    });
+    it('kasir: outlet lain → 403', async () => {
+      await get('cashier', '/orders/summary/finance?outletId=o-2').expect(403);
+      await get('cashier', '/orders/summary/dashboard?outletId=o-2').expect(403);
+      await get('cashier', '/orders?outletId=o-2').expect(403);
+      await get('cashier', '/orders/ord-B').expect(403);
+    });
+    it('kasir yang belum ditugaskan ke outlet → 403', () =>
+      get('cashierNoOutlet', '/orders/summary/finance').expect(403));
+    it('admin outlet dengan beberapa outlet: laporan = gabungan outlet yang ditugaskan (bukan global)', async () => {
+      await get('adminOutlet', '/orders/summary/finance').expect(200);
+      expect(ordersService.getFinanceSummary.mock.calls.at(-1)).toEqual([undefined, undefined, ['o-1', 'o-2']]);
+      await get('adminOutlet', '/orders/summary/finance?outletId=o-1').expect(200);
+      expect(ordersService.getFinanceSummary.mock.calls.at(-1)).toEqual([undefined, undefined, ['o-1']]);
+    });
+    it('owner: laporan global (tanpa filter outlet)', async () => {
+      await get('owner', '/orders/summary/finance').expect(200);
+      expect(ordersService.getFinanceSummary.mock.calls.at(-1)).toEqual([undefined, undefined, null]);
+      await get('owner', '/orders/summary/dashboard').expect(200);
+      expect(ordersService.getDashboardSummary.mock.calls.at(-1)).toEqual([null]);
+    });
+    it('customer tidak bisa membuka laporan apa pun', () =>
+      get('custA', '/orders/summary/finance').expect(403));
   });
 
   it('request tanpa identitas ditolak', () => request(app.getHttpServer()).get('/orders/ord-A').expect(401));

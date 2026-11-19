@@ -25,3 +25,10 @@ export class PaymentWebhookDto {
   @IsIn(['PAID', 'FAILED', 'EXPIRED'])
   status: 'PAID' | 'FAILED' | 'EXPIRED';
 }
+
+/** Bayar order yang sudah ada memakai saldo (nominal ditentukan server). */
+export class PayOrderWithWalletDto {
+  @ApiProperty({ description: 'ID order yang akan dibayar' })
+  @IsString()
+  orderId: string;
+}

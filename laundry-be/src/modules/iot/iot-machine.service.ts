@@ -91,6 +91,23 @@ export class IotMachineService implements OnModuleInit {
     deviceId?: string;
     deviceCode?: string;
   }) {
+    // Order alur booking: mesin WAJIB mesin pada booking order tsb (cegah START
+    // mesin lain memakai order PAID milik booking berbeda).
+    const bound = await this.prisma.machineBooking.findUnique({
+      where: { orderId: input.orderId },
+      include: { device: true },
+    });
+    if (bound) {
+      const mismatch =
+        (input.deviceId && input.deviceId !== bound.deviceId) ||
+        (input.deviceCode && input.deviceCode !== bound.device.deviceCode);
+      if (mismatch) {
+        throw new BadRequestException(
+          "Mesin tidak sesuai dengan booking order ini",
+        );
+      }
+      return bound.device;
+    }
     if (input.deviceId) {
       return this.prisma.iotDevice.findUnique({
         where: { id: input.deviceId },
@@ -116,7 +133,7 @@ export class IotMachineService implements OnModuleInit {
    */
   async createStartMachineCommand(
     input: { orderId: string; deviceId?: string; deviceCode?: string },
-    opts: { publish?: boolean } = {},
+    opts: { publish?: boolean; idempotencyKey?: string } = {},
   ) {
     const order = await this.prisma.order.findUnique({
       where: { id: input.orderId },
@@ -126,7 +143,8 @@ export class IotMachineService implements OnModuleInit {
       throw new BadRequestException("Mesin hanya bisa start untuk order PAID");
     }
 
-    const idempotencyKey = `start-machine-${input.orderId}`;
+    const idempotencyKey =
+      opts.idempotencyKey ?? `start-machine-${input.orderId}`;
     const existing = await this.prisma.iotCommand.findUnique({
       where: { idempotencyKey },
     });
@@ -186,6 +204,57 @@ export class IotMachineService implements OnModuleInit {
   }
 
   /**
+   * Minta mesin START untuk order booking yang sudah tervalidasi (scan QR).
+   * Idempoten: scan ulang/paralel tidak membuat START ganda. Bila START terakhir
+   * FAILED, boleh dicoba ulang sampai `maxAttempts`.
+   */
+  async requestMachineStart(
+    orderId: string,
+    deviceId: string,
+    maxAttempts = 3,
+  ) {
+    const previous = await this.prisma.iotCommand.findMany({
+      where: { orderId, command: START_MACHINE },
+      orderBy: { createdAt: "desc" },
+    });
+    const latest = previous[0];
+    if (latest && latest.status !== IotCommandStatus.FAILED) {
+      // Sudah ada START aktif/selesai → jangan kirim lagi (anti-replay).
+      if (latest.status === IotCommandStatus.PENDING)
+        return this.markPublished(latest.id);
+      return latest;
+    }
+    if (previous.length >= maxAttempts) {
+      throw new BadRequestException(
+        "Mesin gagal dinyalakan berulang kali. Hubungi petugas outlet.",
+      );
+    }
+    const attempt = previous.length + 1;
+    const idempotencyKey =
+      attempt === 1
+        ? `start-machine-${orderId}`
+        : `start-machine-${orderId}-${attempt}`;
+    try {
+      return await this.createStartMachineCommand(
+        { orderId, deviceId },
+        { publish: true, idempotencyKey },
+      );
+    } catch (err) {
+      // Scan paralel: kalah balapan unik idempotencyKey → pakai command pemenang.
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        const winner = await this.prisma.iotCommand.findUnique({
+          where: { idempotencyKey },
+        });
+        if (winner) return winner;
+      }
+      throw err;
+    }
+  }
+
+  /**
    * Dipanggil hook payment PAID. Aman: TIDAK pernah melempar — bila order tak punya
    * binding mesin, kembalikan null + log (payment/order tetap sukses).
    */
@@ -193,6 +262,19 @@ export class IotMachineService implements OnModuleInit {
     orderId: string,
     ref: { deviceId?: string; deviceCode?: string } = {},
   ) {
+    // K2/T2: order alur booking TIDAK start saat dibayar — mesin baru start saat
+    // pelanggan scan QR di mesin (validasi di BookingsService.verifyByDeviceCode).
+    // Mencegah booking terjadwal (mis. besok) menyalakan mesin sekarang.
+    const booking = await this.prisma.machineBooking.findUnique({
+      where: { orderId },
+      select: { id: true },
+    });
+    if (booking) {
+      this.logger.log(
+        `Order ${orderId} terikat booking ${booking.id}: aktivasi ditunda sampai scan QR`,
+      );
+      return null;
+    }
     try {
       return await this.createStartMachineCommand(
         { orderId, ...ref },
@@ -273,13 +355,16 @@ export class IotMachineService implements OnModuleInit {
         await this.prisma.machineBooking.updateMany({
           where: {
             orderId: command.orderId,
-            status: { not: BookingStatus.DONE },
+            status: { in: [BookingStatus.RESERVED, BookingStatus.IN_USE] },
           },
           data: { status: BookingStatus.IN_USE, startedAt: new Date() },
         });
       } else if (targetStatus === IotCommandStatus.COMPLETED) {
         await this.prisma.machineBooking.updateMany({
-          where: { orderId: command.orderId },
+          where: {
+            orderId: command.orderId,
+            status: { in: [BookingStatus.RESERVED, BookingStatus.IN_USE] },
+          },
           data: { status: BookingStatus.DONE, endedAt: new Date() },
         });
       }

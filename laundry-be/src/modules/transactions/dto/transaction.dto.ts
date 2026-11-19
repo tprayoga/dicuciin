@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsArray,
   ValidateNested,
+  IsDateString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
@@ -78,6 +79,21 @@ export class CheckoutDto {
   @IsString()
   @IsOptional()
   kioskId?: string;
+
+  @ApiProperty({ required: false, description: 'Mesin yang dipesan (alur booking)' })
+  @IsString()
+  @IsOptional()
+  deviceId?: string;
+
+  @ApiProperty({ required: false, description: 'Kode mesin (alternatif deviceId)' })
+  @IsString()
+  @IsOptional()
+  deviceCode?: string;
+
+  @ApiProperty({ required: false, description: 'Jadwal pemakaian (ISO 8601); kosong = sekarang' })
+  @IsDateString()
+  @IsOptional()
+  scheduledAt?: string;
 }
 
 export class RefundTransactionDto {

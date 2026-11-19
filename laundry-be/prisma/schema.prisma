@@ -99,6 +99,7 @@ enum ReviewSource {
 }
 
 enum BookingStatus {
+  HOLD // order dibuat, menunggu pembayaran (kedaluwarsa singkat)
   RESERVED
   IN_USE
   DONE
@@ -382,6 +383,7 @@ model Order {
   iotCommands        IotCommand[]
   review             Review?
 
+  machineBooking MachineBooking?
   @@index([orderNumber])
   @@index([customerId])
   @@index([outletId])
@@ -782,6 +784,7 @@ model MachineBooking {
 
   device   IotDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   customer Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  order    Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   @@index([deviceId, status])
   @@index([customerId])
@@ -1274,4 +1277,14 @@ model PricingCalculationLog {
   @@index([customerId])
   @@index([partnerId])
   @@map("pricing_calculation_logs")
+}
+
+/// Penghitung nomor urut harian (ORD-YYYYMMDD-NNNNNN, MBR-…). Increment atomik
+/// lewat INSERT … ON CONFLICT DO UPDATE agar aman untuk request paralel.
+model DailySequence {
+  key       String   @id
+  value     Int
+  updatedAt DateTime @updatedAt
+
+  @@map("daily_sequences")
 }

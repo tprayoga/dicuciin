@@ -408,6 +408,7 @@ class _LocationDetailPageState extends State<_LocationDetailPage> {
           outletId: (svc != null && svc.outletId.isNotEmpty)
               ? svc.outletId
               : widget.outlet.id,
+          deviceId: m.deviceId,
         );
         (type == _MachineType.dryer ? dryers : washers).add(machine);
       }

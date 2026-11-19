@@ -6,6 +6,7 @@ import {
   ConflictException,
   UnauthorizedException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   OrderStatus,
@@ -28,6 +29,7 @@ import { B2BPartnerService } from '../partners/b2b-partner.service';
 import { CampaignService } from '../campaigns/campaign.service';
 import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 import { IotMachineService } from '../iot/iot-machine.service';
+import { promoteBookingOnPaidInTx } from '../bookings/booking-lifecycle';
 
 @Injectable()
 export class PaymentsService {
@@ -245,47 +247,147 @@ export class PaymentsService {
    * Tandai Payment PAID + Order PAID + OrderStatusLog dalam satu transaksi.
    * Idempoten: kalau payment sudah PAID, tidak melakukan apa-apa.
    */
-  private async settlePaid(paymentId: string) {
-    let paidOrderId: string | null = null;
-    await this.prisma.$transaction(async (tx) => {
-      const payment = await tx.payment.findUniqueOrThrow({
-        where: { id: paymentId },
-      });
-      if (payment.status === PaymentStatus.PAID) return;
+  /**
+   * Tandai Payment PAID + Order PAID + log + promo + loyalty + booking
+   * HOLD→RESERVED, di DALAM transaksi pemanggil. Idempoten: payment yang sudah
+   * PAID dilewati. Mengembalikan id order yang baru menjadi PAID (atau null).
+   */
+  private async settlePaidInTx(
+    tx: Prisma.TransactionClient,
+    paymentId: string,
+    note = 'Dibayar via payment gateway',
+  ): Promise<string | null> {
+    const payment = await tx.payment.findUniqueOrThrow({
+      where: { id: paymentId },
+    });
+    if (payment.status === PaymentStatus.PAID) return null;
 
-      await tx.payment.update({
-        where: { id: payment.id },
-        data: { status: PaymentStatus.PAID, paidAt: new Date() },
-      });
-
-      const order = await tx.order.findUnique({
-        where: { id: payment.orderId },
-      });
-      if (order && order.status !== OrderStatus.PAID) {
-        await tx.order.update({
-          where: { id: order.id },
-          data: { status: OrderStatus.PAID },
-        });
-        await tx.orderStatusLog.create({
-          data: {
-            orderId: order.id,
-            status: OrderStatus.PAID,
-            notes: 'Dibayar via payment gateway',
-            createdBy: order.customerId ?? undefined,
-          },
-        });
-
-        // Pemakaian promo dicatat saat order benar-benar dibayar.
-        await this.promosService.commitUsage(tx, order.id);
-        await this.settlePromotionLoyalty(tx, order);
-        paidOrderId = order.id;
-      }
+    await tx.payment.update({
+      where: { id: payment.id },
+      data: { status: PaymentStatus.PAID, paidAt: new Date() },
     });
 
-    // Aktivasi mesin di luar transaksi finansial (best-effort; tak pernah
-    // menggagalkan pembayaran). No-op bila order tak terikat mesin.
+    const order = await tx.order.findUnique({
+      where: { id: payment.orderId },
+    });
+    if (!order || order.status === OrderStatus.PAID) return null;
+
+    await tx.order.update({
+      where: { id: order.id },
+      data: { status: OrderStatus.PAID },
+    });
+    await tx.orderStatusLog.create({
+      data: {
+        orderId: order.id,
+        status: OrderStatus.PAID,
+        notes: note,
+        createdBy: order.customerId ?? undefined,
+      },
+    });
+
+    // Pemakaian promo dicatat saat order benar-benar dibayar.
+    await this.promosService.commitUsage(tx, order.id);
+    await this.settlePromotionLoyalty(tx, order);
+
+    // K2/T2: booking terikat order → RESERVED (siap dipakai saat scan QR).
+    const promotion = await promoteBookingOnPaidInTx(tx, order.id);
+    if (promotion.bookingId && !promotion.promoted) {
+      this.logger.error(
+        `Order ${order.orderNumber} PAID tetapi booking ${promotion.bookingId} tidak bisa dipertahankan (slot terambil) — perlu tindak lanjut admin`,
+      );
+    }
+    return order.id;
+  }
+
+  private async settlePaid(paymentId: string) {
+    const paidOrderId = await this.prisma.$transaction((tx) =>
+      this.settlePaidInTx(tx, paymentId),
+    );
+    // Aktivasi mesin di luar transaksi finansial (best-effort). No-op untuk
+    // order booking (aktivasi lewat scan QR) dan order tanpa mesin.
     if (paidOrderId) {
       await this.iotMachineService.activateMachineForOrder(paidOrderId);
+    }
+  }
+
+  /**
+   * Bayar order YANG SUDAH ADA memakai saldo (BONUS dulu, lalu MAIN) —
+   * order yang sama dengan jalur QRIS/VA, tanpa membuat order baru.
+   * Nominal = total order (server). Aman terhadap request paralel: baris order
+   * dikunci, dan paymentNumber unik menolak pembayaran ganda.
+   */
+  async payOrderWithWallet(userId: string, orderId: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!customer) throw new ForbiddenException('Hanya customer yang bisa membayar dengan saldo');
+
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
+        const order = await tx.order.findUnique({ where: { id: orderId } });
+        if (!order) throw new NotFoundException('Order not found');
+        if (order.customerId !== customer.id) {
+          throw new ForbiddenException('Order bukan milik Anda');
+        }
+        if (order.status === OrderStatus.PAID) {
+          throw new ConflictException('Order sudah dibayar');
+        }
+        if (order.status !== OrderStatus.DRAFT && order.status !== OrderStatus.WAITING_PAYMENT) {
+          throw new BadRequestException(`Order berstatus ${order.status} tidak bisa dibayar`);
+        }
+
+        // Cegah bayar dobel: tagihan QRIS/VA yang masih aktif harus selesai/
+        // kedaluwarsa dulu (pembatalan tagihan Midtrans menyusul di Batch 2).
+        const now = Date.now();
+        const pendingGateway = await tx.payment.findMany({
+          where: { orderId, status: PaymentStatus.PENDING, paymentMethod: { not: PaymentMethod.WALLET } },
+        });
+        const stillActive = pendingGateway.some((pg) => {
+          const exp = (pg.externalResponse as { expiresAt?: string } | null)?.expiresAt;
+          return !exp || new Date(exp).getTime() > now;
+        });
+        if (stillActive) {
+          throw new ConflictException(
+            'Masih ada tagihan QRIS/VA aktif untuk order ini. Selesaikan atau tunggu tagihan kedaluwarsa.',
+          );
+        }
+
+        const amount = order.totalAmount;
+        const wallet = await this.getOrCreateWalletInTx(tx, { customerId: customer.id });
+        if (amount.gt(0)) {
+          await this.walletLedger.payWithWallet(tx, {
+            walletId: wallet.id,
+            amount,
+            orderId,
+            allowBonus: true,
+            referenceType: 'PAYMENT',
+            description: `Pembayaran order ${order.orderNumber}`,
+          });
+        }
+        const payment = await tx.payment.create({
+          data: {
+            orderId,
+            paymentNumber: `PAY-${order.orderNumber}`,
+            paymentMethod: PaymentMethod.WALLET,
+            amount,
+            status: PaymentStatus.PENDING,
+            notes: 'Pembayaran via saldo wallet',
+          },
+        });
+        await this.settlePaidInTx(tx, payment.id, 'Dibayar via saldo wallet');
+        return { orderId, orderNumber: order.orderNumber, amount: toNum(amount) };
+      });
+
+      await this.iotMachineService.activateMachineForOrder(orderId);
+      return { ...result, status: OrderStatus.PAID };
+    } catch (err) {
+      // paymentNumber unik → request kedua untuk order yang sama.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException('Order sudah dibayar');
+      }
+      throw err;
     }
   }
 

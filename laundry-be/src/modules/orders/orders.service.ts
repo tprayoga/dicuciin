@@ -16,7 +16,14 @@ import {
   UpdateOrderStatusDto,
   CancelOrderDto,
 } from "./dto/order.dto";
-import { OrderStatus, UserRole, Prisma } from "@prisma/client";
+import { OrderStatus, UserRole, Prisma, BookingStatus } from "@prisma/client";
+import { randomBytes } from "crypto";
+import {
+  createBookingInTx,
+  parseScheduledAt,
+  releaseBookingForOrderInTx,
+  resolveBookableDevice,
+} from "../bookings/booking-lifecycle";
 import { generateDailySequence } from "../../common/utils/sequence.util";
 import { toNum } from "../../common/utils/money.util";
 import { PromosService } from "../promos/promos.service";
@@ -108,8 +115,19 @@ export class OrdersService {
       customerId,
       promoCode,
       deliveryFee = 0,
+      deviceId,
+      deviceCode,
+      scheduledAt: scheduledAtIso,
       ...orderData
     } = createOrderDto;
+    const wantsBooking = !!(deviceId || deviceCode);
+    if (wantsBooking && !customerId) {
+      throw new BadRequestException("Booking mesin membutuhkan customer");
+    }
+    const now = new Date();
+    const scheduledAt = wantsBooking
+      ? parseScheduledAt(scheduledAtIso, now)
+      : null;
 
     const outlet = await this.prisma.outlet.findUnique({
       where: { id: outletId },
@@ -163,7 +181,7 @@ export class OrdersService {
 
       const totalAmount = subtotal.minus(discountAmount).plus(deliveryFee);
 
-      return tx.order.create({
+      const created = await tx.order.create({
         data: {
           orderNumber,
           customerId,
@@ -192,6 +210,27 @@ export class OrdersService {
           customer: true,
         },
       });
+
+      // K2/T2: order alur booking → booking HOLD terikat order, dalam transaksi
+      // yang sama. Mesin bentrok → seluruh transaksi (termasuk order) dibatalkan.
+      if (wantsBooking) {
+        const device = await resolveBookableDevice(
+          tx,
+          { deviceId, deviceCode },
+          outletId,
+        );
+        const booking = await createBookingInTx(tx, {
+          customerId: customerId!,
+          deviceId: device.id,
+          orderId: created.id,
+          scheduledAt,
+          status: BookingStatus.HOLD,
+          bookingCode: "BK-" + randomBytes(4).toString("hex").toUpperCase(),
+          now,
+        });
+        return { ...created, booking };
+      }
+      return created;
     });
 
     return order;
@@ -202,6 +241,7 @@ export class OrdersService {
     limit: number = 10,
     status?: OrderStatus,
     outletId?: string,
+    outletScope?: string[] | null,
   ) {
     const skip = (page - 1) * limit;
     const where: any = {};
@@ -211,6 +251,10 @@ export class OrdersService {
     }
     if (outletId) {
       where.outletId = outletId;
+    }
+    // Lingkup outlet staf (null = global).
+    if (outletScope) {
+      where.outletId = { in: outletScope };
     }
 
     const [orders, total] = await Promise.all([
@@ -281,7 +325,8 @@ export class OrdersService {
     return order;
   }
 
-  async getDashboardSummary() {
+  async getDashboardSummary(outletScope: string[] | null = null) {
+    const inScope = outletScope ? { outletId: { in: outletScope } } : {};
     const start = new Date();
     start.setHours(0, 0, 0, 0);
     const end = new Date(start);
@@ -297,10 +342,11 @@ export class OrdersService {
       recentOrders,
       last30DaysOrders,
     ] = await Promise.all([
-      this.prisma.iotDevice.count(),
-      this.prisma.outlet.count(),
+      this.prisma.iotDevice.count({ where: inScope }),
+      this.prisma.outlet.count({ where: outletScope ? { id: { in: outletScope } } : {} }),
       this.prisma.user.count({
         where: {
+          ...(outletScope ? { outletUsers: { some: { outletId: { in: outletScope } } } } : {}),
           isActive: true,
           role: {
             in: [
@@ -315,6 +361,7 @@ export class OrdersService {
       }),
       this.prisma.order.aggregate({
         where: {
+          ...inScope,
           status: { in: this.paidOrderStatuses },
           orderDate: { gte: start, lt: end },
         },
@@ -323,6 +370,7 @@ export class OrdersService {
       }),
       this.prisma.order.findMany({
         where: {
+          ...inScope,
           status: { in: this.paidOrderStatuses },
         },
         include: {
@@ -334,6 +382,7 @@ export class OrdersService {
       }),
       this.prisma.order.findMany({
         where: {
+          ...inScope,
           status: { in: this.paidOrderStatuses },
           orderDate: { gte: start30Days, lt: end },
         },
@@ -381,7 +430,7 @@ export class OrdersService {
     };
   }
 
-  async getFinanceSummary(month?: string, outletId?: string) {
+  async getFinanceSummary(month?: string, outletId?: string, outletScope?: string[] | null) {
     const now = new Date();
     const monthRegex = /^\d{4}-\d{2}$/;
     if (month && !monthRegex.test(month)) {
@@ -404,6 +453,8 @@ export class OrdersService {
       orderDate: { gte: start, lt: end },
     };
     if (outletId) where.outletId = outletId;
+    // Lingkup outlet staf non-global (gabungan outlet yang ditugaskan).
+    if (outletScope) where.outletId = { in: outletScope };
 
     const [orders, aggregate] = await Promise.all([
       this.prisma.order.findMany({
@@ -447,7 +498,7 @@ export class OrdersService {
 
     return {
       month: `${start.getFullYear()}-${`${start.getMonth() + 1}`.padStart(2, "0")}`,
-      outletId: outletId ?? null,
+      outletId: outletId ?? (outletScope?.length === 1 ? outletScope[0] : null),
       totalRevenue,
       operationalCost,
       estimatedProfit,
@@ -527,24 +578,27 @@ export class OrdersService {
       }
     }
 
-    const cancelledOrder = await this.prisma.order.update({
-      where: { id },
-      data: {
-        status: OrderStatus.CANCELLED,
-        cancelledAt: new Date(),
-        cancelReason: cancelOrderDto.cancelReason,
-        statusLogs: {
-          create: {
-            status: OrderStatus.CANCELLED,
-            notes: cancelOrderDto.cancelReason,
-            createdBy: cancelledBy,
+    const cancelledOrder = await this.prisma.$transaction(async (tx) => {
+      await releaseBookingForOrderInTx(tx, id);
+      return tx.order.update({
+        where: { id },
+        data: {
+          status: OrderStatus.CANCELLED,
+          cancelledAt: new Date(),
+          cancelReason: cancelOrderDto.cancelReason,
+          statusLogs: {
+            create: {
+              status: OrderStatus.CANCELLED,
+              notes: cancelOrderDto.cancelReason,
+              createdBy: cancelledBy,
+            },
           },
         },
-      },
-      include: {
-        items: true,
-        outlet: true,
-      },
+        include: {
+          items: true,
+          outlet: true,
+        },
+      });
     });
 
     return cancelledOrder;

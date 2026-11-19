@@ -13,6 +13,7 @@ import {
   UserSegment,
   LedgerDirection,
   WalletType,
+  BookingStatus,
 } from '@prisma/client';
 import { generateDailySequence } from '../../common/utils/sequence.util';
 import { toNum, D } from '../../common/utils/money.util';
@@ -27,6 +28,13 @@ import { PromosService } from '../promos/promos.service';
 import { CampaignService } from '../campaigns/campaign.service';
 import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 import { IotMachineService } from '../iot/iot-machine.service';
+import { randomBytes } from 'crypto';
+import {
+  createBookingInTx,
+  parseScheduledAt,
+  promoteBookingOnPaidInTx,
+  resolveBookableDevice,
+} from '../bookings/booking-lifecycle';
 
 export interface CheckoutInput {
   customerId?: string;
@@ -39,6 +47,10 @@ export interface CheckoutInput {
   sourcePlatform?: string;
   staffUserId?: string;
   kioskId?: string;
+  /** Booking mesin (Fase 1 Batch 1): order+booking+bayar dalam satu transaksi. */
+  deviceId?: string;
+  deviceCode?: string;
+  scheduledAt?: string;
 }
 
 /** Detail perhitungan untuk response API (tugas 9). */
@@ -147,6 +159,12 @@ export class TransactionService {
 
   /** Checkout penuh: harga → order → bayar wallet → settle loyalty. */
   async checkout(input: CheckoutInput): Promise<TransactionResult> {
+    const wantsBooking = !!(input.deviceId || input.deviceCode);
+    if (wantsBooking && !input.customerId) {
+      throw new BadRequestException('Booking mesin membutuhkan customer');
+    }
+    const bookingNow = new Date();
+    const scheduledAt = wantsBooking ? parseScheduledAt(input.scheduledAt, bookingNow) : null;
     const ctx = await this.resolveContext(input);
     const { orderItems, subtotal } = await this.ordersService.priceItems(
       input.outletId,
@@ -208,6 +226,25 @@ export class TransactionService {
           },
         });
 
+        // K2/T2: booking mesin dibuat atomik bersama order (HOLD), lalu naik
+        // RESERVED setelah order PAID di transaksi yang sama.
+        if (wantsBooking) {
+          const device = await resolveBookableDevice(
+            tx,
+            { deviceId: input.deviceId, deviceCode: input.deviceCode },
+            input.outletId,
+          );
+          await createBookingInTx(tx, {
+            customerId: input.customerId!,
+            deviceId: device.id,
+            orderId: order.id,
+            scheduledAt,
+            status: BookingStatus.HOLD,
+            bookingCode: 'BK-' + randomBytes(4).toString('hex').toUpperCase(),
+            now: bookingNow,
+          });
+        }
+
         // Bayar wallet: BONUS dulu, sisanya MAIN (saldo tak boleh minus).
         let bonusUsed = new Prisma.Decimal(0);
         let mainUsed = new Prisma.Decimal(0);
@@ -246,6 +283,9 @@ export class TransactionService {
             createdBy: input.customerId ?? input.staffUserId,
           },
         });
+        if (wantsBooking) {
+          await promoteBookingOnPaidInTx(tx, order.id, bookingNow);
+        }
 
         // --- Settle loyalty (semua dalam transaksi yang sama) ---
         if (pricing.happyHourRules?.length) {

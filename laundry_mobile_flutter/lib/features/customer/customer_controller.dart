@@ -471,6 +471,8 @@ class CustomerController extends ChangeNotifier {
     required String outletId,
     required List<CreateOrderItemInput> items,
     String? voucherCode,
+    String? deviceId,
+    DateTime? scheduledAt,
   }) async {
     final customerId = user.customer?.id;
     final partnerId = user.b2bPartner?.id;
@@ -491,6 +493,8 @@ class CustomerController extends ChangeNotifier {
         outletId: outletId,
         items: items,
         voucherCode: voucherCode,
+        deviceId: deviceId,
+        scheduledAt: scheduledAt,
       );
       await loadDashboard(user: user, accessToken: accessToken);
       return result;
@@ -500,6 +504,35 @@ class CustomerController extends ChangeNotifier {
     } catch (_) {
       _errorMessage = 'Pembayaran gagal. Coba lagi.';
       return null;
+    } finally {
+      _isSubmittingOrder = false;
+      notifyListeners();
+    }
+  }
+
+  /// Bayar order yang sudah ada dengan saldo. Mengembalikan true bila sukses;
+  /// pesan error di [errorMessage].
+  Future<bool> payOrderWithWallet({
+    required AppUser user,
+    required String accessToken,
+    required String orderId,
+  }) async {
+    _isSubmittingOrder = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _customerService.payOrderWithWallet(
+        accessToken: accessToken,
+        orderId: orderId,
+      );
+      await loadDashboard(user: user, accessToken: accessToken);
+      return true;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      return false;
+    } catch (_) {
+      _errorMessage = 'Pembayaran saldo gagal. Coba lagi.';
+      return false;
     } finally {
       _isSubmittingOrder = false;
       notifyListeners();
@@ -586,6 +619,8 @@ class CustomerController extends ChangeNotifier {
     required List<CreateOrderItemInput> items,
     String? promoCode,
     String? notes,
+    String? deviceId,
+    DateTime? scheduledAt,
   }) async {
     final customerId = user.customer?.id;
     if (customerId == null) {
@@ -606,6 +641,8 @@ class CustomerController extends ChangeNotifier {
         items: items,
         promoCode: promoCode,
         notes: notes,
+        deviceId: deviceId,
+        scheduledAt: scheduledAt,
       );
 
       await loadDashboard(user: user, accessToken: accessToken);

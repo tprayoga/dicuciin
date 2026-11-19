@@ -79,7 +79,9 @@ class _BookingMachinesPageState extends State<_BookingMachinesPage> {
     }
   }
 
-  /// Alur booking: pilih waktu + layanan → reservasi mesin → checkout (order+bayar).
+  /// Alur booking: pilih waktu + layanan → checkout. Booking mesin dibuat
+  /// server BERSAMAAN dengan order (atomik) saat bayar, dan mesin baru bisa
+  /// dipakai setelah order lunas — tidak ada lagi reservasi terpisah.
   Future<void> _openBookingFlow(OutletMachine m) async {
     final token = _token;
     if (token == null) return;
@@ -91,26 +93,6 @@ class _BookingMachinesPageState extends State<_BookingMachinesPage> {
       builder: (_) => _BookingFlowSheet(outlet: widget.outlet, machine: m),
     );
     if (choice == null || !mounted) return;
-
-    // Reservasi mesin untuk waktu terjadwal.
-    setState(() => _reservingCode = m.deviceCode);
-    try {
-      await context.read<CustomerController>().reserveMachine(
-            accessToken: token,
-            deviceCode: m.deviceCode,
-            scheduledAt: choice.scheduledAt.toUtc().toIso8601String(),
-          );
-    } on ApiException catch (e) {
-      if (mounted) AppToast.error(context, e.message);
-      if (mounted) setState(() => _reservingCode = null);
-      return;
-    } catch (_) {
-      if (mounted) AppToast.error(context, 'Gagal booking. Coba lagi.');
-      if (mounted) setState(() => _reservingCode = null);
-      return;
-    }
-    if (!mounted) return;
-    setState(() => _reservingCode = null);
 
     // Lanjut ke checkout untuk order + pembayaran layanan terpilih.
     final svc = choice.service;
@@ -129,6 +111,8 @@ class _BookingMachinesPageState extends State<_BookingMachinesPage> {
       date: _bookingDateLabel(choice.scheduledAt),
       serviceId: svc.serviceId,
       outletId: svc.outletId.isNotEmpty ? svc.outletId : widget.outlet.id,
+      deviceId: m.deviceId,
+      scheduledAt: choice.scheduledAt,
     );
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => _OrderCheckoutPage(data: data)),

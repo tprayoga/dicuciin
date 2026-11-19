@@ -14,7 +14,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
-import { CreateGatewayPaymentDto, PaymentWebhookDto } from './dto/payment.dto';
+import {
+  CreateGatewayPaymentDto,
+  PayOrderWithWalletDto,
+  PaymentWebhookDto,
+} from './dto/payment.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { assertOrderAccess } from '../../common/auth/access-policy';
@@ -36,6 +40,13 @@ export class PaymentsController {
     @Body() dto: CreateGatewayPaymentDto,
   ) {
     return this.paymentsService.createGatewayPayment(req.user.userId, dto);
+  }
+
+  @Post('wallet')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Bayar order yang sudah ada memakai saldo (nominal dari server)' })
+  async payWithWallet(@Request() req: any, @Body() dto: PayOrderWithWalletDto) {
+    return this.paymentsService.payOrderWithWallet(req.user.userId, dto.orderId);
   }
 
   @Get(':paymentNumber/status')

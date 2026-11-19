@@ -29,6 +29,9 @@ export const ADMIN_ROLES: UserRole[] = [
 /** Role yang boleh mengelola akun user lain. */
 export const USER_ADMIN_ROLES: UserRole[] = [UserRole.SUPER_ADMIN, UserRole.OWNER];
 
+/** Role dengan akses lintas outlet (global). */
+export const GLOBAL_ROLES: UserRole[] = [UserRole.SUPER_ADMIN, UserRole.OWNER];
+
 export function isStaff(user: AuthUser | undefined | null): boolean {
   return !!user && (STAFF_ROLES as string[]).includes(user.role as string);
 }
@@ -63,12 +66,21 @@ export async function assertOrderAccess(
   user: AuthUser,
   orderId: string,
 ): Promise<void> {
-  if (isStaff(user)) return;
+  if (isStaff(user) && (GLOBAL_ROLES as string[]).includes(user.role as string)) return;
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    select: { customer: { select: { userId: true } } },
+    select: { outletId: true, customer: { select: { userId: true } } },
   });
   if (!order) throw new NotFoundException('Order not found');
+  if (isStaff(user)) {
+    // Staf non-global: hanya order di outlet yang ditugaskan.
+    const link = await prisma.outletUser.findFirst({
+      where: { userId: user.userId, outletId: order.outletId },
+      select: { id: true },
+    });
+    if (!link) throw new ForbiddenException('Order ini berada di outlet lain');
+    return;
+  }
   if (order.customer?.userId !== user.userId) {
     throw new ForbiddenException('Tidak boleh mengakses order ini');
   }
@@ -114,4 +126,40 @@ export async function scopeCheckoutIdentity<
     throw new ForbiddenException('Tidak boleh bertransaksi atas nama customer lain');
   }
   return { ...dto, customerId: ownId };
+}
+
+
+/**
+ * Lingkup outlet untuk laporan/daftar operasional.
+ * - `null`  → global (SUPER_ADMIN/OWNER tanpa filter outlet).
+ * - array  → hanya outlet tersebut.
+ * Staf non-global hanya boleh outlet yang ditugaskan (OutletUser); meminta
+ * outlet lain → 403; belum ditugaskan ke outlet mana pun → 403.
+ */
+export async function resolveOutletScope(
+  prisma: PrismaService,
+  user: AuthUser,
+  requestedOutletId?: string,
+): Promise<string[] | null> {
+  if ((GLOBAL_ROLES as string[]).includes(user.role as string)) {
+    return requestedOutletId ? [requestedOutletId] : null;
+  }
+  if (!isStaff(user)) {
+    throw new ForbiddenException('Tidak memiliki akses ke data outlet');
+  }
+  const links = await prisma.outletUser.findMany({
+    where: { userId: user.userId },
+    select: { outletId: true },
+  });
+  const assigned = links.map((l) => l.outletId);
+  if (assigned.length === 0) {
+    throw new ForbiddenException('Akun ini belum ditugaskan ke outlet mana pun');
+  }
+  if (requestedOutletId) {
+    if (!assigned.includes(requestedOutletId)) {
+      throw new ForbiddenException('Tidak boleh mengakses data outlet lain');
+    }
+    return [requestedOutletId];
+  }
+  return assigned;
 }
