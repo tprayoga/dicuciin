@@ -3,19 +3,23 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
-} from '@nestjs/common';
-import { AuthUser, isStaff } from '../../common/auth/access-policy';
+} from "@nestjs/common";
+import { AuthUser, isStaff } from "../../common/auth/access-policy";
 import {
   FINAL_STATUSES,
   UNPAID_STATUSES,
   assertManualTransition,
-} from './order-status.policy';
-import { PrismaService } from '../../common/prisma/prisma.service';
-import { CreateOrderDto, UpdateOrderStatusDto, CancelOrderDto } from './dto/order.dto';
-import { OrderStatus, UserRole, Prisma } from '@prisma/client';
-import { generateDailySequence } from '../../common/utils/sequence.util';
-import { toNum } from '../../common/utils/money.util';
-import { PromosService } from '../promos/promos.service';
+} from "./order-status.policy";
+import { PrismaService } from "../../common/prisma/prisma.service";
+import {
+  CreateOrderDto,
+  UpdateOrderStatusDto,
+  CancelOrderDto,
+} from "./dto/order.dto";
+import { OrderStatus, UserRole, Prisma } from "@prisma/client";
+import { generateDailySequence } from "../../common/utils/sequence.util";
+import { toNum } from "../../common/utils/money.util";
+import { PromosService } from "../promos/promos.service";
 
 @Injectable()
 export class OrdersService {
@@ -29,9 +33,8 @@ export class OrdersService {
    * Idealnya ini dikonfigurasi per outlet di masa depan.
    * Untuk saat ini bisa di-override via env PROFIT_MARGIN_PERCENT.
    */
-  private readonly PROFIT_MARGIN = parseFloat(
-    process.env.PROFIT_MARGIN_PERCENT ?? '80',
-  ) / 100;
+  private readonly PROFIT_MARGIN =
+    parseFloat(process.env.PROFIT_MARGIN_PERCENT ?? "80") / 100;
 
   private readonly paidOrderStatuses: OrderStatus[] = [
     OrderStatus.PAID,
@@ -50,7 +53,12 @@ export class OrdersService {
    */
   async priceItems(
     outletId: string,
-    items: { serviceId: string; quantity: number; notes?: string; machineType?: string }[],
+    items: {
+      serviceId: string;
+      quantity: number;
+      notes?: string;
+      machineType?: string;
+    }[],
   ): Promise<{ orderItems: any[]; subtotal: Prisma.Decimal }> {
     const servicePrices = await this.prisma.servicePrice.findMany({
       where: {
@@ -68,10 +76,14 @@ export class OrdersService {
     for (const item of items) {
       const servicePrice = priceMap.get(item.serviceId);
       if (!servicePrice) {
-        throw new BadRequestException(`Service price not found for service ${item.serviceId}`);
+        throw new BadRequestException(
+          `Service price not found for service ${item.serviceId}`,
+        );
       }
 
-      const itemSubtotal = new Prisma.Decimal(servicePrice.price).mul(item.quantity);
+      const itemSubtotal = new Prisma.Decimal(servicePrice.price).mul(
+        item.quantity,
+      );
       subtotal = subtotal.plus(itemSubtotal);
 
       orderItems.push({
@@ -90,25 +102,36 @@ export class OrdersService {
   }
 
   async create(createOrderDto: CreateOrderDto, createdBy?: string) {
-    const { items, outletId, customerId, promoCode, deliveryFee = 0, ...orderData } = createOrderDto;
+    const {
+      items,
+      outletId,
+      customerId,
+      promoCode,
+      deliveryFee = 0,
+      ...orderData
+    } = createOrderDto;
 
-    const outlet = await this.prisma.outlet.findUnique({ where: { id: outletId } });
+    const outlet = await this.prisma.outlet.findUnique({
+      where: { id: outletId },
+    });
     if (!outlet) {
-      throw new NotFoundException('Outlet not found');
+      throw new NotFoundException("Outlet not found");
     }
 
     if (customerId) {
-      const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
+      const customer = await this.prisma.customer.findUnique({
+        where: { id: customerId },
+      });
       if (!customer) {
-        throw new NotFoundException('Customer not found');
+        throw new NotFoundException("Customer not found");
       }
     }
 
     const orderNumber = await generateDailySequence(
       this.prisma,
-      'ORD',
-      'order',
-      'orderNumber',
+      "ORD",
+      "order",
+      "orderNumber",
       6,
     );
 
@@ -158,7 +181,7 @@ export class OrdersService {
           statusLogs: {
             create: {
               status: OrderStatus.DRAFT,
-              notes: 'Order created',
+              notes: "Order created",
               createdBy,
             },
           },
@@ -174,7 +197,12 @@ export class OrdersService {
     return order;
   }
 
-  async findAll(page: number = 1, limit: number = 10, status?: OrderStatus, outletId?: string) {
+  async findAll(
+    page: number = 1,
+    limit: number = 10,
+    status?: OrderStatus,
+    outletId?: string,
+  ) {
     const skip = (page - 1) * limit;
     const where: any = {};
 
@@ -205,7 +233,7 @@ export class OrdersService {
           },
           items: true,
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
       }),
       this.prisma.order.count({ where }),
     ]);
@@ -240,14 +268,14 @@ export class OrdersService {
         customerAddress: true,
         items: true,
         statusLogs: {
-          orderBy: { createdAt: 'desc' },
+          orderBy: { createdAt: "desc" },
         },
         payments: true,
       },
     });
 
     if (!order) {
-      throw new NotFoundException('Order not found');
+      throw new NotFoundException("Order not found");
     }
 
     return order;
@@ -261,59 +289,65 @@ export class OrdersService {
     const start30Days = new Date(start);
     start30Days.setDate(start30Days.getDate() - 29);
 
-    const [totalMachines, totalOutlets, totalStaff, todayAggregate, recentOrders, last30DaysOrders] =
-      await Promise.all([
-        this.prisma.iotDevice.count(),
-        this.prisma.outlet.count(),
-        this.prisma.user.count({
-          where: {
-            isActive: true,
-            role: {
-              in: [
-                UserRole.OWNER,
-                UserRole.ADMIN_OUTLET,
-                UserRole.CASHIER,
-                UserRole.OPERATOR,
-                UserRole.TECHNICIAN,
-              ],
-            },
+    const [
+      totalMachines,
+      totalOutlets,
+      totalStaff,
+      todayAggregate,
+      recentOrders,
+      last30DaysOrders,
+    ] = await Promise.all([
+      this.prisma.iotDevice.count(),
+      this.prisma.outlet.count(),
+      this.prisma.user.count({
+        where: {
+          isActive: true,
+          role: {
+            in: [
+              UserRole.OWNER,
+              UserRole.ADMIN_OUTLET,
+              UserRole.CASHIER,
+              UserRole.OPERATOR,
+              UserRole.TECHNICIAN,
+            ],
           },
-        }),
-        this.prisma.order.aggregate({
-          where: {
-            status: { in: this.paidOrderStatuses },
-            orderDate: { gte: start, lt: end },
-          },
-          _sum: { totalAmount: true },
-          _count: { _all: true },
-        }),
-        this.prisma.order.findMany({
-          where: {
-            status: { in: this.paidOrderStatuses },
-          },
-          include: {
-            outlet: true,
-            items: true,
-          },
-          orderBy: { orderDate: 'desc' },
-          take: 6,
-        }),
-        this.prisma.order.findMany({
-          where: {
-            status: { in: this.paidOrderStatuses },
-            orderDate: { gte: start30Days, lt: end },
-          },
-          select: {
-            orderDate: true,
-            totalAmount: true,
-          },
-        }),
-      ]);
+        },
+      }),
+      this.prisma.order.aggregate({
+        where: {
+          status: { in: this.paidOrderStatuses },
+          orderDate: { gte: start, lt: end },
+        },
+        _sum: { totalAmount: true },
+        _count: { _all: true },
+      }),
+      this.prisma.order.findMany({
+        where: {
+          status: { in: this.paidOrderStatuses },
+        },
+        include: {
+          outlet: true,
+          items: true,
+        },
+        orderBy: { orderDate: "desc" },
+        take: 6,
+      }),
+      this.prisma.order.findMany({
+        where: {
+          status: { in: this.paidOrderStatuses },
+          orderDate: { gte: start30Days, lt: end },
+        },
+        select: {
+          orderDate: true,
+          totalAmount: true,
+        },
+      }),
+    ]);
 
     const formatDateKey = (date: Date): string => {
       const y = date.getFullYear();
-      const m = `${date.getMonth() + 1}`.padStart(2, '0');
-      const d = `${date.getDate()}`.padStart(2, '0');
+      const m = `${date.getMonth() + 1}`.padStart(2, "0");
+      const d = `${date.getDate()}`.padStart(2, "0");
       return `${y}-${m}-${d}`;
     };
 
@@ -351,12 +385,14 @@ export class OrdersService {
     const now = new Date();
     const monthRegex = /^\d{4}-\d{2}$/;
     if (month && !monthRegex.test(month)) {
-      throw new BadRequestException('Invalid month format. Use YYYY-MM');
+      throw new BadRequestException("Invalid month format. Use YYYY-MM");
     }
 
-    const base = month ? new Date(`${month}-01T00:00:00.000Z`) : new Date(now.getFullYear(), now.getMonth(), 1);
+    const base = month
+      ? new Date(`${month}-01T00:00:00.000Z`)
+      : new Date(now.getFullYear(), now.getMonth(), 1);
     if (Number.isNaN(base.getTime())) {
-      throw new BadRequestException('Invalid month value');
+      throw new BadRequestException("Invalid month value");
     }
 
     const start = new Date(base);
@@ -372,7 +408,7 @@ export class OrdersService {
     const [orders, aggregate] = await Promise.all([
       this.prisma.order.findMany({
         where,
-        orderBy: { orderDate: 'asc' },
+        orderBy: { orderDate: "asc" },
         select: {
           id: true,
           orderDate: true,
@@ -391,8 +427,8 @@ export class OrdersService {
     for (const order of orders) {
       const date = new Date(order.orderDate);
       const y = date.getFullYear();
-      const m = `${date.getMonth() + 1}`.padStart(2, '0');
-      const d = `${date.getDate()}`.padStart(2, '0');
+      const m = `${date.getMonth() + 1}`.padStart(2, "0");
+      const d = `${date.getDate()}`.padStart(2, "0");
       const key = `${y}-${m}-${d}`;
       dailyMap.set(key, (dailyMap.get(key) ?? 0) + toNum(order.totalAmount));
     }
@@ -410,7 +446,7 @@ export class OrdersService {
     const estimatedProfit = totalRevenue - operationalCost;
 
     return {
-      month: `${start.getFullYear()}-${`${start.getMonth() + 1}`.padStart(2, '0')}`,
+      month: `${start.getFullYear()}-${`${start.getMonth() + 1}`.padStart(2, "0")}`,
       outletId: outletId ?? null,
       totalRevenue,
       operationalCost,
@@ -420,10 +456,14 @@ export class OrdersService {
     };
   }
 
-  async updateStatus(id: string, updateOrderStatusDto: UpdateOrderStatusDto, updatedBy?: string) {
+  async updateStatus(
+    id: string,
+    updateOrderStatusDto: UpdateOrderStatusDto,
+    updatedBy?: string,
+  ) {
     const order = await this.prisma.order.findUnique({ where: { id } });
     if (!order) {
-      throw new NotFoundException('Order not found');
+      throw new NotFoundException("Order not found");
     }
 
     const { status, notes } = updateOrderStatusDto;
@@ -433,7 +473,9 @@ export class OrdersService {
       where: { id },
       data: {
         status,
-        ...(status === OrderStatus.COMPLETED ? { completedAt: new Date() } : {}),
+        ...(status === OrderStatus.COMPLETED
+          ? { completedAt: new Date() }
+          : {}),
         statusLogs: {
           create: {
             status,
@@ -467,20 +509,20 @@ export class OrdersService {
       include: { customer: { select: { userId: true } } },
     });
     if (!order) {
-      throw new NotFoundException('Order not found');
+      throw new NotFoundException("Order not found");
     }
 
     if (FINAL_STATUSES.has(order.status)) {
-      throw new BadRequestException('Cannot cancel this order');
+      throw new BadRequestException("Cannot cancel this order");
     }
 
     if (actor && !isStaff(actor)) {
       if (order.customer?.userId !== actor.userId) {
-        throw new ForbiddenException('Tidak boleh membatalkan order ini');
+        throw new ForbiddenException("Tidak boleh membatalkan order ini");
       }
       if (!UNPAID_STATUSES.has(order.status)) {
         throw new BadRequestException(
-          'Order yang sudah dibayar tidak bisa dibatalkan sendiri. Hubungi admin.',
+          "Order yang sudah dibayar tidak bisa dibatalkan sendiri. Hubungi admin.",
         );
       }
     }
@@ -511,6 +553,6 @@ export class OrdersService {
   private async generateOrderNumber(): Promise<string> {
     // Deprecated: digantikan oleh generateDailySequence di sequence.util.ts
     // Method ini dipertahankan sementara untuk backward compatibility
-    return generateDailySequence(this.prisma, 'ORD', 'order', 'orderNumber', 6);
+    return generateDailySequence(this.prisma, "ORD", "order", "orderNumber", 6);
   }
 }

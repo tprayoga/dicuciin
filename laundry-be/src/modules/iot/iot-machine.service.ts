@@ -4,21 +4,21 @@ import {
   Logger,
   NotFoundException,
   OnModuleInit,
-} from '@nestjs/common';
-import { BookingStatus, OrderStatus, Prisma } from '@prisma/client';
-import { PrismaService } from '../../common/prisma/prisma.service';
-import { IncomingDeviceEvent, IotMqttService } from './iot-mqtt.service';
+} from "@nestjs/common";
+import { BookingStatus, OrderStatus, Prisma } from "@prisma/client";
+import { PrismaService } from "../../common/prisma/prisma.service";
+import { IncomingDeviceEvent, IotMqttService } from "./iot-mqtt.service";
 
 /** Lifecycle status command mesin (disimpan di IotCommand.status). */
 export const IotCommandStatus = {
-  PENDING: 'PENDING',
-  PUBLISHED: 'PUBLISHED',
-  ACKED: 'ACKED',
-  RUNNING: 'RUNNING',
-  COMPLETED: 'COMPLETED',
-  FAILED: 'FAILED',
-  TIMEOUT: 'TIMEOUT',
-  CANCELLED: 'CANCELLED',
+  PENDING: "PENDING",
+  PUBLISHED: "PUBLISHED",
+  ACKED: "ACKED",
+  RUNNING: "RUNNING",
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
+  TIMEOUT: "TIMEOUT",
+  CANCELLED: "CANCELLED",
 } as const;
 
 export type IotCommandStatusValue =
@@ -38,25 +38,25 @@ const TERMINAL_STATUSES: string[] = [
   IotCommandStatus.CANCELLED,
 ];
 
-export const START_MACHINE = 'START_MACHINE';
+export const START_MACHINE = "START_MACHINE";
 
 /** Map eventType device → status command tujuan. */
 function mapEventToStatus(eventType: string): IotCommandStatusValue | null {
   switch (eventType.toUpperCase()) {
-    case 'ACK':
-    case 'ACKED':
+    case "ACK":
+    case "ACKED":
       return IotCommandStatus.ACKED;
-    case 'RUNNING':
-    case 'STARTED':
-    case 'START':
+    case "RUNNING":
+    case "STARTED":
+    case "START":
       return IotCommandStatus.RUNNING;
-    case 'COMPLETED':
-    case 'DONE':
-    case 'FINISHED':
+    case "COMPLETED":
+    case "DONE":
+    case "FINISHED":
       return IotCommandStatus.COMPLETED;
-    case 'ERROR':
-    case 'FAILED':
-    case 'FAULT':
+    case "ERROR":
+    case "FAILED":
+    case "FAULT":
       return IotCommandStatus.FAILED;
     default:
       return null; // HEARTBEAT/lainnya: tidak mengubah command
@@ -92,7 +92,9 @@ export class IotMachineService implements OnModuleInit {
     deviceCode?: string;
   }) {
     if (input.deviceId) {
-      return this.prisma.iotDevice.findUnique({ where: { id: input.deviceId } });
+      return this.prisma.iotDevice.findUnique({
+        where: { id: input.deviceId },
+      });
     }
     if (input.deviceCode) {
       return this.prisma.iotDevice.findUnique({
@@ -119,9 +121,9 @@ export class IotMachineService implements OnModuleInit {
     const order = await this.prisma.order.findUnique({
       where: { id: input.orderId },
     });
-    if (!order) throw new NotFoundException('Order tidak ditemukan');
+    if (!order) throw new NotFoundException("Order tidak ditemukan");
     if (order.status !== OrderStatus.PAID) {
-      throw new BadRequestException('Mesin hanya bisa start untuk order PAID');
+      throw new BadRequestException("Mesin hanya bisa start untuk order PAID");
     }
 
     const idempotencyKey = `start-machine-${input.orderId}`;
@@ -138,7 +140,9 @@ export class IotMachineService implements OnModuleInit {
 
     const device = await this.resolveDevice(input);
     if (!device) {
-      throw new NotFoundException('Device mesin untuk order ini tidak ditemukan');
+      throw new NotFoundException(
+        "Device mesin untuk order ini tidak ditemukan",
+      );
     }
 
     const command = await this.prisma.iotCommand.create({
@@ -167,7 +171,7 @@ export class IotMachineService implements OnModuleInit {
       where: { id: commandId },
       include: { device: true },
     });
-    if (!command) throw new NotFoundException('Command tidak ditemukan');
+    if (!command) throw new NotFoundException("Command tidak ditemukan");
     if (command.status !== IotCommandStatus.PENDING) return command;
 
     this.mqtt.publishCommand(command.device.deviceCode, command.command, {
@@ -226,7 +230,7 @@ export class IotMachineService implements OnModuleInit {
     });
     await this.prisma.iotDevice.update({
       where: { id: device.id },
-      data: { status: 'ONLINE', lastHeartbeatAt: new Date() },
+      data: { status: "ONLINE", lastHeartbeatAt: new Date() },
     });
 
     const targetStatus = mapEventToStatus(event.eventType);
@@ -236,14 +240,20 @@ export class IotMachineService implements OnModuleInit {
 
     // Command tujuan: by commandId atau command START aktif terbaru device ini.
     const command = event.commandId
-      ? await this.prisma.iotCommand.findUnique({ where: { id: event.commandId } })
+      ? await this.prisma.iotCommand.findUnique({
+          where: { id: event.commandId },
+        })
       : await this.prisma.iotCommand.findFirst({
           where: { deviceId: device.id, status: { in: ACTIVE_STATUSES } },
-          orderBy: { createdAt: 'desc' },
+          orderBy: { createdAt: "desc" },
         });
 
     if (!command || TERMINAL_STATUSES.includes(command.status)) {
-      return { trusted: true as const, eventType: event.eventType, commandUpdated: false };
+      return {
+        trusted: true as const,
+        eventType: event.eventType,
+        commandUpdated: false,
+      };
     }
 
     await this.prisma.iotCommand.update({
@@ -261,7 +271,10 @@ export class IotMachineService implements OnModuleInit {
     if (command.orderId) {
       if (targetStatus === IotCommandStatus.RUNNING) {
         await this.prisma.machineBooking.updateMany({
-          where: { orderId: command.orderId, status: { not: BookingStatus.DONE } },
+          where: {
+            orderId: command.orderId,
+            status: { not: BookingStatus.DONE },
+          },
           data: { status: BookingStatus.IN_USE, startedAt: new Date() },
         });
       } else if (targetStatus === IotCommandStatus.COMPLETED) {
@@ -286,7 +299,7 @@ export class IotMachineService implements OnModuleInit {
     const command = await this.prisma.iotCommand.findFirst({
       where: { orderId, command: START_MACHINE },
       include: { device: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
     if (!command) {
       return {
@@ -300,7 +313,7 @@ export class IotMachineService implements OnModuleInit {
     }
     const lastEvent = await this.prisma.iotEvent.findFirst({
       where: { deviceId: command.deviceId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       select: { eventType: true, createdAt: true },
     });
     return {

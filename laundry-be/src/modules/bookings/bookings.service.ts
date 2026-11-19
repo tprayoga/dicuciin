@@ -4,11 +4,11 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
-} from '@nestjs/common';
-import * as crypto from 'crypto';
-import { PrismaService } from '../../common/prisma/prisma.service';
-import { IotService } from '../iot/iot.service';
-import { BookingStatus, DeviceType } from '@prisma/client';
+} from "@nestjs/common";
+import * as crypto from "crypto";
+import { PrismaService } from "../../common/prisma/prisma.service";
+import { IotService } from "../iot/iot.service";
+import { BookingStatus, DeviceType } from "@prisma/client";
 
 const MACHINE_TYPES: DeviceType[] = [
   DeviceType.WASHING_MACHINE,
@@ -18,7 +18,9 @@ const MACHINE_TYPES: DeviceType[] = [
 const RESERVE_TTL_MS = 15 * 60 * 1000; // 15 menit untuk mengaktifkan reservasi
 
 const bookingInclude = {
-  device: { select: { id: true, name: true, deviceCode: true, deviceType: true } },
+  device: {
+    select: { id: true, name: true, deviceCode: true, deviceType: true },
+  },
 };
 
 @Injectable()
@@ -34,13 +36,15 @@ export class BookingsService {
       select: { id: true },
     });
     if (!customer) {
-      throw new ForbiddenException('Hanya customer yang dapat membooking mesin');
+      throw new ForbiddenException(
+        "Hanya customer yang dapat membooking mesin",
+      );
     }
     return customer.id;
   }
 
   private genCode(): string {
-    return 'BK-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+    return "BK-" + crypto.randomBytes(4).toString("hex").toUpperCase();
   }
 
   /** Reservasi mesin: kunci untuk customer ini bila masih tersedia. */
@@ -53,15 +57,17 @@ export class BookingsService {
     const customerId = await this.resolveCustomerId(userId);
 
     if (!ref.deviceId && !ref.deviceCode) {
-      throw new BadRequestException('deviceId atau deviceCode wajib diisi');
+      throw new BadRequestException("deviceId atau deviceCode wajib diisi");
     }
     const device = ref.deviceId
       ? await this.prisma.iotDevice.findUnique({ where: { id: ref.deviceId } })
-      : await this.prisma.iotDevice.findUnique({ where: { deviceCode: ref.deviceCode } });
-    if (!device) throw new NotFoundException('Mesin tidak ditemukan');
+      : await this.prisma.iotDevice.findUnique({
+          where: { deviceCode: ref.deviceCode },
+        });
+    if (!device) throw new NotFoundException("Mesin tidak ditemukan");
     const deviceId = device.id;
     if (!MACHINE_TYPES.includes(device.deviceType)) {
-      throw new BadRequestException('Perangkat ini bukan mesin cuci/pengering');
+      throw new BadRequestException("Perangkat ini bukan mesin cuci/pengering");
     }
 
     const now = new Date();
@@ -73,10 +79,10 @@ export class BookingsService {
     if (scheduledAtIso) {
       scheduledAt = new Date(scheduledAtIso);
       if (Number.isNaN(scheduledAt.getTime())) {
-        throw new BadRequestException('Waktu terjadwal tidak valid');
+        throw new BadRequestException("Waktu terjadwal tidak valid");
       }
       if (scheduledAt.getTime() < now.getTime() - 60_000) {
-        throw new BadRequestException('Waktu terjadwal sudah lewat');
+        throw new BadRequestException("Waktu terjadwal sudah lewat");
       }
       expiresAt = new Date(scheduledAt.getTime() + 30 * 60 * 1000);
     }
@@ -90,7 +96,8 @@ export class BookingsService {
         ],
       },
     });
-    if (active) throw new ConflictException('Mesin sedang dibooking atau dipakai');
+    if (active)
+      throw new ConflictException("Mesin sedang dibooking atau dipakai");
 
     const booking = await this.prisma.machineBooking.create({
       data: {
@@ -117,8 +124,10 @@ export class BookingsService {
   async verifyByDeviceCode(userId: string, deviceCode: string) {
     const customerId = await this.resolveCustomerId(userId);
 
-    const device = await this.prisma.iotDevice.findUnique({ where: { deviceCode } });
-    if (!device) throw new NotFoundException('Mesin tidak dikenali');
+    const device = await this.prisma.iotDevice.findUnique({
+      where: { deviceCode },
+    });
+    if (!device) throw new NotFoundException("Mesin tidak dikenali");
 
     const now = new Date();
 
@@ -130,7 +139,7 @@ export class BookingsService {
         status: BookingStatus.RESERVED,
         expiresAt: { gt: now },
       },
-      orderBy: { reservedAt: 'desc' },
+      orderBy: { reservedAt: "desc" },
     });
     if (mine) {
       const booking = await this.prisma.machineBooking.update({
@@ -140,14 +149,14 @@ export class BookingsService {
       });
       await this.prisma.iotDevice.update({
         where: { id: device.id },
-        data: { status: 'IN_USE' },
+        data: { status: "IN_USE" },
       });
-      await this.iot.sendCommand(device.id, 'UNLOCK', { bookingId: mine.id });
+      await this.iot.sendCommand(device.id, "UNLOCK", { bookingId: mine.id });
       return {
         verified: true,
         status: BookingStatus.IN_USE,
         booking,
-        message: 'Mesin terbuka. Selamat menggunakan!',
+        message: "Mesin terbuka. Selamat menggunakan!",
       };
     }
 
@@ -161,7 +170,7 @@ export class BookingsService {
         verified: true,
         status: BookingStatus.IN_USE,
         booking: alreadyMine,
-        message: 'Mesin sudah aktif untukmu.',
+        message: "Mesin sudah aktif untukmu.",
       };
     }
 
@@ -177,24 +186,28 @@ export class BookingsService {
       },
     });
     if (other) {
-      throw new ForbiddenException('Mesin ini sedang dibooking pelanggan lain');
+      throw new ForbiddenException("Mesin ini sedang dibooking pelanggan lain");
     }
 
-    throw new BadRequestException('Kamu belum membooking mesin ini. Booking dulu ya.');
+    throw new BadRequestException(
+      "Kamu belum membooking mesin ini. Booking dulu ya.",
+    );
   }
 
   async complete(userId: string, id: string) {
     const customerId = await this.resolveCustomerId(userId);
-    const booking = await this.prisma.machineBooking.findUnique({ where: { id } });
-    if (!booking) throw new NotFoundException('Booking tidak ditemukan');
+    const booking = await this.prisma.machineBooking.findUnique({
+      where: { id },
+    });
+    if (!booking) throw new NotFoundException("Booking tidak ditemukan");
     if (booking.customerId !== customerId) {
-      throw new ForbiddenException('Bukan booking milikmu');
+      throw new ForbiddenException("Bukan booking milikmu");
     }
     if (
       booking.status !== BookingStatus.IN_USE &&
       booking.status !== BookingStatus.RESERVED
     ) {
-      throw new BadRequestException('Booking tidak aktif');
+      throw new BadRequestException("Booking tidak aktif");
     }
     const updated = await this.prisma.machineBooking.update({
       where: { id },
@@ -203,21 +216,25 @@ export class BookingsService {
     });
     await this.prisma.iotDevice.update({
       where: { id: booking.deviceId },
-      data: { status: 'AVAILABLE' },
+      data: { status: "AVAILABLE" },
     });
-    await this.iot.sendCommand(booking.deviceId, 'LOCK', { bookingId: id });
+    await this.iot.sendCommand(booking.deviceId, "LOCK", { bookingId: id });
     return updated;
   }
 
   async cancel(userId: string, id: string) {
     const customerId = await this.resolveCustomerId(userId);
-    const booking = await this.prisma.machineBooking.findUnique({ where: { id } });
-    if (!booking) throw new NotFoundException('Booking tidak ditemukan');
+    const booking = await this.prisma.machineBooking.findUnique({
+      where: { id },
+    });
+    if (!booking) throw new NotFoundException("Booking tidak ditemukan");
     if (booking.customerId !== customerId) {
-      throw new ForbiddenException('Bukan booking milikmu');
+      throw new ForbiddenException("Bukan booking milikmu");
     }
     if (booking.status !== BookingStatus.RESERVED) {
-      throw new BadRequestException('Hanya reservasi yang belum aktif bisa dibatalkan');
+      throw new BadRequestException(
+        "Hanya reservasi yang belum aktif bisa dibatalkan",
+      );
     }
     const updated = await this.prisma.machineBooking.update({
       where: { id },
@@ -226,7 +243,7 @@ export class BookingsService {
     });
     await this.prisma.iotDevice.update({
       where: { id: booking.deviceId },
-      data: { status: 'AVAILABLE' },
+      data: { status: "AVAILABLE" },
     });
     return updated;
   }
@@ -237,12 +254,14 @@ export class BookingsService {
    * perangkat: IN_USE > RESERVED > OFFLINE > AVAILABLE.
    */
   async listOutletMachines(outletId: string) {
-    const outlet = await this.prisma.outlet.findUnique({ where: { id: outletId } });
-    if (!outlet) throw new NotFoundException('Outlet tidak ditemukan');
+    const outlet = await this.prisma.outlet.findUnique({
+      where: { id: outletId },
+    });
+    if (!outlet) throw new NotFoundException("Outlet tidak ditemukan");
 
     const devices = await this.prisma.iotDevice.findMany({
       where: { outletId, deviceType: { in: MACHINE_TYPES } },
-      orderBy: { deviceCode: 'asc' },
+      orderBy: { deviceCode: "asc" },
     });
 
     const statusByDevice = await this.activeBookingStatusByDevice(
@@ -257,7 +276,7 @@ export class BookingsService {
         name: d.name,
         type: d.deviceType,
         status,
-        bookable: status === 'AVAILABLE',
+        bookable: status === "AVAILABLE",
       };
     });
 
@@ -320,44 +339,44 @@ export class BookingsService {
   private effectiveStatus(deviceStatus: string, bs?: BookingStatus): string {
     // Booking aktif (query sudah mengecualikan yang expired) = sumber kebenaran
     // untuk RESERVED/IN_USE-via-reservasi.
-    if (bs === BookingStatus.IN_USE) return 'IN_USE';
-    if (bs === BookingStatus.RESERVED) return 'RESERVED';
+    if (bs === BookingStatus.IN_USE) return "IN_USE";
+    if (bs === BookingStatus.RESERVED) return "RESERVED";
     // Status fisik perangkat: OFFLINE (mati) atau IN_USE (mesin benar2 berjalan).
     // 'RESERVED' sengaja TIDAK dibaca dari device agar flag lama tak nyangkut.
-    if (deviceStatus === 'OFFLINE') return 'OFFLINE';
-    if (deviceStatus === 'IN_USE') return 'IN_USE';
-    return 'AVAILABLE';
+    if (deviceStatus === "OFFLINE") return "OFFLINE";
+    if (deviceStatus === "IN_USE") return "IN_USE";
+    return "AVAILABLE";
   }
 
   /** Hitung ringkasan keramaian dari daftar status mesin. */
   private occupancyOf(machines: { status: string }[]) {
     const total = machines.length;
-    const offline = machines.filter((m) => m.status === 'OFFLINE').length;
+    const offline = machines.filter((m) => m.status === "OFFLINE").length;
     const busy = machines.filter(
-      (m) => m.status === 'IN_USE' || m.status === 'RESERVED',
+      (m) => m.status === "IN_USE" || m.status === "RESERVED",
     ).length;
-    const available = machines.filter((m) => m.status === 'AVAILABLE').length;
+    const available = machines.filter((m) => m.status === "AVAILABLE").length;
     const operational = total - offline;
 
     let level: string;
     let remark: string;
     if (operational === 0) {
-      level = 'none';
-      remark = 'Mesin tidak tersedia';
+      level = "none";
+      remark = "Mesin tidak tersedia";
     } else if (busy === 0) {
-      level = 'low';
-      remark = 'Sepi';
+      level = "low";
+      remark = "Sepi";
     } else {
       const ratio = busy / operational;
       if (ratio < 0.5) {
-        level = 'medium';
-        remark = 'Normal';
+        level = "medium";
+        remark = "Normal";
       } else if (ratio < 1) {
-        level = 'high';
-        remark = 'Ramai';
+        level = "high";
+        remark = "Ramai";
       } else {
-        level = 'full';
-        remark = 'Penuh';
+        level = "full";
+        remark = "Penuh";
       }
     }
     return { total, available, busy, offline, level, remark };
@@ -375,7 +394,7 @@ export class BookingsService {
           { status: BookingStatus.RESERVED, expiresAt: { gt: now } },
         ],
       },
-      orderBy: { reservedAt: 'desc' },
+      orderBy: { reservedAt: "desc" },
       include: bookingInclude,
     });
   }
