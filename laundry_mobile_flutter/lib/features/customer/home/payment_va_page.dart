@@ -6,12 +6,16 @@ class _PaymentVaPage extends StatefulWidget {
     required this.data,
     required this.total,
     required this.orderId,
+    this.topupAmount,
   });
 
   final String bank;
   final _CheckoutData data;
   final int total;
   final String orderId;
+
+  /// Batch 4: diisi → halaman ini menagih TOP-UP saldo (bukan order).
+  final int? topupAmount;
 
   @override
   State<_PaymentVaPage> createState() => _PaymentVaPageState();
@@ -29,6 +33,9 @@ class _PaymentVaPageState extends State<_PaymentVaPage>
 
   @override
   String get _attemptOrderId => widget.orderId;
+
+  @override
+  int? get _topupAmount => widget.topupAmount;
 
   @override
   void initState() {
@@ -64,10 +71,7 @@ class _PaymentVaPageState extends State<_PaymentVaPage>
     if (token == null || pn == null) return;
     setState(() => _simulating = true);
     try {
-      await context.read<CustomerController>().simulatePayment(
-        accessToken: token,
-        paymentNumber: pn,
-      );
+      await _attemptSimulate(token, pn);
       await _checkStatus();
     } on ApiException catch (e) {
       if (mounted) AppToast.error(context, e.message);
@@ -78,6 +82,11 @@ class _PaymentVaPageState extends State<_PaymentVaPage>
 
   @override
   void _onAttemptPaid() {
+    if (widget.topupAmount != null) {
+      // Top-up: kembali ke halaman top-up dengan hasil lunas dari server.
+      Navigator.of(context).pop(true);
+      return;
+    }
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => _OrderSuccessPage(

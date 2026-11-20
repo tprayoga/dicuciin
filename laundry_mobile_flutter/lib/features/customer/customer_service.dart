@@ -140,6 +140,68 @@ class CustomerService {
     return GatewayPayment.fromJson(payload as Map<String, dynamic>);
   }
 
+  // ── Batch 4: top-up saldo Midtrans (bentuk respons = GatewayPayment) ────
+  Future<GatewayPayment> createWalletTopup({
+    required String accessToken,
+    required int amount,
+    required String method, // 'QRIS' | 'VA'
+    String? bank,
+  }) async {
+    final payload = await _apiClient.post(
+      '/wallets/me/topup',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({
+        'amount': amount,
+        'method': method,
+        if (bank != null && bank.isNotEmpty) 'bank': bank,
+      }),
+    );
+    return GatewayPayment.fromJson(payload as Map<String, dynamic>);
+  }
+
+  Future<GatewayPayment> getWalletTopupStatus({
+    required String accessToken,
+    required String topupNumber,
+  }) async {
+    final payload = await _apiClient.get(
+      '/wallets/me/topups/$topupNumber',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return GatewayPayment.fromJson(payload as Map<String, dynamic>);
+  }
+
+  Future<GatewayPayment> cancelWalletTopup({
+    required String accessToken,
+    required String topupNumber,
+  }) async {
+    final payload = await _apiClient.post(
+      '/wallets/me/topups/$topupNumber/cancel',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return GatewayPayment.fromJson(payload as Map<String, dynamic>);
+  }
+
+  Future<void> simulateWalletTopup({
+    required String accessToken,
+    required String topupNumber,
+  }) async {
+    await _apiClient.post(
+      '/wallets/me/topups/$topupNumber/simulate',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+  }
+
+  Future<List<GatewayPayment>> listWalletTopups({required String accessToken}) async {
+    final payload = await _apiClient.get(
+      '/wallets/me/topups',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return (payload as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(GatewayPayment.fromJson)
+        .toList();
+  }
+
   /// Cek status pembayaran (untuk polling).
   Future<GatewayPayment> getPaymentStatus({
     required String accessToken,

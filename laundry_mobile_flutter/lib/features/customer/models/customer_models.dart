@@ -1139,10 +1139,16 @@ class GatewayPayment {
     this.expiresAt,
     this.secondsRemaining = 0,
     this.canRetry = false,
+    this.creditAmount,
+    this.createdAt,
   });
 
   final String paymentNumber;
   final String method;
+
+  /// Batch 4 (top-up): nominal yang dikreditkan ke saldo; null untuk order.
+  final double? creditAmount;
+  final DateTime? createdAt;
   final double amount;
   final String status; // PENDING | PAID | FAILED | EXPIRED | CANCELLED
   final String? qrString;
@@ -1171,6 +1177,8 @@ class GatewayPayment {
     expiresAt: json['expiresAt'] as String?,
     secondsRemaining: (json['secondsRemaining'] as num?)?.toInt() ?? 0,
     canRetry: json['canRetry'] as bool? ?? false,
+    creditAmount: json['creditAmount'] == null ? null : _toDouble(json['creditAmount']),
+    createdAt: DateTime.tryParse((json['createdAt'] as String?) ?? ''),
   );
 }
 

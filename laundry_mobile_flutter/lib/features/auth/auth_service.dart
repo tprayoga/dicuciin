@@ -121,16 +121,17 @@ class AuthService {
     return (payload as Map<String, dynamic>?)?['url'] as String?;
   }
 
-  /// Set PIN wallet 6 digit (disimpan ter-hash di server).
+  /// Set / ganti PIN wallet 6 digit (Batch 4: ganti PIN wajib [currentPin]).
   Future<void> setWalletPin({
     required String accessToken,
     required String customerId,
     required String pin,
+    String? currentPin,
   }) async {
     await _apiClient.post(
-      '/wallets/customer/$customerId/pin/set',
+      '/wallets/me/pin',
       headers: {'Authorization': 'Bearer $accessToken'},
-      body: jsonEncode({'pin': pin}),
+      body: jsonEncode({'pin': pin, 'currentPin': ?currentPin}),
     );
   }
 
@@ -140,8 +141,9 @@ class AuthService {
     required String customerId,
     required String pin,
   }) async {
+    // Batch 4: PIN salah → 400, terkunci → 403 (ApiException dengan pesan server).
     final payload = await _apiClient.post(
-      '/wallets/customer/$customerId/pin/verify',
+      '/wallets/me/pin/verify',
       headers: {'Authorization': 'Bearer $accessToken'},
       body: jsonEncode({'pin': pin}),
     );
@@ -177,23 +179,6 @@ class AuthService {
         'orderId': orderId,
         'idempotencyKey': ?idempotencyKey,
       }),
-    );
-    final wallet =
-        (payload as Map<String, dynamic>)['wallet'] as Map<String, dynamic>?;
-    return _moneyToInt(wallet?['balance']);
-  }
-
-  /// Top up saldo wallet. Mengembalikan saldo terbaru.
-  Future<int> topUpWallet({
-    required String accessToken,
-    required String customerId,
-    required int amount,
-    String? idempotencyKey,
-  }) async {
-    final payload = await _apiClient.post(
-      '/wallets/customer/$customerId/topup',
-      headers: {'Authorization': 'Bearer $accessToken'},
-      body: jsonEncode({'amount': amount, 'idempotencyKey': ?idempotencyKey}),
     );
     final wallet =
         (payload as Map<String, dynamic>)['wallet'] as Map<String, dynamic>?;

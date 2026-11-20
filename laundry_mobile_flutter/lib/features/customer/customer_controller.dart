@@ -309,6 +309,46 @@ class CustomerController extends ChangeNotifier {
   }
 
   /// [DEV] Simulasikan pembayaran gateway berhasil.
+  // ── Batch 4: top-up saldo (saldo bertambah HANYA dari pelunasan server) ──
+  Future<GatewayPayment> createWalletTopup({
+    required String accessToken,
+    required int amount,
+    required String method,
+    String? bank,
+  }) => _customerService.createWalletTopup(
+    accessToken: accessToken,
+    amount: amount,
+    method: method,
+    bank: bank,
+  );
+
+  Future<GatewayPayment> getWalletTopupStatus({
+    required String accessToken,
+    required String topupNumber,
+  }) => _customerService.getWalletTopupStatus(
+    accessToken: accessToken,
+    topupNumber: topupNumber,
+  );
+
+  Future<GatewayPayment> cancelWalletTopup({
+    required String accessToken,
+    required String topupNumber,
+  }) => _customerService.cancelWalletTopup(
+    accessToken: accessToken,
+    topupNumber: topupNumber,
+  );
+
+  Future<void> simulateWalletTopup({
+    required String accessToken,
+    required String topupNumber,
+  }) => _customerService.simulateWalletTopup(
+    accessToken: accessToken,
+    topupNumber: topupNumber,
+  );
+
+  Future<List<GatewayPayment>> listWalletTopups({required String accessToken}) =>
+      _customerService.listWalletTopups(accessToken: accessToken);
+
   Future<void> simulatePayment({
     required String accessToken,
     required String paymentNumber,

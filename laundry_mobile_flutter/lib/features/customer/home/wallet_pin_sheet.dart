@@ -38,8 +38,13 @@ class _WalletPinSheetState extends State<_WalletPinSheet> {
     await Future<void>.delayed(const Duration(milliseconds: 120));
     if (!mounted) return;
     bool ok;
+    String message = 'PIN salah. Coba lagi.';
     try {
       ok = await context.read<WalletController>().verifyPin(_input);
+    } on ApiException catch (e) {
+      // Batch 4: tampilkan pesan server (PIN salah / terkunci 15 menit).
+      ok = false;
+      message = e.message;
     } catch (_) {
       ok = false;
     }
@@ -49,7 +54,7 @@ class _WalletPinSheetState extends State<_WalletPinSheet> {
       return;
     }
     setState(() {
-      _error = 'PIN salah. Coba lagi.';
+      _error = message;
       _input = '';
     });
   }
@@ -57,7 +62,9 @@ class _WalletPinSheetState extends State<_WalletPinSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Container(
         decoration: const BoxDecoration(
           color: Colors.white,

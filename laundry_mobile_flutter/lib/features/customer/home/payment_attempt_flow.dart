@@ -28,6 +28,42 @@ mixin _PaymentAttemptFlow<T extends StatefulWidget> on State<T> {
   String get _attemptOrderId;
   void _onAttemptPaid();
 
+  /// Batch 4: sumber tagihan — order (default) atau top-up saldo.
+  int? get _topupAmount => null;
+
+  Future<GatewayPayment> _attemptCreate(String token) {
+    final c = context.read<CustomerController>();
+    final amount = _topupAmount;
+    if (amount != null) {
+      return c.createWalletTopup(
+        accessToken: token,
+        amount: amount,
+        method: _attemptMethod,
+        bank: _attemptBank,
+      );
+    }
+    return c.createGatewayPayment(
+      accessToken: token,
+      orderId: _attemptOrderId,
+      method: _attemptMethod,
+      bank: _attemptBank,
+    );
+  }
+
+  Future<GatewayPayment> _attemptStatus(String token, String paymentNumber) {
+    final c = context.read<CustomerController>();
+    return _topupAmount != null
+        ? c.getWalletTopupStatus(accessToken: token, topupNumber: paymentNumber)
+        : c.getPaymentStatus(accessToken: token, paymentNumber: paymentNumber);
+  }
+
+  Future<void> _attemptSimulate(String token, String paymentNumber) {
+    final c = context.read<CustomerController>();
+    return _topupAmount != null
+        ? c.simulateWalletTopup(accessToken: token, topupNumber: paymentNumber)
+        : c.simulatePayment(accessToken: token, paymentNumber: paymentNumber);
+  }
+
   String? get _token => context.read<AuthController>().accessToken;
 
   void _disposeAttempt() {
@@ -52,14 +88,7 @@ mixin _PaymentAttemptFlow<T extends StatefulWidget> on State<T> {
       return;
     }
     try {
-      final payment = await context
-          .read<CustomerController>()
-          .createGatewayPayment(
-            accessToken: token,
-            orderId: _attemptOrderId,
-            method: _attemptMethod,
-            bank: _attemptBank,
-          );
+      final payment = await _attemptCreate(token);
       if (!mounted) return;
       setState(() => _loading = false);
       _applyPayment(payment);
@@ -130,10 +159,7 @@ mixin _PaymentAttemptFlow<T extends StatefulWidget> on State<T> {
     if (token == null || pn == null) return;
     _checking = true;
     try {
-      final status = await context.read<CustomerController>().getPaymentStatus(
-        accessToken: token,
-        paymentNumber: pn,
-      );
+      final status = await _attemptStatus(token, pn);
       _applyPayment(status);
     } catch (_) {
       // Abaikan error sesaat; polling berikutnya mencoba lagi.
