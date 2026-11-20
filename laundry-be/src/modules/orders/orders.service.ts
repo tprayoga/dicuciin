@@ -1,4 +1,5 @@
 import {
+  Optional,
   Injectable,
   NotFoundException,
   BadRequestException,
@@ -10,6 +11,7 @@ import {
   UNPAID_STATUSES,
   assertManualTransition,
 } from "./order-status.policy";
+import { PaymentsService } from "../payments/payments.service";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import {
   CreateOrderDto,
@@ -34,6 +36,8 @@ export class OrdersService {
   constructor(
     private prisma: PrismaService,
     private promosService: PromosService,
+    // Opsional: dipakai untuk membatalkan tagihan gateway saat order dibatalkan.
+    @Optional() private payments?: PaymentsService,
   ) {}
 
   /**
@@ -580,6 +584,7 @@ export class OrdersService {
     // Batch 1.5: kunci baris order lalu periksa ulang status DI DALAM transaksi,
     // agar pembatalan tidak berselang-seling dengan webhook PAID (settlePaidInTx
     // mengunci baris yang sama).
+    const retired: { id: string; paymentNumber: string }[] = [];
     const cancelledOrder = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`;
       const order = await tx.order.findUniqueOrThrow({
@@ -604,6 +609,16 @@ export class OrdersService {
       }
 
       await releaseBookingForOrderInTx(tx, id);
+      // Batch 2: percobaan pembayaran aktif ikut dibatalkan (DB) — dibatalkan
+      // juga di gateway setelah commit; bila tetap dibayar → rekonsiliasi.
+      const active = await tx.payment.findUnique({ where: { pendingSlot: id } });
+      if (active) {
+        await tx.payment.update({
+          where: { id: active.id },
+          data: { status: "CANCELLED", pendingSlot: null, cancelledAt: new Date() },
+        });
+        if (active.externalId) retired.push({ id: active.id, paymentNumber: active.paymentNumber });
+      }
       return tx.order.update({
         where: { id },
         data: {
@@ -625,6 +640,9 @@ export class OrdersService {
       });
     });
 
+    if (retired.length && this.payments) {
+      await this.payments.cancelAttemptsAtGateway(retired);
+    }
     return cancelledOrder;
   }
 

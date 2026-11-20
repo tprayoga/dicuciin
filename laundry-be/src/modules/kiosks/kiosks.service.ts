@@ -420,7 +420,7 @@ export class KiosksService {
   async createDevicePayment(deviceToken: string, dto: CreateGatewayPaymentDto) {
     const kiosk = await this.authenticateDevice(deviceToken);
     await this.assertOrderOwnedByKiosk(dto.orderId, kiosk.id);
-    return this.paymentsService.createKioskGatewayPayment(dto.orderId, dto);
+    return this.paymentsService.createKioskGatewayPayment(dto.orderId, dto, kiosk.id);
   }
 
   /** Status pembayaran untuk polling dari kiosk. */

@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import {
   CreateChargeInput,
   CreateChargeResult,
+  GatewayChargeStatus,
   PaymentGateway,
 } from './payment-gateway.interface';
 
@@ -33,5 +34,15 @@ export class MockPaymentGateway implements PaymentGateway {
     const bank = input.bank ?? 'BCA';
     const vaNumber = `8808${Math.floor(1e11 + Math.random() * 9e11)}`;
     return { externalId, vaNumber, bank, expiresAt };
+  }
+
+  /** Mock: tagihan selalu bisa dibatalkan (pembayaran hanya lewat simulate). */
+  async cancelCharge(): Promise<GatewayChargeStatus> {
+    return 'CANCELLED';
+  }
+
+  /** Mock tidak tahu status; server memakai `expiresAt` miliknya sendiri. */
+  async getChargeStatus(): Promise<GatewayChargeStatus> {
+    return 'PENDING';
   }
 }

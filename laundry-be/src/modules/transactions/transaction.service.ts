@@ -278,9 +278,10 @@ export class TransactionService {
           mainUsed = paid.mainUsed;
         }
 
-        await tx.payment.create({
+        const walletPayment = await tx.payment.create({
           data: {
             orderId: order.id,
+            provider: 'wallet',
             paymentNumber: `PAY-${orderNumber}`,
             paymentMethod: PaymentMethod.WALLET,
             amount: totalAmount,
@@ -292,7 +293,8 @@ export class TransactionService {
 
         await tx.order.update({
           where: { id: order.id },
-          data: { status: OrderStatus.PAID },
+          // Batch 2: pembayaran yang melunasi order dicatat (unik).
+          data: { status: OrderStatus.PAID, paidPaymentId: walletPayment.id },
         });
         await tx.orderStatusLog.create({
           data: {

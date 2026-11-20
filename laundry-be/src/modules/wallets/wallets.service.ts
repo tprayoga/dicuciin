@@ -7,6 +7,8 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { releaseBookingForOrderInTx } from '../bookings/booking-lifecycle';
+import { ORDER_REFUND_REASONS } from '../payments/reconciliation-record';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   TopupWalletDto,
@@ -287,9 +289,9 @@ export class WalletsService {
         customer: { select: { userId: true } },
         payments: {
           where: { status: PaymentStatus.PAID },
-          orderBy: { paidAt: 'desc' },
-          take: 1,
+          orderBy: { paidAt: 'asc' },
         },
+        machineBooking: { select: { status: true } },
       },
     });
 
@@ -317,7 +319,13 @@ export class WalletsService {
       );
     }
 
-    const payment = order.payments[0];
+    // Batch 2: refund pembayaran yang MELUNASI order (bukan sembarang yang
+    // terakhir) — pembayaran ganda ditangani lewat rekonsiliasi.
+    const payment =
+      order.payments.find((p) => p.id === order.paidPaymentId) ?? order.payments[0];
+    if (order.machineBooking?.status === 'IN_USE') {
+      throw new ConflictException('Mesin sedang dipakai — order tidak bisa direfund sekarang');
+    }
     if (!payment) {
       throw new BadRequestException('Pembayaran lunas tidak ditemukan');
     }
@@ -367,6 +375,23 @@ export class WalletsService {
             status: OrderStatus.REFUNDED,
             notes: description,
             createdBy: actorUserId,
+          },
+        });
+        // Mesin yang belum dipakai dilepas — order refund tidak bisa menyalakan mesin.
+        await releaseBookingForOrderInTx(tx, order.id);
+        // Permintaan refund terbuka untuk order ini ikut selesai (satu eksekusi).
+        await tx.paymentReconciliation.updateMany({
+          where: {
+            orderId: order.id,
+            reason: { in: ORDER_REFUND_REASONS },
+            status: { in: ['OPEN', 'REQUESTED', 'APPROVED'] },
+          },
+          data: {
+            status: 'REFUNDED',
+            refundMethod: 'WALLET_CREDIT',
+            executedBy: actorUserId,
+            executedAt: new Date(),
+            executionRef: ledger.id,
           },
         });
 

@@ -1,4 +1,4 @@
-import { IsString, IsIn, IsOptional, IsNumber } from 'class-validator';
+import { IsString, IsIn, IsOptional, IsNumber, MinLength, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateGatewayPaymentDto {
@@ -52,4 +52,46 @@ export class LegacyPayWithWalletDto {
   @IsOptional()
   @IsString()
   idempotencyKey?: string;
+}
+
+export class RefundRequestDto {
+  @ApiProperty()
+  @IsString()
+  orderId: string;
+
+  @ApiProperty({ description: 'Alasan permintaan refund' })
+  @IsString()
+  @MinLength(5)
+  @MaxLength(500)
+  reason: string;
+}
+
+export class ReviewReconciliationDto {
+  @ApiProperty({ enum: ['APPROVE', 'REJECT', 'CLOSE'] })
+  @IsIn(['APPROVE', 'REJECT', 'CLOSE'])
+  decision: 'APPROVE' | 'REJECT' | 'CLOSE';
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(500)
+  note: string;
+}
+
+export class ExecuteRefundDto {
+  @ApiProperty({ enum: ['WALLET_CREDIT', 'EXTERNAL'] })
+  @IsIn(['WALLET_CREDIT', 'EXTERNAL'])
+  method: 'WALLET_CREDIT' | 'EXTERNAL';
+
+  @ApiProperty({ required: false, description: 'Wajib untuk EXTERNAL' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  reference?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
 }
