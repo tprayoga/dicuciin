@@ -6,8 +6,13 @@ import {
   UnauthorizedException,
   ForbiddenException,
 } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
+import {
+  setWalletPin,
+  verifyWalletPinWithLockout,
+  walletPinStatus,
+} from '../../common/auth/wallet-pin';
 import { releaseBookingForOrderInTx } from '../bookings/booking-lifecycle';
+import { restoreVoucherAfterRefundInTx } from '../orders/voucher-refund-policy';
 import { ORDER_REFUND_REASONS } from '../payments/reconciliation-record';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
@@ -98,29 +103,38 @@ export class WalletsService {
     return customer;
   }
 
-  /** Set / ganti PIN wallet (6 digit, disimpan sebagai hash bcrypt). */
-  async setPin(customerId: string, userId: string, pin: string) {
+  /**
+   * Set PIN pertama kali, atau ganti PIN (Batch 4: WAJIB PIN lama, terkena
+   * penguncian). Disimpan sebagai hash bcrypt.
+   */
+  async setPin(customerId: string, userId: string, pin: string, currentPin?: string) {
     await this.getOwnedCustomer(customerId, userId);
-
-    const pinHash = await bcrypt.hash(pin, 10);
-    await this.prisma.customer.update({
-      where: { id: customerId },
-      data: { walletPinHash: pinHash, pinSetAt: new Date() },
-    });
-
+    await setWalletPin(this.prisma, customerId, pin, currentPin);
     return { message: 'PIN wallet berhasil disimpan' };
   }
 
-  /** Verifikasi PIN wallet. */
-  async verifyPin(customerId: string, userId: string, pin: string) {
-    const customer = await this.getOwnedCustomer(customerId, userId);
-    if (!customer.walletPinHash)
-      throw new BadRequestException('PIN wallet belum diatur');
-
-    const valid = await bcrypt.compare(pin, customer.walletPinHash);
-    if (!valid) throw new UnauthorizedException('PIN salah');
-
+  /**
+   * Verifikasi PIN (Batch 4: penguncian 5×/15 menit, aman paralel). Sukses
+   * menerbitkan bukti PIN sekali pakai untuk pembayaran saldo berikutnya
+   * (app lama memverifikasi PIN dulu, lalu membayar tanpa mengirim PIN).
+   */
+  async verifyPin(customerId: string, userId: string, pin: string, sessionKey: string | null = null) {
+    await this.getOwnedCustomer(customerId, userId);
+    await verifyWalletPinWithLockout(this.prisma, customerId, pin, new Date(), {
+      issueProofFor: sessionKey,
+    });
     return { valid: true };
+  }
+
+  async pinStatus(customerId: string, userId: string) {
+    await this.getOwnedCustomer(customerId, userId);
+    return walletPinStatus(this.prisma, customerId);
+  }
+
+  async customerIdOf(userId: string) {
+    const c = await this.prisma.customer.findUnique({ where: { userId }, select: { id: true } });
+    if (!c) throw new NotFoundException('Akun ini belum memiliki profil customer');
+    return c.id;
   }
 
   async getWallet(customerId: string) {
@@ -362,6 +376,8 @@ export class WalletsService {
 
         const transaction = mapLedgerToTransaction(ledger);
 
+        // Batch 4: voucher kembali hanya bila layanan belum dikonsumsi (kebijakan).
+        await restoreVoucherAfterRefundInTx(tx, order.id, actorUserId);
         const updatedOrder = await tx.order.update({
           where: { id: order.id },
           data: {

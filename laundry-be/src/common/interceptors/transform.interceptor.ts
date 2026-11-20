@@ -16,7 +16,22 @@ export interface ApiResponse<T> {
  * konversi Decimal → number di batas response. Aman karena nilai rupiah jauh di
  * bawah Number.MAX_SAFE_INTEGER. Date/Buffer/null dibiarkan apa adanya.
  */
-function serializeDecimals(value: unknown): unknown {
+/**
+ * Batch 4: kolom rahasia TIDAK PERNAH keluar di response, apa pun include
+ * Prisma yang dipakai service (mis. `customer: true` ikut membawa hash PIN).
+ */
+const REDACTED_KEYS = new Set([
+  'passwordHash',
+  'walletPinHash',
+  'walletPinFailedAttempts',
+  'sessionHash',
+  'enrollmentCodeHash',
+  'deviceTokenHash',
+  'tokenHash',
+  'codeHash',
+]);
+
+export function serializeDecimals(value: unknown): unknown {
   if (value == null) return value;
   if (Prisma.Decimal.isDecimal(value)) return (value as Prisma.Decimal).toNumber();
   if (value instanceof Date || Buffer.isBuffer(value)) return value;
@@ -24,6 +39,7 @@ function serializeDecimals(value: unknown): unknown {
   if (typeof value === 'object') {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (REDACTED_KEYS.has(k)) continue;
       out[k] = serializeDecimals(v);
     }
     return out;

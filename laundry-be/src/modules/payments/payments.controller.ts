@@ -14,6 +14,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
+import { requireWalletAuthorization, walletSessionKey } from '../../common/auth/wallet-pin';
 import {
   CreateGatewayPaymentDto,
   PayOrderWithWalletDto,
@@ -46,6 +47,19 @@ export class PaymentsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Bayar order yang sudah ada memakai saldo (nominal dari server)' })
   async payWithWallet(@Request() req: any, @Body() dto: PayOrderWithWalletDto) {
+    // Batch 4 (S5): PIN ditegakkan SERVER untuk setiap debit saldo.
+    const customer = await this.prisma.customer.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (customer) {
+      await requireWalletAuthorization(
+        this.prisma,
+        customer.id,
+        dto.pin,
+        walletSessionKey(req.headers?.authorization),
+      );
+    }
     return this.paymentsService.payOrderWithWallet(req.user.userId, dto.orderId);
   }
 

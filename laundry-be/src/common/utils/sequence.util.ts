@@ -10,8 +10,8 @@ import { PrismaService } from '../prisma/prisma.service';
 export async function generateDailySequence(
   prisma: PrismaService,
   prefix: string,
-  tableName: 'order' | 'customer',
-  codeField: 'orderNumber' | 'memberCode',
+  tableName: 'order' | 'customer' | 'walletTopup',
+  codeField: 'orderNumber' | 'memberCode' | 'topupNumber',
   padLength = 6,
 ): Promise<string> {
   const today = new Date();
@@ -28,6 +28,13 @@ export async function generateDailySequence(
       select: { orderNumber: true },
     });
     lastCode = last?.orderNumber ?? null;
+  } else if (tableName === 'walletTopup') {
+    const last = await prisma.walletTopup.findFirst({
+      where: { topupNumber: { startsWith: fullPrefix } },
+      orderBy: { topupNumber: 'desc' },
+      select: { topupNumber: true },
+    });
+    lastCode = last?.topupNumber ?? null;
   } else {
     const last = await prisma.customer.findFirst({
       where: { memberCode: { startsWith: fullPrefix } },

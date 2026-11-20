@@ -1,4 +1,5 @@
 import {
+  Matches,
   IsString,
   IsNumber,
   IsOptional,
@@ -102,6 +103,15 @@ export class CheckoutDto {
   @IsString()
   @IsOptional()
   orderId?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'PIN wallet (Batch 4). Tanpa PIN → wajib bukti dari /pin/verify yang baru sukses',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[0-9]{6}$/, { message: 'PIN harus 6 digit angka' })
+  pin?: string;
 }
 
 export class RefundTransactionDto {

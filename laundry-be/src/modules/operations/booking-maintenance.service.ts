@@ -21,6 +21,7 @@ import {
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { PaymentsService } from "../payments/payments.service";
 import { OrdersService } from "../orders/orders.service";
+import { WalletTopupService } from "../payments/wallet-topup.service";
 import {
   IotMachineService,
   IotCommandStatus,
@@ -66,6 +67,7 @@ export class BookingMaintenanceService {
     private readonly payments: PaymentsService,
     private readonly iot: IotMachineService,
     private readonly orders: OrdersService,
+    private readonly topups: WalletTopupService,
   ) {}
 
   /** Kunci booking (lewati bila sedang dipegang worker lain). */
@@ -429,6 +431,28 @@ export class BookingMaintenanceService {
       }
     }
 
+    // Batch 4: top-up PENDING lewat batas → verifikasi ke provider (kredit hanya bila PAID).
+    const staleTopups = await this.prisma.walletTopup.findMany({
+      where: {
+        status: "PENDING",
+        OR: [
+          { expiresAt: { lt: ago(now, cfg.paymentGraceSeconds * 1000) } },
+          { expiresAt: null, createdAt: { lt: ago(now, 5 * 60_000) } },
+        ],
+      },
+      select: { id: true },
+      take: cfg.batch,
+    });
+    let topupsSynced = 0;
+    for (const t of staleTopups) {
+      try {
+        await this.topups.syncPending(t.id);
+        topupsSynced++;
+      } catch (err) {
+        this.logger.error(`Sinkronisasi top-up ${t.id} gagal: ${(err as Error).message}`);
+      }
+    }
+
     const pendingStarts = await this.prisma.iotCommand.findMany({
       where: {
         command: START_MACHINE,
@@ -469,6 +493,7 @@ export class BookingMaintenanceService {
     }
     return {
       paymentsSynced,
+      topupsSynced,
       startsRepublished: pendingStarts.length,
       startsTimedOut: timedOut,
     };

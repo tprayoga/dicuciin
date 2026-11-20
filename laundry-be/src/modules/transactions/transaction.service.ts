@@ -27,6 +27,7 @@ import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 import { IotMachineService } from '../iot/iot-machine.service';
 import { PaymentsService } from '../payments/payments.service';
 import { OrderPricingSnapshot, readSnapshot } from '../orders/pricing-reservation';
+import { restoreVoucherAfterRefundInTx } from '../orders/voucher-refund-policy';
 
 export interface CheckoutInput {
   customerId?: string;
@@ -364,8 +365,9 @@ export class TransactionService {
         }
       }
 
-      // Rollback voucher → ACTIVE kembali bila masih berlaku.
-      await this.voucherService.reverseRedemption(tx, order.id);
+      // Batch 4: voucher kembali hanya bila layanan belum dikonsumsi & masih
+      // berlaku (kebijakan REFUND_RESTORE_VOUCHER, diaudit).
+      await restoreVoucherAfterRefundInTx(tx, order.id, actorUserId);
 
       // Turunkan akumulasi tier.
       if (order.customerId) {

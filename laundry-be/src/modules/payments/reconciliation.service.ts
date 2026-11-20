@@ -31,6 +31,7 @@ import {
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { WalletLedgerService } from "../wallets/wallet-ledger.service";
 import { releaseBookingForOrderInTx } from "../bookings/booking-lifecycle";
+import { restoreVoucherAfterRefundInTx } from "../orders/voucher-refund-policy";
 import {
   ORDER_REFUND_REASONS,
   recordReconciliationInTx,
@@ -223,12 +224,19 @@ export class ReconciliationService {
     return this.prisma.$transaction(async (tx) => {
       const pre = await tx.paymentReconciliation.findUnique({
         where: { id },
-        select: { orderId: true },
+        select: { orderId: true, topupId: true },
       });
       if (!pre)
         throw new NotFoundException("Data rekonsiliasi tidak ditemukan");
+      if (pre.topupId) {
+        return this.executeTopupRefund(tx, id, pre.topupId, adminUserId, method, reference, note);
+      }
+      if (!pre.orderId) {
+        throw new ConflictException("Rekonsiliasi tanpa order/top-up tidak dapat dieksekusi");
+      }
+      const orderId = pre.orderId;
       // Urutan kunci order → rekonsiliasi (sama dengan settlement).
-      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${pre.orderId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
       const row = await this.lockRow(tx, id);
       if (row.status === ReconciliationStatus.REFUNDED) {
         throw new ConflictException("Refund ini sudah dieksekusi");
@@ -239,7 +247,7 @@ export class ReconciliationService {
         );
       }
       const order = await tx.order.findUniqueOrThrow({
-        where: { id: row.orderId },
+        where: { id: orderId },
         include: { machineBooking: { select: { status: true } } },
       });
       const isOrderRefund = ORDER_REFUND_REASONS.includes(row.reason);
@@ -310,6 +318,8 @@ export class ReconciliationService {
         },
       });
       if (isOrderRefund) {
+        // Batch 4: voucher kembali hanya bila layanan belum dikonsumsi (kebijakan).
+        await restoreVoucherAfterRefundInTx(tx, order.id, adminUserId);
         await tx.order.update({
           where: { id: order.id },
           data: {
@@ -350,6 +360,84 @@ export class ReconciliationService {
         await tx.paymentReconciliation.findUniqueOrThrow({ where: { id } }),
       );
     });
+  }
+
+  /**
+   * Batch 4 — refund EKSTERNAL atas top-up yang terlambat lunas (saldo sudah
+   * dikreditkan). Uang dikembalikan di luar sistem HANYA bersama debit
+   * kompensasi saldo sebesar nominal kredit, dalam transaksi yang sama →
+   * tidak mungkin saldo tetap bertambah sementara dana juga dikembalikan.
+   * Saldo sudah terpakai → ditolak (tidak boleh minus). Tepat sekali: kunci
+   * baris rekonsiliasi & top-up, transisi bersyarat, idempotencyKey ledger.
+   */
+  private async executeTopupRefund(
+    tx: Prisma.TransactionClient,
+    id: string,
+    topupId: string,
+    adminUserId: string,
+    method: RefundMethod,
+    reference?: string,
+    note?: string,
+  ) {
+    if (method !== RefundMethod.EXTERNAL) {
+      throw new BadRequestException(
+        "Top-up sudah dikreditkan ke saldo — refund hanya EXTERNAL (transfer balik) dengan debit kompensasi",
+      );
+    }
+    const row = await this.lockRow(tx, id);
+    if (row.status === ReconciliationStatus.REFUNDED) {
+      throw new ConflictException("Refund ini sudah dieksekusi");
+    }
+    if (row.status !== ReconciliationStatus.APPROVED) {
+      throw new ConflictException("Refund harus disetujui sebelum dieksekusi");
+    }
+    await tx.$queryRaw`SELECT id FROM wallet_topups WHERE id = ${topupId} FOR UPDATE`;
+    const topup = await tx.walletTopup.findUniqueOrThrow({ where: { id: topupId } });
+    if (topup.status !== "PAID" || !topup.ledgerId) {
+      throw new ConflictException(`Top-up berstatus ${topup.status} — tidak bisa direfund`);
+    }
+    const wallet = await tx.wallet.findUniqueOrThrow({ where: { id: topup.walletId } });
+    if (wallet.balance.lt(topup.amount)) {
+      throw new ConflictException(
+        "Saldo customer sudah terpakai — kredit top-up tidak bisa dibalik, refund eksternal ditolak",
+      );
+    }
+    // Debit kompensasi (guard saldo cukup di ledger; tidak pernah minus).
+    const compensation = await this.walletLedger.debit(WalletType.MAIN_BALANCE, {
+      tx,
+      walletId: topup.walletId,
+      amount: topup.amount,
+      referenceType: "TOPUP_REFUND",
+      referenceId: topup.id,
+      description: `Pembalikan top-up ${topup.topupNumber} (refund eksternal ${reference})`,
+      idempotencyKey: `topup-refund-${topup.id}`,
+    });
+    await tx.walletTopup.update({
+      where: { id: topup.id },
+      data: { status: "REFUNDED", refundedAt: new Date() },
+    });
+    const done = await tx.paymentReconciliation.updateMany({
+      where: { id, status: ReconciliationStatus.APPROVED },
+      data: {
+        status: ReconciliationStatus.REFUNDED,
+        refundMethod: RefundMethod.EXTERNAL,
+        refundAmount: topup.chargeAmount,
+        executedBy: adminUserId,
+        executedAt: new Date(),
+        executionRef: reference!.trim(),
+      },
+    });
+    if (done.count !== 1) throw new ConflictException("Refund ini sudah dieksekusi");
+    await this.audit(tx, adminUserId, "RECONCILIATION_EXECUTED", id, {
+      method: RefundMethod.EXTERNAL,
+      executionRef: reference,
+      topupId: topup.id,
+      compensatingLedgerId: compensation.id,
+      debited: topup.amount.toString(),
+      refundedToCustomer: topup.chargeAmount.toString(),
+      note,
+    });
+    return this.view(await tx.paymentReconciliation.findUniqueOrThrow({ where: { id } }));
   }
 
   private view(

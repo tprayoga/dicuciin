@@ -23,7 +23,8 @@ import {
   RefundWalletDto,
   AdminRefundWalletDto,
 } from './dto/wallet.dto';
-import { WalletPinDto } from './dto/wallet-pin.dto';
+import { SetWalletPinDto, WalletPinDto } from './dto/wallet-pin.dto';
+import { walletSessionKey } from '../../common/auth/wallet-pin';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -120,22 +121,57 @@ export class WalletsController {
   }
 
   @Post('customer/:customerId/pin/set')
-  @ApiOperation({ summary: 'Set / ganti PIN wallet' })
+  @ApiOperation({ summary: 'Set / ganti PIN wallet (ganti: wajib currentPin)' })
   async setPin(
     @Param('customerId') customerId: string,
     @Request() req: any,
-    @Body() dto: WalletPinDto,
+    @Body() dto: SetWalletPinDto,
   ) {
-    return this.walletsService.setPin(customerId, req.user.userId, dto.pin);
+    return this.walletsService.setPin(customerId, req.user.userId, dto.pin, dto.currentPin);
   }
 
   @Post('customer/:customerId/pin/verify')
-  @ApiOperation({ summary: 'Verifikasi PIN wallet' })
+  @ApiOperation({ summary: 'Verifikasi PIN wallet (penguncian 5×/15 menit)' })
   async verifyPin(
     @Param('customerId') customerId: string,
     @Request() req: any,
     @Body() dto: WalletPinDto,
   ) {
-    return this.walletsService.verifyPin(customerId, req.user.userId, dto.pin);
+    return this.walletsService.verifyPin(
+      customerId,
+      req.user.userId,
+      dto.pin,
+      walletSessionKey(req.headers?.authorization),
+    );
+  }
+
+  // ── Batch 4: rute PIN milik sendiri (customer dari JWT) ─────────────────
+  @Get('me/pin')
+  @Roles(UserRole.CUSTOMER)
+  @ApiOperation({ summary: 'Status PIN (ada/tidak, terkunci sampai)' })
+  async myPinStatus(@Request() req: any) {
+    const customerId = await this.walletsService.customerIdOf(req.user.userId);
+    return this.walletsService.pinStatus(customerId, req.user.userId);
+  }
+
+  @Post('me/pin')
+  @Roles(UserRole.CUSTOMER)
+  @ApiOperation({ summary: 'Set / ganti PIN (ganti: wajib currentPin)' })
+  async setMyPin(@Body() dto: SetWalletPinDto, @Request() req: any) {
+    const customerId = await this.walletsService.customerIdOf(req.user.userId);
+    return this.walletsService.setPin(customerId, req.user.userId, dto.pin, dto.currentPin);
+  }
+
+  @Post('me/pin/verify')
+  @Roles(UserRole.CUSTOMER)
+  @ApiOperation({ summary: 'Verifikasi PIN (penguncian 5×/15 menit)' })
+  async verifyMyPin(@Body() dto: WalletPinDto, @Request() req: any) {
+    const customerId = await this.walletsService.customerIdOf(req.user.userId);
+    return this.walletsService.verifyPin(
+      customerId,
+      req.user.userId,
+      dto.pin,
+      walletSessionKey(req.headers?.authorization),
+    );
   }
 }

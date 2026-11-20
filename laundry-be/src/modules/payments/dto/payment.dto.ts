@@ -1,4 +1,4 @@
-import { IsString, IsIn, IsOptional, IsNumber, MinLength, MaxLength } from 'class-validator';
+import { IsString, IsIn, IsOptional, IsNumber, MinLength, MaxLength, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateGatewayPaymentDto {
@@ -31,6 +31,15 @@ export class PayOrderWithWalletDto {
   @ApiProperty({ description: 'ID order yang akan dibayar' })
   @IsString()
   orderId: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'PIN wallet (Batch 4). Tanpa PIN → wajib bukti dari /pin/verify yang baru sukses',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[0-9]{6}$/, { message: 'PIN harus 6 digit angka' })
+  pin?: string;
 }
 
 /**
@@ -52,6 +61,15 @@ export class LegacyPayWithWalletDto {
   @IsOptional()
   @IsString()
   idempotencyKey?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'PIN wallet (Batch 4). Tanpa PIN → wajib bukti dari /pin/verify yang baru sukses',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[0-9]{6}$/, { message: 'PIN harus 6 digit angka' })
+  pin?: string;
 }
 
 export class RefundRequestDto {
@@ -94,4 +112,20 @@ export class ExecuteRefundDto {
   @IsString()
   @MaxLength(500)
   note?: string;
+}
+
+/** Batch 4 — top-up saldo mandiri. Nominal divalidasi ulang di server (min/maks/kebijakan). */
+export class WalletTopupDto {
+  @ApiProperty({ example: 50000 })
+  @IsNumber()
+  amount: number;
+
+  @ApiProperty({ enum: ['QRIS', 'VA'] })
+  @IsIn(['QRIS', 'VA'])
+  method: 'QRIS' | 'VA';
+
+  @ApiProperty({ required: false, example: 'BCA' })
+  @IsOptional()
+  @IsString()
+  bank?: string;
 }

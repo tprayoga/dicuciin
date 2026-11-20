@@ -7,6 +7,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { requireWalletAuthorization, walletSessionKey } from '../../common/auth/wallet-pin';
 import { scopeCheckoutIdentity } from '../../common/auth/access-policy';
 
 @ApiTags('Transactions')
@@ -32,9 +33,19 @@ export class TransactionsController {
   @ApiOperation({ summary: 'Checkout: harga → order → bayar wallet → settle loyalty' })
   async checkout(@Body() dto: CheckoutDto, @Request() req: any) {
     // K8: mencegah memotong saldo customer/partner lain.
-    return this.transactionService.checkout(
-      await scopeCheckoutIdentity(this.prisma, req.user, dto),
-    );
+    const scoped = await scopeCheckoutIdentity(this.prisma, req.user, dto);
+    // Batch 4 (S5): debit saldo CUSTOMER wajib PIN (atau bukti /pin/verify).
+    // Dompet partner B2B belum punya PIN (dicatat sebagai risiko).
+    if (!scoped.partnerId && scoped.customerId) {
+      await requireWalletAuthorization(
+        this.prisma,
+        scoped.customerId,
+        dto.pin,
+        walletSessionKey(req.headers?.authorization),
+      );
+    }
+    const { pin: _pin, ...input } = scoped;
+    return this.transactionService.checkout(input);
   }
 
   // K9: kredit saldo tanpa pembayaran → hanya admin (top-up manual).

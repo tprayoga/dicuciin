@@ -11,6 +11,10 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { assertCustomerAccess } from "../../common/auth/access-policy";
+import {
+  requireWalletAuthorization,
+  walletSessionKey,
+} from "../../common/auth/wallet-pin";
 import { LegacyPayWithWalletDto } from "./dto/payment.dto";
 import { PaymentsService } from "./payments.service";
 
@@ -44,6 +48,14 @@ export class LegacyWalletPayController {
     @Request() req: any,
   ) {
     await assertCustomerAccess(this.prisma, req.user, customerId);
+    // Batch 4 (S5): app lama memverifikasi PIN lewat /pin/verify sebelum bayar →
+    // bukti PIN sekali pakai dikonsumsi di sini (atau PIN dikirim langsung).
+    await requireWalletAuthorization(
+      this.prisma,
+      customerId,
+      dto.pin,
+      walletSessionKey(req.headers?.authorization),
+    );
     const result = await this.payments.payOrderWithWalletForCustomer(
       customerId,
       dto.orderId,

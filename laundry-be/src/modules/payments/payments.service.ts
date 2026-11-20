@@ -7,6 +7,7 @@ import {
   UnauthorizedException,
   BadRequestException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import {
   BookingStatus,
@@ -38,6 +39,7 @@ import {
   promoteBookingOnPaidInTx,
 } from '../bookings/booking-lifecycle';
 import { recordReconciliationInTx } from './reconciliation-record';
+import { WalletTopupService } from './wallet-topup.service';
 import { confirmOrderPricingInTx } from '../orders/pricing-reservation';
 
 @Injectable()
@@ -55,6 +57,8 @@ export class PaymentsService {
     private campaignService: CampaignService,
     private loyaltyConfig: LoyaltyConfigService,
     private iotMachineService: IotMachineService,
+    // Batch 4: webhook top-up saldo memakai endpoint Midtrans yang sama.
+    @Optional() private topups?: WalletTopupService,
   ) {}
 
   // ══════════════════════════════════════════════════════════════════════
@@ -409,7 +413,11 @@ export class PaymentsService {
     const payment = await this.prisma.payment.findFirst({
       where: { externalId: dto.externalId },
     });
-    if (!payment) throw new NotFoundException('Payment not found');
+    if (!payment) {
+      const topup = await this.topups?.handleGatewayEvent({ externalId: dto.externalId, status: dto.status });
+      if (topup) return topup;
+      throw new NotFoundException('Payment not found');
+    }
     if (dto.status === 'PAID') {
       await this.settlePaid(payment.id);
     } else {
@@ -440,6 +448,9 @@ export class PaymentsService {
       },
     });
     if (!payment) {
+      // Batch 4: order_id top-up saldo (TOP-…) → layanan top-up.
+      const topup = await this.topups?.handleGatewayEvent(event);
+      if (topup) return topup;
       // Signature sah tetapi transaksinya bukan milik kita (mis. "Test
       // notification URL" dari dashboard Midtrans) → 200, tidak mengubah apa pun.
       this.logger.warn(
