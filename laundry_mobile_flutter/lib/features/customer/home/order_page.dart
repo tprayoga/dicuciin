@@ -25,10 +25,92 @@ class _OrderPageState extends State<_OrderPage> {
     );
   }
 
-  /// K3: refund tidak lagi bisa dilakukan sendiri. Pelanggan menghubungi
-  /// layanan pelanggan (WhatsApp) dengan nomor order; refund diproses admin
-  /// sesuai kebijakan.
+  /// K3/Batch 2: pelanggan tidak bisa me-refund sendiri. Pilihan: AJUKAN
+  /// refund (ditinjau & dieksekusi admin) atau hubungi layanan pelanggan.
   Future<void> _requestHelp(OrderSummary order) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.assignment_return_outlined),
+              title: const Text('Ajukan refund'),
+              subtitle: const Text(
+                'Ditinjau admin; dana kembali ke saldo bila disetujui',
+              ),
+              onTap: () => Navigator.of(sheetContext).pop('refund'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.chat_outlined),
+              title: const Text('Chat layanan pelanggan'),
+              onTap: () => Navigator.of(sheetContext).pop('chat'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'refund') {
+      await _submitRefundRequest(order);
+    } else {
+      await _openSupportChat(order);
+    }
+  }
+
+  Future<void> _submitRefundRequest(OrderSummary order) async {
+    final reasonCtrl = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Ajukan refund'),
+        content: TextField(
+          controller: reasonCtrl,
+          maxLength: 300,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            hintText: 'Alasan (mis. mesin tidak bisa dipakai)',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(reasonCtrl.text.trim()),
+            child: const Text('Kirim'),
+          ),
+        ],
+      ),
+    );
+    reasonCtrl.dispose();
+    if (!mounted || reason == null) return;
+    if (reason.length < 5) {
+      AppToast.error(context, 'Alasan minimal 5 karakter.');
+      return;
+    }
+    final token = context.read<AuthController>().accessToken;
+    if (token == null) return;
+    final error = await context.read<CustomerController>().requestRefund(
+      accessToken: token,
+      orderId: order.id,
+      reason: reason,
+    );
+    if (!mounted) return;
+    if (error == null) {
+      AppToast.success(
+        context,
+        'Pengajuan refund terkirim. Admin akan meninjaunya.',
+      );
+    } else {
+      AppToast.error(context, error);
+    }
+  }
+
+  Future<void> _openSupportChat(OrderSummary order) async {
     final text = Uri.encodeComponent(
       'Halo Di.Cuciin, saya butuh bantuan untuk order ${order.orderNumber} '
       '(${_formatRupiah(order.totalAmount.round())}).',
@@ -187,7 +269,6 @@ class _OrderPageState extends State<_OrderPage> {
       ),
     );
   }
-
 }
 
 class _OrderSectionTitle extends StatelessWidget {

@@ -45,6 +45,9 @@ class KioskController extends ChangeNotifier {
   String? completedPaymentMethod;
   Timer? _heartbeatTimer;
   Timer? _paymentTimer;
+  bool _paymentChecking = false;
+  String _lastMethod = 'QRIS';
+  String? _lastBank;
 
   // ── Status aktivasi mesin setelah bayar (Batch 1.5) ─────────────────
   /// null = belum dicek; selain itu status perintah START dari server:
@@ -300,21 +303,34 @@ class KioskController extends ChangeNotifier {
           ? promoCode!.trim()
           : null;
 
-      final paymentPayload =
-          await _api.post(
-                '/kiosks/device/payments',
-                token: deviceToken,
-                body: {
-                  'orderId': createdOrder!.id,
-                  'method': method,
-                  'bank': ?bank,
-                },
-              )
-              as Map<String, dynamic>;
-      payment = KioskPayment.fromJson(paymentPayload);
+      _lastMethod = method;
+      _lastBank = bank;
+      await _requestPayment();
       stage = KioskStage.payment;
-      _startPaymentPolling();
     });
+  }
+
+  Future<void> _requestPayment() async {
+    final paymentPayload =
+        await _api.post(
+              '/kiosks/device/payments',
+              token: deviceToken,
+              body: {
+                'orderId': createdOrder!.id,
+                'method': _lastMethod,
+                'bank': ?_lastBank,
+              },
+            )
+            as Map<String, dynamic>;
+    payment = KioskPayment.fromJson(paymentPayload);
+    _startPaymentPolling();
+  }
+
+  /// Tagihan lama tidak berlaku lagi (menurut server) → tagihan baru untuk
+  /// order yang SAMA (server membuat percobaan baru; mesin tetap ditahan).
+  Future<void> renewPayment() async {
+    if (createdOrder == null || loading) return;
+    await _run(_requestPayment);
   }
 
   Future<void> submitWalletCheckout({
@@ -463,7 +479,8 @@ class KioskController extends ChangeNotifier {
   }
 
   Future<void> _checkPayment() async {
-    if (payment == null) return;
+    if (payment == null || _paymentChecking) return;
+    _paymentChecking = true;
     try {
       final payload = await _api.get(
         '/kiosks/device/payments/${payment!.paymentNumber}/status',
@@ -472,12 +489,19 @@ class KioskController extends ChangeNotifier {
       payment = KioskPayment.fromJson(payload as Map<String, dynamic>);
       if (payment!.isPaid) {
         _paymentTimer?.cancel();
-        stage = KioskStage.success;
-        _startMachinePolling();
+        if (stage != KioskStage.success) {
+          stage = KioskStage.success;
+          _startMachinePolling();
+        }
+      } else if (payment!.isEnded) {
+        // Server menyatakan tagihan berakhir → hentikan polling.
+        _paymentTimer?.cancel();
       }
       notifyListeners();
     } catch (_) {
       // Abaikan error polling sesaat; percobaan berikutnya akan mengulang.
+    } finally {
+      _paymentChecking = false;
     }
   }
 

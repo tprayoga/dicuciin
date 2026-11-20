@@ -17,12 +17,18 @@ class _PaymentVaPage extends StatefulWidget {
   State<_PaymentVaPage> createState() => _PaymentVaPageState();
 }
 
-class _PaymentVaPageState extends State<_PaymentVaPage> {
-  GatewayPayment? _payment;
-  bool _loading = true;
+class _PaymentVaPageState extends State<_PaymentVaPage>
+    with _PaymentAttemptFlow<_PaymentVaPage> {
   bool _simulating = false;
-  String? _error;
-  Timer? _poll;
+
+  @override
+  String get _attemptMethod => 'VA';
+
+  @override
+  String? get _attemptBank => _bankShortName;
+
+  @override
+  String get _attemptOrderId => widget.orderId;
 
   @override
   void initState() {
@@ -32,11 +38,9 @@ class _PaymentVaPageState extends State<_PaymentVaPage> {
 
   @override
   void dispose() {
-    _poll?.cancel();
+    _disposeAttempt();
     super.dispose();
   }
-
-  String? get _token => context.read<AuthController>().accessToken;
 
   String get _bankShortName {
     if (widget.bank.contains('BCA')) return 'BCA';
@@ -53,75 +57,6 @@ class _PaymentVaPageState extends State<_PaymentVaPage> {
   }
 
   String get _vaNumber => _payment?.vaNumber ?? '-';
-
-  Future<void> _createPayment() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    final token = _token;
-    if (token == null) {
-      setState(() {
-        _loading = false;
-        _error = 'Sesi berakhir. Silakan masuk lagi.';
-      });
-      return;
-    }
-    try {
-      final payment = await context
-          .read<CustomerController>()
-          .createGatewayPayment(
-            accessToken: token,
-            orderId: widget.orderId,
-            method: 'VA',
-            bank: _bankShortName,
-          );
-      if (!mounted) return;
-      setState(() {
-        _payment = payment;
-        _loading = false;
-      });
-      _startPolling();
-    } on ApiException catch (e) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = e.message;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = 'Gagal membuat tagihan.';
-        });
-      }
-    }
-  }
-
-  void _startPolling() {
-    _poll?.cancel();
-    _poll = Timer.periodic(const Duration(seconds: 3), (_) => _checkStatus());
-  }
-
-  Future<void> _checkStatus() async {
-    final token = _token;
-    final pn = _payment?.paymentNumber;
-    if (token == null || pn == null) return;
-    try {
-      final status = await context.read<CustomerController>().getPaymentStatus(
-        accessToken: token,
-        paymentNumber: pn,
-      );
-      if (!mounted) return;
-      if (status.isPaid) {
-        _poll?.cancel();
-        _goSuccess();
-      }
-    } catch (_) {
-      // diamkan; poll berikutnya coba lagi
-    }
-  }
 
   Future<void> _simulate() async {
     final token = _token;
@@ -141,7 +76,8 @@ class _PaymentVaPageState extends State<_PaymentVaPage> {
     }
   }
 
-  void _goSuccess() {
+  @override
+  void _onAttemptPaid() {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => _OrderSuccessPage(
@@ -167,30 +103,34 @@ class _PaymentVaPageState extends State<_PaymentVaPage> {
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
                   ? _errorView()
-                  : ListView(
-                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
-                      children: [
-                        _summaryCard(),
-                        const SizedBox(height: 16),
-                        _vaCard(),
-                        const SizedBox(height: 16),
-                        const _PaymentInstructionCard(
-                          title: 'Petunjuk Pembayaran Virtual Account',
-                          items: [
-                            'Salin nomor Virtual Account terlebih dahulu.',
-                            'Buka aplikasi m-banking/ATM sesuai bank yang dipilih.',
-                            'Pilih menu Transfer atau Virtual Account.',
-                            'Masukkan nomor VA dan pastikan nominal sesuai.',
-                            'Status order akan diperbarui otomatis setelah berhasil.',
+                  : _attemptEndedView() ??
+                        ListView(
+                          padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+                          children: [
+                            _summaryCard(),
+                            const SizedBox(height: 16),
+                            _vaCard(),
+                            const SizedBox(height: 16),
+                            const _PaymentInstructionCard(
+                              title: 'Petunjuk Pembayaran Virtual Account',
+                              items: [
+                                'Salin nomor Virtual Account terlebih dahulu.',
+                                'Buka aplikasi m-banking/ATM sesuai bank yang dipilih.',
+                                'Pilih menu Transfer atau Virtual Account.',
+                                'Masukkan nomor VA dan pastikan nominal sesuai.',
+                                'Status order akan diperbarui otomatis setelah berhasil.',
+                              ],
+                            ),
                           ],
                         ),
-                      ],
-                    ),
             ),
           ],
         ),
       ),
-      bottomNavigationBar: _loading || _error != null ? null : _bottomBar(),
+      bottomNavigationBar:
+          _loading || _error != null || _attemptEndedView() != null
+          ? null
+          : _bottomBar(),
     );
   }
 
@@ -323,7 +263,7 @@ class _PaymentVaPageState extends State<_PaymentVaPage> {
               ),
               const SizedBox(width: 8),
               Text(
-                'Menunggu pembayaran…',
+                _attemptStatusLabel,
                 style: TextStyle(fontSize: 12, color: _textMuted),
               ),
             ],

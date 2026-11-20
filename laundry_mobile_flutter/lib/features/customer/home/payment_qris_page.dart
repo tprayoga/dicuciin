@@ -15,12 +15,15 @@ class _PaymentQrisPage extends StatefulWidget {
   State<_PaymentQrisPage> createState() => _PaymentQrisPageState();
 }
 
-class _PaymentQrisPageState extends State<_PaymentQrisPage> {
-  GatewayPayment? _payment;
-  bool _loading = true;
+class _PaymentQrisPageState extends State<_PaymentQrisPage>
+    with _PaymentAttemptFlow<_PaymentQrisPage> {
   bool _simulating = false;
-  String? _error;
-  Timer? _poll;
+
+  @override
+  String get _attemptMethod => 'QRIS';
+
+  @override
+  String get _attemptOrderId => widget.orderId;
 
   @override
   void initState() {
@@ -30,80 +33,8 @@ class _PaymentQrisPageState extends State<_PaymentQrisPage> {
 
   @override
   void dispose() {
-    _poll?.cancel();
+    _disposeAttempt();
     super.dispose();
-  }
-
-  String? get _token => context.read<AuthController>().accessToken;
-
-  Future<void> _createPayment() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    final token = _token;
-    if (token == null) {
-      setState(() {
-        _loading = false;
-        _error = 'Sesi berakhir. Silakan masuk lagi.';
-      });
-      return;
-    }
-    try {
-      final payment = await context
-          .read<CustomerController>()
-          .createGatewayPayment(
-            accessToken: token,
-            orderId: widget.orderId,
-            method: 'QRIS',
-          );
-      if (!mounted) return;
-      setState(() {
-        _payment = payment;
-        _loading = false;
-      });
-      _startPolling();
-    } on ApiException catch (e) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = e.message;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = 'Gagal membuat tagihan.';
-        });
-      }
-    }
-  }
-
-  void _startPolling() {
-    _poll?.cancel();
-    _poll = Timer.periodic(const Duration(seconds: 3), (_) => _checkStatus());
-  }
-
-  Future<void> _checkStatus() async {
-    final token = _token;
-    final pn = _payment?.paymentNumber;
-    if (token == null || pn == null) return;
-    try {
-      final status = await context.read<CustomerController>().getPaymentStatus(
-        accessToken: token,
-        paymentNumber: pn,
-      );
-      if (!mounted) return;
-      if (status.isPaid) {
-        _poll?.cancel();
-        _goSuccess();
-      } else {
-        setState(() => _payment = status);
-      }
-    } catch (_) {
-      // diamkan; poll berikutnya coba lagi
-    }
   }
 
   Future<void> _simulate() async {
@@ -124,7 +55,8 @@ class _PaymentQrisPageState extends State<_PaymentQrisPage> {
     }
   }
 
-  void _goSuccess() {
+  @override
+  void _onAttemptPaid() {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => _OrderSuccessPage(
@@ -150,28 +82,32 @@ class _PaymentQrisPageState extends State<_PaymentQrisPage> {
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
                   ? _errorView()
-                  : ListView(
-                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
-                      children: [
-                        _summaryCard(),
-                        const SizedBox(height: 16),
-                        _qrisCard(),
-                        const SizedBox(height: 16),
-                        const _PaymentInstructionCard(
-                          title: 'Petunjuk Pembayaran QRIS',
-                          items: [
-                            'Scan QR dari m-banking, e-wallet, atau aplikasi pembayaran lain.',
-                            'Pastikan nama merchant dan nominal sudah sesuai.',
-                            'Status akan diperbarui otomatis setelah pembayaran berhasil.',
+                  : _attemptEndedView() ??
+                        ListView(
+                          padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+                          children: [
+                            _summaryCard(),
+                            const SizedBox(height: 16),
+                            _qrisCard(),
+                            const SizedBox(height: 16),
+                            const _PaymentInstructionCard(
+                              title: 'Petunjuk Pembayaran QRIS',
+                              items: [
+                                'Scan QR dari m-banking, e-wallet, atau aplikasi pembayaran lain.',
+                                'Pastikan nama merchant dan nominal sudah sesuai.',
+                                'Status akan diperbarui otomatis setelah pembayaran berhasil.',
+                              ],
+                            ),
                           ],
                         ),
-                      ],
-                    ),
             ),
           ],
         ),
       ),
-      bottomNavigationBar: _loading || _error != null ? null : _bottomBar(),
+      bottomNavigationBar:
+          _loading || _error != null || _attemptEndedView() != null
+          ? null
+          : _bottomBar(),
     );
   }
 
@@ -287,7 +223,7 @@ class _PaymentQrisPageState extends State<_PaymentQrisPage> {
               ),
               const SizedBox(width: 8),
               Text(
-                'Menunggu pembayaran…',
+                _attemptStatusLabel,
                 style: TextStyle(fontSize: 12, color: _textMuted),
               ),
             ],

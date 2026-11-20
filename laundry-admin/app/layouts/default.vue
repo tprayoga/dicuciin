@@ -14,6 +14,7 @@ const navItems = [
   { label: 'Kelola Member', icon: 'i-heroicons-user-group', to: '/customers' },
   { label: 'Transaksi/Order', icon: 'i-heroicons-credit-card', to: '/orders' },
   { label: 'Laporan Keuangan', icon: 'i-heroicons-chart-bar-square', to: '/reports/finance' },
+  { label: 'Rekonsiliasi & Refund', icon: 'i-heroicons-arrow-uturn-left', to: '/reports/reconciliations' },
   { label: 'Promo & Banner', icon: 'i-heroicons-megaphone', to: '/marketing' },
   { label: 'Promotion & Loyalty', icon: 'i-heroicons-gift', to: '/promotion-loyalty' },
   { label: 'Ulasan & Feedback', icon: 'i-heroicons-star', to: '/reviews' },

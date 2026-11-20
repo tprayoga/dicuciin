@@ -1098,18 +1098,28 @@ class GatewayPayment {
     this.vaNumber,
     this.bank,
     this.expiresAt,
+    this.secondsRemaining = 0,
+    this.canRetry = false,
   });
 
   final String paymentNumber;
   final String method;
   final double amount;
-  final String status; // PENDING | PAID | FAILED | EXPIRED
+  final String status; // PENDING | PAID | FAILED | EXPIRED | CANCELLED
   final String? qrString;
   final String? vaNumber;
   final String? bank;
   final String? expiresAt;
 
+  /// Sisa detik menurut SERVER saat respons dibuat (Batch 2).
+  final int secondsRemaining;
+
+  /// Server mengizinkan membuat tagihan baru (EXPIRED/FAILED/CANCELLED).
+  final bool canRetry;
+
   bool get isPaid => status == 'PAID';
+  bool get isPending => status == 'PENDING';
+  bool get isExpired => status == 'EXPIRED';
 
   factory GatewayPayment.fromJson(Map<String, dynamic> json) => GatewayPayment(
     paymentNumber: json['paymentNumber'] as String,
@@ -1120,6 +1130,8 @@ class GatewayPayment {
     vaNumber: json['vaNumber'] as String?,
     bank: json['bank'] as String?,
     expiresAt: json['expiresAt'] as String?,
+    secondsRemaining: (json['secondsRemaining'] as num?)?.toInt() ?? 0,
+    canRetry: json['canRetry'] as bool? ?? false,
   );
 }
 

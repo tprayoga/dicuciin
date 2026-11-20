@@ -512,6 +512,19 @@ class CustomerService {
     );
   }
 
+  /// Batch 2: ajukan refund (hanya pengajuan — disetujui & dieksekusi admin).
+  Future<void> requestRefund({
+    required String accessToken,
+    required String orderId,
+    required String reason,
+  }) async {
+    await _apiClient.post(
+      '/payments/refund-requests',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({'orderId': orderId, 'reason': reason}),
+    );
+  }
+
   Future<OrderDetail> getOrderDetail({
     required String accessToken,
     required String orderId,

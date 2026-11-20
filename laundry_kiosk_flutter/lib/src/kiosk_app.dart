@@ -1000,9 +1000,29 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                 value: rupiah(payment.amount),
                                 emphasized: true,
                               ),
-                              if (payment.expiresAt != null) ...[
+                              if (payment.isPending) ...[
                                 const SizedBox(height: 6),
-                                CountdownRow(expiresAtIso: payment.expiresAt!),
+                                CountdownRow(
+                                  key: ValueKey(payment.paymentNumber),
+                                  secondsRemaining: payment.secondsRemaining,
+                                ),
+                              ],
+                              if (payment.isEnded) ...[
+                                const SizedBox(height: 10),
+                                ErrorMessage(
+                                  payment.status == 'EXPIRED'
+                                      ? 'Tagihan kedaluwarsa dan belum ada pembayaran masuk.'
+                                      : 'Tagihan ini sudah tidak berlaku.',
+                                ),
+                                const SizedBox(height: 10),
+                                if (payment.canRetry)
+                                  OutlinedButton.icon(
+                                    onPressed: controller.loading
+                                        ? null
+                                        : controller.renewPayment,
+                                    icon: const Icon(Icons.refresh_rounded),
+                                    label: const Text('Buat Tagihan Baru'),
+                                  ),
                               ],
                             ],
                           ),
@@ -1299,7 +1319,8 @@ class SuccessScreen extends StatelessWidget {
         secondaryLabel: _machineNeedsRetry(controller)
             ? 'Nyalakan Ulang'
             : 'Cetak',
-        onSecondary: _machineNeedsRetry(controller) && !controller.machineRetrying
+        onSecondary:
+            _machineNeedsRetry(controller) && !controller.machineRetrying
             ? controller.retryMachineStart
             : null,
         primaryLabel: 'Selesai',
@@ -1489,9 +1510,10 @@ class DashedDivider extends StatelessWidget {
 }
 
 class CountdownRow extends StatefulWidget {
-  const CountdownRow({required this.expiresAtIso, super.key});
+  const CountdownRow({required this.secondsRemaining, super.key});
 
-  final String expiresAtIso;
+  /// Sisa detik dari SERVER saat status diterima.
+  final int secondsRemaining;
 
   @override
   State<CountdownRow> createState() => _CountdownRowState();
@@ -1504,8 +1526,7 @@ class _CountdownRowState extends State<CountdownRow> {
   @override
   void initState() {
     super.initState();
-    _expiry =
-        DateTime.tryParse(widget.expiresAtIso)?.toLocal() ?? DateTime.now();
+    _expiry = DateTime.now().add(Duration(seconds: widget.secondsRemaining));
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
@@ -1520,9 +1541,9 @@ class _CountdownRowState extends State<CountdownRow> {
   @override
   Widget build(BuildContext context) {
     final left = _expiry.difference(DateTime.now());
-    final expired = left.isNegative;
-    final mm = (expired ? 0 : left.inMinutes).toString().padLeft(2, '0');
-    final ss = (expired ? 0 : left.inSeconds % 60).toString().padLeft(2, '0');
+    final done = left.isNegative || left.inSeconds == 0;
+    final mm = (done ? 0 : left.inMinutes).toString().padLeft(2, '0');
+    final ss = (done ? 0 : left.inSeconds % 60).toString().padLeft(2, '0');
     return Row(
       children: [
         const Text(
@@ -1531,7 +1552,8 @@ class _CountdownRowState extends State<CountdownRow> {
         ),
         const Spacer(),
         Text(
-          expired ? 'Kedaluwarsa' : '$mm:$ss',
+          // Habis di layar ≠ kedaluwarsa: status akhir ditentukan server.
+          done ? 'Memastikan status…' : '$mm:$ss',
           style: const TextStyle(
             color: errorColor,
             fontSize: 16,

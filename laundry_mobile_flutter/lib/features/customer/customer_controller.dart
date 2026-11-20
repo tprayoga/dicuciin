@@ -539,6 +539,26 @@ class CustomerController extends ChangeNotifier {
     }
   }
 
+  /// Ajukan refund order. Mengembalikan null bila sukses, atau pesan error.
+  Future<String?> requestRefund({
+    required String accessToken,
+    required String orderId,
+    required String reason,
+  }) async {
+    try {
+      await _customerService.requestRefund(
+        accessToken: accessToken,
+        orderId: orderId,
+        reason: reason,
+      );
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Pengajuan refund gagal. Coba lagi.';
+    }
+  }
+
   Future<UserVoucher?> redeemPointVoucher({
     required AppUser user,
     required String accessToken,
