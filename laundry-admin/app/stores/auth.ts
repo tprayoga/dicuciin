@@ -66,7 +66,28 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = u
   }
 
-  async function refreshSession(apiBase: string): Promise<boolean> {
+  /**
+   * Batch 5: satu refresh untuk semua request yang kena 401 bersamaan. Server
+   * merotasi refresh token dan menolak token lama (pemakaian ulang setelah
+   * masa tenggang mencabut sesi), jadi refresh paralel dengan token yang sama
+   * harus dihindari.
+   */
+  let inflight: Promise<boolean> | null = null
+  function refreshSession(apiBase: string): Promise<boolean> {
+    if (!inflight) {
+      inflight = doRefreshSession(apiBase).finally(() => {
+        inflight = null
+      })
+    }
+    return inflight
+  }
+
+  async function doRefreshSession(apiBase: string): Promise<boolean> {
+    // Tab lain mungkin sudah merotasi token → pakai yang terbaru di storage.
+    if (import.meta.client) {
+      const latest = localStorage.getItem('refreshToken')
+      if (latest) refreshToken.value = latest
+    }
     if (!refreshToken.value) return false
     try {
       const res = await fetch(`${apiBase}/auth/refresh`, {
@@ -192,6 +213,7 @@ export const useAuthStore = defineStore('auth', () => {
     loadFromStorage,
     setUser,
     initAuth,
+    refreshSession,
     logout,
   }
 }, { persist: false })
