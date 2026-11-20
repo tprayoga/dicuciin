@@ -171,10 +171,16 @@ Lihat **20-batch4-test-report.md**: wallet-topup 22, wallet-pin 17, refund-vouch
 
 Lihat **21-auth-account.md**: auth-session 35, phone-normalization 2, wallet-pin +1 (bukti PIN terikat sesi), unit phone.util 19, Flutter session_refresh 7. Total integration **222/222 (16 suite)**, unit **283/283**.
 
+## Batch 6 — UX mobile & hapus akun (TESTED, PostgreSQL nyata)
+
+Lihat **22** dan **23**: batch6-features 16, account-deletion 14, wallet-topup +1 assert, unit operating-hours 6 + reward-eligibility 10, Flutter batch6 9. Total integration **252/252 (18 suite)**, unit **299/299**, Flutter mobile **24/24**.
+
 ## NOT_VERIFIED
 
 | Item | Alasan |
 |---|---|
+| Halaman web hapus akun di browser & CORS production | Hanya alur API yang diuji |
+| Simpan QRIS ke galeri di HP (izin Android/iOS) | Hanya build web/analyze |
 | Pengiriman OTP WhatsApp nyata (Fonnte) | `WA_API_KEY` hanya di server; diuji dengan pengirim tiruan |
 | Kamera iOS (T11) di iPhone | Hanya validasi plist |
 | Top-up Midtrans sandbox (`TOP-…`), refund eksternal top-up (Batch 4) | Tidak dijalankan; gateway tiruan |

@@ -15,6 +15,9 @@ describe('PaymentsService loyalty settlement', () => {
     };
     const tx: any = {
       $queryRaw: jest.fn().mockResolvedValue([]),
+      // Batch 6 (R1): notifikasi ORDER_PAID ditulis di transaksi pelunasan.
+      customer: { findUnique: jest.fn().mockResolvedValue({ userId: 'user-1' }) },
+      notification: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
       payment: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({
           id: 'pay-1',

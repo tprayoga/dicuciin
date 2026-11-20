@@ -1,7 +1,7 @@
 # PROGRESS — Di.Cuciin Production Readiness
 
 Status: NOT_STARTED · IN_PROGRESS · IMPLEMENTED · TESTED · BLOCKED · ACCEPTED
-Terakhir diperbarui: 20 Nov 2026 (Batch 5)
+Terakhir diperbarui: 21 Nov 2026 (Batch 6 + hotfix keamanan)
 
 | Fase | Temuan | Status | Bukti |
 |---|---|---|---|
@@ -14,23 +14,24 @@ Terakhir diperbarui: 20 Nov 2026 (Batch 5)
 | IoT perangkat fisik | integrasi & uji mesin | **DITUNDA** (keputusan owner) | — |
 | **2 — Batch 4: Top-up Midtrans & PIN** | K1 (fitur), S5 + kebijakan voucher saat refund | **ACCEPTED (gate lokal)** · Midtrans sandbox NOT_VERIFIED · belum deploy | [18](18-wallet-topup.md), [19](19-wallet-pin-security.md), [20](20-batch4-test-report.md) |
 | **3 — Batch 5: Auth, refresh token & akun** | T1, T6, T7, T11 + R3 (profil) + temuan baru A1–A12 | **ACCEPTED (gate lokal)** · WhatsApp nyata NOT_VERIFIED · belum deploy | [21](21-auth-account.md) |
-| 4 — Kualitas alur | T8, S3, S6–S8, R1–R5, R7 | NOT_STARTED | — |
+| **4 — Batch 6: UX mobile & kelengkapan** | T8, S3, S6–S8, R1–R5, R7 + hapus akun mandiri | **ACCEPTED (gate lokal)** · hapus akun NONAKTIF sampai kebijakan disetujui · belum deploy | [22](22-account-deletion.md), [23](23-batch6-mobile-ux.md) |
+| **Hotfix keamanan production** | V1–V4 (eskalasi akun), K1/K3/K4/K6/K9/K10 | **Siap — menunggu persetujuan owner** (branch `hotfix/auth-privilege-escalation`, dari `70dedee`) | [24](24-security-hotfix.md) |
 | 5 — Rilis & operasional | R6 + checklist | IN_PROGRESS ([06](06-production-deployment.md), [11](11-deployment-compatibility.md)) | — |
 
-## Quality gate (20 Nov 2026, setelah Batch 5)
+## Quality gate (21 Nov 2026, setelah Batch 6)
 
 | Gate | Hasil |
 |---|---|
-| Integration PostgreSQL nyata, **5 run berurutan suite penuh** | **5/5 valid & lulus, 222/222 tiap run** (16 suite; 0 tumpang tindih, 0 tidur host, 0 error koneksi, sidik jari kode sama `849578be1a730ace`) |
-| Unit backend | **283/283** (25 suite) |
+| Integration PostgreSQL nyata, **5 run berurutan suite penuh** | **5/5 valid & lulus, 252/252 tiap run** (18 suite; 0 tumpang tindih, 0 tidur host, 0 error koneksi, sidik jari kode sama `e92bd5ec8ddf5fee`) |
+| Unit backend | **299/299** (27 suite) |
 | `tsc --noEmit` · `npm run build` · `prisma migrate diff` | exit 0 · sukses · *No difference detected* |
-| Uji mutasi Batch 5 (12 backend + 2 mobile) | semua tertangkap |
-| Flutter mobile: analyze / test / build web | bersih / **15/15** / sukses |
+| Flutter mobile: analyze / test / build web | bersih / **24/24** / sukses |
 | Flutter kiosk (regresi): analyze / test / build web | bersih / **2/2** / sukses |
-| Admin (Nuxt) `npm run build` · `nuxi typecheck` | sukses · 36 error lama, **0 baru** (sama dengan sebelum perubahan) |
-| WhatsApp nyata, Midtrans sandbox, iPhone/HP, Redis/BullMQ nyata, IoT fisik | **NOT_VERIFIED** |
+| Admin (Nuxt) `npm run build` · `nuxi typecheck` | sukses · 36 error lama, **0 baru** |
+| Hotfix production (branch terpisah, skema `70dedee`) | keamanan **47/47** × 5 run; unit **178/178**; build sukses — lihat 24 |
+| App di HP/iPhone, halaman web di browser, WhatsApp nyata, Midtrans sandbox, IoT fisik | **NOT_VERIFIED** |
 
-Gate Batch 4 (sebelum Batch 5 dimulai): 20 run berurutan suite integration penuh 20/20 valid & lulus (184/184), unit 264/264, Flutter & admin build lulus — lihat **20-batch4-test-report.md**.
+Gate Batch 5: 5 run berurutan suite penuh 222/222, unit 283/283 — lihat 21. Gate Batch 4 (sebelum Batch 5 dimulai): 20 run berurutan suite integration penuh 20/20 valid & lulus (184/184), unit 264/264, Flutter & admin build lulus — lihat **20-batch4-test-report.md**.
 
 **Test intermiten**: tiga akar masalah teridentifikasi, direproduksi, diperbaiki, dan diverifikasi (mesin dipakai bersama antar-iterasi; supertest menutup server bersama; listen wildcard dibayangi proses lain). Detail & run tidak valid: **20-batch4-test-report.md**. Kegagalan Batch 3 yang lognya hilang tidak dapat dipetakan secara pasti ke salah satunya.
 
@@ -118,6 +119,18 @@ Lingkungan uji: Docker `postgres:16-alpine` (`127.0.0.1:55499/dicuciin_test`), t
 - [ ] WhatsApp nyata, iPhone (kamera), app di HP — NOT_VERIFIED
 - [ ] **ACCEPTED (produksi)** — butuh deploy + uji perangkat
 
+## Gate Batch 6 (UX & hapus akun)
+
+- [x] Slot booking dari jam operasional outlet; server menolak jadwal di luar jam (T8)
+- [x] Kapasitas & layanan per mesin dari server; server menolak layanan yang bukan layanan mesin (S3)
+- [x] Tier tertinggi, status Offline, filter Washing/Dryer (S6, S7)
+- [x] Jadwal & langkah berikutnya nyata di halaman sukses; ulasan setelah selesai (S8)
+- [x] Notifikasi nyata, sekali per kejadian (R1); kontak & kebijakan (R2); tukar poin dengan aturan server (R3)
+- [x] Merek bank Permata & nama merchant (R4); simpan QRIS (R5); kode mati dihapus (R7)
+- [x] Hapus akun mandiri (aplikasi + web) dengan re-autentikasi, penghalang, anonimisasi, cabut sesi, audit — **nonaktif sampai owner menyetujui kebijakan (22 §6)**
+- [x] 5 run berurutan suite integration penuh: 5/5 valid & lulus (252/252); unit 299/299; Flutter 24/24 + 2/2; build lulus
+- [ ] App di HP/iPhone, halaman web hapus akun di browser, push notification — NOT_VERIFIED / belum ada
+
 ## Temuan baru
 
 | Temuan | Status |
@@ -157,7 +170,13 @@ Lingkungan uji: Docker `postgres:16-alpine` (`127.0.0.1:55499/dicuciin_test`), t
 | Login tanpa batas percobaan per akun (A6) | **TESTED** (Batch 5) |
 | Verifikasi OTP tidak atomik; token reset bisa dipakai ulang (A9, A10) | **TESTED** (Batch 5) |
 | OTP "terkirim" padahal tidak dikirim (production tanpa kunci / provider gagal) (T7) | **TESTED** (Batch 5) |
-| Penghapusan akun mandiri (kebijakan Google Play) belum ada | Dicatat — keputusan owner |
+| Penghapusan akun mandiri (kebijakan Google Play) belum ada | **TESTED** (Batch 6, nonaktif sampai kebijakan disetujui — 22) |
+| **Kritis (production)**: `PATCH /users/:id` tanpa role → pelanggan bisa menjadi SUPER_ADMIN / mengganti password admin | Hotfix siap (24); sudah tertutup di branch ini sejak Fase 0 |
+| Checkout: "Bank Permata" tampil sebagai "CIMBNIAGA" | **TESTED** (Batch 6) |
+| Halaman sukses: jadwal tetap "11:00 s/d 11:30" untuk semua order | **TESTED** (Batch 6) |
+| Tukar poin: periode, tier, segmen, batas per pengguna tidak ditegakkan; kuota tidak atomik | **TESTED** (Batch 6) |
+| Tier tertinggi menampilkan "menuju Silver" | **TESTED** (Batch 6) |
+| Bug production lama: login pada detik yang sama dengan register → 500 (A4) | tertutup di branch ini (Batch 5); BUKAN bagian hotfix |
 
 ## Keputusan owner yang tertunda
 
@@ -168,6 +187,9 @@ Lingkungan uji: Docker `postgres:16-alpine` (`127.0.0.1:55499/dicuciin_test`), t
 5. Top-up: batas nominal, biaya admin, cashback; package name, jam operasional per outlet.
 6. Kebijakan pengembalian voucher saat refund (`REFUND_RESTORE_VOUCHER`, default aktif).
 7. Parameter sesi & login (`AUTH_*`, `JWT_ACCESS_EXPIRES_IN`), pemasangan `WA_API_KEY`, pemeriksaan akun admin tak dikenal (A1), penerapan normalisasi nomor HP, kebijakan penghapusan akun.
+8. Hotfix keamanan: persetujuan push/deploy, konfirmasi commit server, audit akun production (24).
+9. Hapus akun: kebijakan saldo/poin/ulasan/masa simpan, teks kebijakan privasi, aktivasi `ACCOUNT_DELETION_ENABLED` (22 §6).
+10. Data: kapasitas & layanan setiap mesin, jam operasional outlet, nama merchant Midtrans (23).
 
 ## Commit (lokal, belum di-push)
 

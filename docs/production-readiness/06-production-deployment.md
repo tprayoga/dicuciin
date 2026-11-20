@@ -1,4 +1,6 @@
-# 06 — Checklist Deployment (Fase 0 + Fase 1 Batch 1–3 + Batch 4 + Batch 5)
+# 06 — Checklist Deployment (Fase 0 + Fase 1 Batch 1–3 + Batch 4–6)
+
+> **Sebelum semua ini:** hotfix keamanan production (24) dapat dideploy terpisah lebih dulu dari branch `hotfix/auth-privilege-escalation`.
 
 > Belum dideploy. Setiap langkah yang mengubah server/production **menunggu persetujuan eksplisit owner**.
 > Urutan rilis & matriks kompatibilitas: **11-deployment-compatibility.md**.
@@ -7,8 +9,8 @@
 
 - [ ] Review commit di branch `feat/production-readiness` (`git log --oneline main..feat/production-readiness`).
 - [ ] Jalankan di mesin developer:
-  - `cd laundry-be && npx jest` — harus **283/283**.
-  - `TEST_DATABASE_URL=postgresql://test:test@127.0.0.1:55499/dicuciin_test npm run test:integration` — harus **222/222**.
+  - `cd laundry-be && npx jest` — harus **299/299**.
+  - `TEST_DATABASE_URL=postgresql://test:test@127.0.0.1:55499/dicuciin_test npm run test:integration` — harus **252/252**.
   - `npm run build`.
   - `cd laundry_mobile_flutter && flutter analyze && flutter build apk --release --dart-define=API_BASE_URL=https://api.dicuciin.com/api/v1`.
   - `cd laundry_kiosk_flutter && flutter analyze && flutter test && flutter build <target> --release --dart-define=API_BASE_URL=https://api.dicuciin.com/api/v1`.
@@ -20,6 +22,10 @@
 - [ ] (Batch 5) `WA_API_KEY` (Fonnte) terpasang di `.env` server dan nomor pengirim terhubung — tanpa ini OTP di production menjawab 503 (bukan "terkirim" palsu).
 - [ ] (Batch 5) Keputusan owner: `AUTH_LOGIN_MAX_ATTEMPTS` (10), `AUTH_LOGIN_LOCK_MINUTES` (15), `AUTH_REFRESH_REUSE_GRACE_SECONDS` (30), `AUTH_SESSION_MAX_DAYS` (0 = tanpa batas), dan `JWT_ACCESS_EXPIRES_IN` server (disarankan ≤ 15m).
 - [ ] (Batch 5) Admin web dideploy **bersamaan** dengan backend (refresh tunggal; versi admin lama yang me-refresh paralel bisa mengeluarkan admin saat masa tenggang terlewati).
+- [ ] (Batch 6) `CORS_ORIGINS` memuat `https://dicuciin.com` (halaman web hapus akun); deploy `dicuciin-landing/hapus-akun.html` (`deploy-landing.sh`).
+- [ ] (Batch 6) `ACCOUNT_DELETION_ENABLED` tetap `false` sampai kebijakan 22 §6 disetujui; isi URL hapus akun di Google Play Console.
+- [ ] (Batch 6) Isi kapasitas & layanan mesin, jam operasional outlet, cek nama merchant Midtrans (23).
+- [ ] (Batch 6) Build app: `--dart-define=WEBSITE_BASE_URL=https://dicuciin.com --dart-define=MERCHANT_NAME=<nama di Midtrans>`.
 - [ ] Jendela deploy saat outlet sepi (kiosk tidak bisa menjual sampai aplikasi kiosk diperbarui).
 
 - [ ] (Batch 2) Redis tersedia untuk worker (sudah dipakai scheduler loyalty). Env opsional: lihat 14 §Konfigurasi. Untuk instance API tambahan tanpa worker: `OPS_SCHEDULER_ENABLED=false`.

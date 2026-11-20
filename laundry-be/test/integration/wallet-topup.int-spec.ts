@@ -225,6 +225,9 @@ describe("Batch 4 — top-up saldo Midtrans (PostgreSQL nyata, gateway tiruan)",
         await prisma.walletLedger.count({ where: { referenceType: "TOPUP" } }),
       ).toBe(1);
       expect(await ledgerMatchesBalance(c.customer.id)).toBe(true);
+      // Batch 6 (R1): satu notifikasi TOPUP_PAID walau webhook datang 6×.
+      const notes = await prisma.notification.findMany({ where: { userId: c.user.id } });
+      expect(notes.map((n) => n.type)).toEqual(["TOPUP_PAID"]);
     });
 
     it("nominal webhook berbeda → ditolak, tidak ada kredit", async () => {
