@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsNumber, IsArray, ValidateNested, IsEnum, IsDateString } from 'class-validator';
+import {
+  Min, IsString, IsOptional, IsNumber, IsArray, ValidateNested, IsEnum, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { OrderStatus } from '@prisma/client';
@@ -8,8 +9,9 @@ class OrderItemDto {
   @IsString()
   serviceId: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Dryer: 1–3 siklus; mesin cuci: 1 (divalidasi server)' })
   @IsNumber()
+  @Min(0.01)
   quantity: number;
 
   @ApiProperty({ required: false })
@@ -93,6 +95,14 @@ export class CreateOrderDto {
   @IsDateString()
   @IsOptional()
   scheduledAt?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Batch 3: kode voucher — diterapkan ke harga order untuk SEMUA metode bayar',
+  })
+  @IsString()
+  @IsOptional()
+  voucherCode?: string;
 }
 
 export class UpdateOrderStatusDto {

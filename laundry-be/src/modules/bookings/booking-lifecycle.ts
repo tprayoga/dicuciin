@@ -97,9 +97,11 @@ export async function findConflictingBooking(
   start: Date,
   now: Date,
   excludeBookingId?: string,
+  /** Batch 3: durasi booking baru (mis. dryer 3 siklus); default slot. */
+  durationMinutes?: number | null,
 ) {
   const { slotMinutes } = bookingConfig();
-  const end = new Date(start.getTime() + minutes(slotMinutes));
+  const end = new Date(start.getTime() + minutes(durationMinutes || slotMinutes));
   const candidates = await tx.machineBooking.findMany({
     where: {
       deviceId,
@@ -112,7 +114,7 @@ export async function findConflictingBooking(
       if (!isBookingActive(b, now)) return false;
       if (b.status === BookingStatus.IN_USE) return true; // dipakai sampai selesai
       const bStart = slotStart(b).getTime();
-      const bEnd = bStart + minutes(slotMinutes);
+      const bEnd = bStart + minutes(b.durationMinutes || slotMinutes);
       return bStart < end.getTime() && start.getTime() < bEnd;
     }) ?? null
   );
@@ -175,6 +177,8 @@ export async function createBookingInTx(
     status: "HOLD" | "RESERVED";
     bookingCode: string;
     now?: Date;
+    /** Batch 3: lama pemakaian (menit) dari estimasi server. */
+    durationMinutes?: number | null;
   },
 ) {
   const now = input.now ?? new Date();
@@ -208,12 +212,24 @@ export async function createBookingInTx(
     if (reusable) {
       return tx.machineBooking.update({
         where: { id: reusable.id },
-        data: { orderId: input.orderId, status: input.status, expiresAt },
+        data: {
+          orderId: input.orderId,
+          status: input.status,
+          expiresAt,
+          durationMinutes: input.durationMinutes ?? null,
+        },
       });
     }
   }
 
-  const conflict = await findConflictingBooking(tx, input.deviceId, start, now);
+  const conflict = await findConflictingBooking(
+    tx,
+    input.deviceId,
+    start,
+    now,
+    undefined,
+    input.durationMinutes,
+  );
   if (conflict) {
     throw new ConflictException("Mesin sudah dibooking pada waktu tersebut");
   }
@@ -227,6 +243,7 @@ export async function createBookingInTx(
       status: input.status,
       scheduledAt: input.scheduledAt,
       expiresAt,
+      durationMinutes: input.durationMinutes ?? null,
     },
   });
 }
@@ -259,6 +276,7 @@ export async function promoteBookingOnPaidInTx(
     start,
     now,
     booking.id,
+    booking.durationMinutes,
   );
   if (conflict) {
     await tx.machineBooking.update({

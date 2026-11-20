@@ -35,12 +35,8 @@ export class OrdersController {
     private readonly prisma: PrismaService,
   ) {}
 
-  @Post()
-  @ApiOperation({ summary: 'Create new order (customer: hanya atas nama sendiri)' })
-  async create(@Body() createOrderDto: CreateOrderDto, @Request() req: any) {
-    const dto = await scopeCheckoutIdentity(this.prisma, req.user, createOrderDto);
-    return this.ordersService.create(dto, req.user.userId);
-  }
+  // `POST /orders` dipindah ke OrderCreateController (modul transactions) —
+  // Batch 3: semua order dihargai mesin pricing tunggal (voucher, happy hour, B2B).
 
   @Get()
   @Roles(...STAFF_ROLES)

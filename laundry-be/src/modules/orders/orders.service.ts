@@ -12,6 +12,11 @@ import {
   assertManualTransition,
 } from "./order-status.policy";
 import { PaymentsService } from "../payments/payments.service";
+import {
+  OrderPricingSnapshot,
+  releaseOrderPricingInTx,
+  reserveOrderPricingInTx,
+} from "./pricing-reservation";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import {
   CreateOrderDto,
@@ -71,7 +76,12 @@ export class OrdersService {
       notes?: string;
       machineType?: string;
     }[],
-  ): Promise<{ orderItems: any[]; subtotal: Prisma.Decimal }> {
+  ): Promise<{
+    orderItems: any[];
+    subtotal: Prisma.Decimal;
+    /** Batch 3 (S4): estimasi durasi mesin (menit) dari server; null bila tak ada layanan mesin. */
+    estimatedMinutes: number | null;
+  }> {
     const servicePrices = await this.prisma.servicePrice.findMany({
       where: {
         serviceId: { in: items.map((i) => i.serviceId) },
@@ -83,7 +93,9 @@ export class OrdersService {
     const priceMap = new Map(servicePrices.map((sp) => [sp.serviceId, sp]));
 
     let subtotal = new Prisma.Decimal(0);
+    let estimatedMinutes: number | null = null;
     const orderItems: any[] = [];
+    const maxDryerCycles = Number(process.env.MAX_DRYER_CYCLES ?? 3);
 
     for (const item of items) {
       const servicePrice = priceMap.get(item.serviceId);
@@ -91,6 +103,24 @@ export class OrdersService {
         throw new BadRequestException(
           `Service price not found for service ${item.serviceId}`,
         );
+      }
+      // Batch 3: jumlah divalidasi server (dulu hanya @IsNumber → 0/negatif lolos).
+      const qty = Number(item.quantity);
+      if (!Number.isFinite(qty) || qty <= 0) {
+        throw new BadRequestException("Jumlah layanan harus lebih dari 0");
+      }
+      const machine = (servicePrice.service.machineType ?? "").toUpperCase();
+      if (machine === "DRYER" && (!Number.isInteger(qty) || qty > maxDryerCycles)) {
+        throw new BadRequestException(
+          `Dryer bisa dipesan 1–${maxDryerCycles} siklus`,
+        );
+      }
+      if (machine === "WASHER" && qty !== 1) {
+        throw new BadRequestException("Mesin cuci dipesan 1 siklus per order");
+      }
+      if (machine && servicePrice.service.estimateMinutes) {
+        estimatedMinutes =
+          (estimatedMinutes ?? 0) + servicePrice.service.estimateMinutes * qty;
       }
 
       const itemSubtotal = new Prisma.Decimal(servicePrice.price).mul(
@@ -110,10 +140,30 @@ export class OrdersService {
       });
     }
 
-    return { orderItems, subtotal };
+    return { orderItems, subtotal, estimatedMinutes };
   }
 
-  async create(createOrderDto: CreateOrderDto, createdBy?: string) {
+  /**
+   * Buat order (+ booking HOLD bila memilih mesin) secara atomik.
+   * `priced` (Batch 3) = hasil mesin pricing tunggal (TransactionService):
+   * total sudah termasuk voucher/happy hour/B2B/promo; reservasi voucher &
+   * kuota dibuat di transaksi yang sama. Tanpa `priced` = harga dasar + promo
+   * (jalur internal lama).
+   */
+  async create(
+    createOrderDto: CreateOrderDto,
+    createdBy?: string,
+    priced?: {
+      orderItems: any[];
+      subtotal: Prisma.Decimal;
+      discountAmount: Prisma.Decimal;
+      deliveryFee: Prisma.Decimal;
+      totalAmount: Prisma.Decimal;
+      promoId: string | null;
+      partnerId?: string | null;
+      snapshot: OrderPricingSnapshot;
+    },
+  ) {
     const {
       items,
       outletId,
@@ -123,6 +173,7 @@ export class OrdersService {
       deviceId,
       deviceCode,
       scheduledAt: scheduledAtIso,
+      voucherCode: _voucherCode,
       ...orderData
     } = createOrderDto;
     const wantsBooking = !!(deviceId || deviceCode);
@@ -160,17 +211,23 @@ export class OrdersService {
       6,
     );
 
-    const { orderItems, subtotal } = await this.priceItems(outletId, items);
+    const { orderItems, subtotal, estimatedMinutes } = priced
+      ? {
+          orderItems: priced.orderItems,
+          subtotal: priced.subtotal,
+          estimatedMinutes: priced.snapshot.estimatedMinutes,
+        }
+      : await this.priceItems(outletId, items);
 
     // Validasi + kalkulasi promo lewat sumber kebenaran TUNGGAL (PromosService).
     // Promo invalid → error jelas (bukan diam-diam tanpa diskon). Pemakaian promo
     // (PromoUsage + usedCount + cashback) BARU dicatat saat order dibayar
     // (commitUsage di jalur pembayaran), bukan di sini.
     const order = await this.prisma.$transaction(async (tx) => {
-      let discountAmount = new Prisma.Decimal(0);
-      let promoId: string | null = null;
+      let discountAmount = priced?.discountAmount ?? new Prisma.Decimal(0);
+      let promoId: string | null = priced?.promoId ?? null;
 
-      if (promoCode) {
+      if (promoCode && !priced) {
         const result = await this.promosService.evaluatePromo({
           code: promoCode,
           customerId,
@@ -186,7 +243,8 @@ export class OrdersService {
         promoId = result.promo.id;
       }
 
-      const totalAmount = subtotal.minus(discountAmount).plus(deliveryFee);
+      const totalAmount =
+        priced?.totalAmount ?? subtotal.minus(discountAmount).plus(deliveryFee);
 
       const created = await tx.order.create({
         data: {
@@ -195,10 +253,14 @@ export class OrdersService {
           outletId,
           promoId,
           ...orderData,
+          ...(priced?.partnerId ? { partnerId: priced.partnerId } : {}),
           subtotal,
           discountAmount,
-          deliveryFee,
+          deliveryFee: priced?.deliveryFee ?? deliveryFee,
           totalAmount,
+          ...(priced
+            ? { pricingSnapshot: priced.snapshot as unknown as Prisma.InputJsonValue }
+            : {}),
           status: OrderStatus.DRAFT,
           items: {
             create: orderItems.map(({ machineType, ...item }) => item),
@@ -218,6 +280,11 @@ export class OrdersService {
         },
       });
 
+      // Batch 3: voucher & kuota happy hour dipegang order sejak dibuat.
+      if (priced) {
+        await reserveOrderPricingInTx(tx, { orderId: created.id, snapshot: priced.snapshot });
+      }
+
       // K2/T2: order alur booking → booking HOLD terikat order, dalam transaksi
       // yang sama. Mesin bentrok → seluruh transaksi (termasuk order) dibatalkan.
       if (wantsBooking) {
@@ -234,6 +301,7 @@ export class OrdersService {
           status: BookingStatus.HOLD,
           bookingCode: "BK-" + randomBytes(4).toString("hex").toUpperCase(),
           now,
+          durationMinutes: estimatedMinutes,
         });
         return { ...created, booking };
       }
@@ -332,6 +400,16 @@ export class OrdersService {
           orderBy: { createdAt: "desc" },
         },
         payments: true,
+        // Batch 3 (S1): detail order di app menampilkan mesin & jadwal booking.
+        machineBooking: {
+          select: {
+            status: true,
+            scheduledAt: true,
+            expiresAt: true,
+            durationMinutes: true,
+            device: { select: { name: true, deviceCode: true, deviceType: true } },
+          },
+        },
       },
     });
 
@@ -609,6 +687,8 @@ export class OrdersService {
       }
 
       await releaseBookingForOrderInTx(tx, id);
+      // Batch 3: voucher & kuota happy hour yang dipegang order dikembalikan.
+      await releaseOrderPricingInTx(tx, id);
       // Batch 2: percobaan pembayaran aktif ikut dibatalkan (DB) — dibatalkan
       // juga di gateway setelah commit; bila tetap dibayar → rekonsiliasi.
       const active = await tx.payment.findUnique({ where: { pendingSlot: id } });

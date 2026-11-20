@@ -38,6 +38,7 @@ import {
   promoteBookingOnPaidInTx,
 } from '../bookings/booking-lifecycle';
 import { recordReconciliationInTx } from './reconciliation-record';
+import { confirmOrderPricingInTx } from '../orders/pricing-reservation';
 
 @Injectable()
 export class PaymentsService {
@@ -104,7 +105,7 @@ export class PaymentsService {
    */
   private async assertBookingHoldable(
     tx: Prisma.TransactionClient,
-    order: { machineBooking: { id: string; status: BookingStatus; deviceId: string; scheduledAt: Date | null; expiresAt: Date } | null },
+    order: { machineBooking: { id: string; status: BookingStatus; deviceId: string; scheduledAt: Date | null; expiresAt: Date; durationMinutes: number | null } | null },
     now: Date,
   ) {
     const b = order.machineBooking;
@@ -122,6 +123,7 @@ export class PaymentsService {
       b.scheduledAt ?? now,
       now,
       b.id,
+      b.durationMinutes,
     );
     if (conflict) {
       throw new ConflictException(
@@ -578,6 +580,9 @@ export class PaymentsService {
     }
 
     await this.promosService.commitUsage(tx, order.id);
+    // Batch 3: voucher (RESERVED → APPLIED) & pemakaian aturan B2B — reservasi
+    // sudah dipegang sejak order dibuat, jadi pelunasan tidak pernah gagal di sini.
+    await confirmOrderPricingInTx(tx, order);
     await this.settlePromotionLoyalty(tx, order);
 
     const promotion = await promoteBookingOnPaidInTx(tx, order.id);
@@ -645,10 +650,23 @@ export class PaymentsService {
    * ternyata sudah dibayar, saldo tidak dipotong.
    */
   async payOrderWithWalletForCustomer(customerId: string, orderId: string) {
+    return this.payOrderWithWalletForPayer({ customerId }, orderId);
+  }
+
+  /**
+   * Batch 3: pembayar = customer ATAU partner B2B (dompet partner) — satu jalur
+   * pelunasan untuk semua checkout saldo (mobile, kiosk, B2B).
+   */
+  async payOrderWithWalletForPayer(
+    payer: { customerId?: string; partnerId?: string },
+    orderId: string,
+  ) {
+    const owns = (o: { customerId: string | null; partnerId: string | null }) =>
+      payer.partnerId ? o.partnerId === payer.partnerId : !!payer.customerId && o.customerId === payer.customerId;
     // Fase 1 — kunci order, validasi, batalkan percobaan QRIS/VA aktif.
     const superseded = await this.prisma.$transaction(async (tx) => {
       const order = await this.lockOrder(tx, orderId);
-      if (order.customerId !== customerId) {
+      if (!owns(order)) {
         throw new ForbiddenException('Order bukan milik Anda');
       }
       this.assertPayable(order);
@@ -668,8 +686,12 @@ export class PaymentsService {
         if (await tx.payment.findUnique({ where: { pendingSlot: orderId } })) {
           throw new ConflictException('Ada pembayaran lain yang sedang diproses untuk order ini');
         }
+        if (!owns(order)) throw new ForbiddenException('Order bukan milik Anda');
         const amount = order.totalAmount;
-        const wallet = await this.getOrCreateWalletInTx(tx, { customerId });
+        const wallet = await this.getOrCreateWalletInTx(
+          tx,
+          payer.partnerId ? { partnerId: payer.partnerId } : { customerId: payer.customerId },
+        );
         if (amount.gt(0)) {
           await this.walletLedger.payWithWallet(tx, {
             walletId: wallet.id,

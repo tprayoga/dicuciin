@@ -19,13 +19,20 @@ export class PricingCalculationService {
 
   async calculate(input: CalculatePricingDto) {
     const ctx = await this.resolveContext(input);
-    const { orderItems } = await this.ordersService.priceItems(input.outletId, input.items);
+    const { orderItems, estimatedMinutes } = await this.ordersService.priceItems(
+      input.outletId,
+      input.items,
+    );
 
-    return this.pricingService.calculate({
+    // Batch 3: input identik dengan TransactionService.priceOrder (quantity
+    // dipakai mesin pricing untuk jumlah unit kuota happy hour, mis. dryer
+    // 3 siklus = 3 unit) + estimasi durasi dari server.
+    const pricing = await this.pricingService.calculate({
       segment: ctx.segment,
       items: orderItems.map((it) => ({
         serviceId: it.serviceId,
         machineType: it.machineType,
+        quantity: it.quantity,
         subtotal: it.subtotal,
       })),
       voucherCode: input.voucherCode,
@@ -38,6 +45,7 @@ export class PricingCalculationService {
       deliveryFee: input.deliveryFee,
       at: input.at ? new Date(input.at) : undefined,
     });
+    return { ...pricing, estimatedMinutes };
   }
 
   private async resolveContext(input: CalculatePricingDto) {

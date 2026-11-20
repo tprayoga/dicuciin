@@ -8,14 +8,11 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   Prisma,
   OrderStatus,
-  PaymentMethod,
   PaymentStatus,
   UserSegment,
   LedgerDirection,
   WalletType,
-  BookingStatus,
 } from '@prisma/client';
-import { generateDailySequence } from '../../common/utils/sequence.util';
 import { toNum, D } from '../../common/utils/money.util';
 import { OrdersService } from '../orders/orders.service';
 import { PricingService } from '../pricing/pricing.service';
@@ -28,14 +25,8 @@ import { PromosService } from '../promos/promos.service';
 import { CampaignService } from '../campaigns/campaign.service';
 import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 import { IotMachineService } from '../iot/iot-machine.service';
-import { randomBytes } from 'crypto';
-import {
-  createBookingInTx,
-  parseScheduledAt,
-  promoteBookingOnPaidInTx,
-  resolveBookableDevice,
-  bindLegacyHoldToOrderInTx,
-} from '../bookings/booking-lifecycle';
+import { PaymentsService } from '../payments/payments.service';
+import { OrderPricingSnapshot, readSnapshot } from '../orders/pricing-reservation';
 
 export interface CheckoutInput {
   customerId?: string;
@@ -52,6 +43,10 @@ export interface CheckoutInput {
   deviceId?: string;
   deviceCode?: string;
   scheduledAt?: string;
+  /** Batch 3 (S1): bayar order yang SUDAH ada (bukan membuat order baru). */
+  orderId?: string;
+  notes?: string;
+  customerAddressId?: string;
 }
 
 /** Detail perhitungan untuk response API (tugas 9). */
@@ -97,6 +92,8 @@ export class TransactionService {
     private campaignService: CampaignService,
     private loyaltyConfig: LoyaltyConfigService,
     private iotMachineService: IotMachineService,
+    // Batch 3: checkout saldo dilunasi lewat jalur bayar-saldo tunggal.
+    private paymentsService: PaymentsService,
   ) {}
 
   /**
@@ -128,50 +125,21 @@ export class TransactionService {
   }
 
   /** Preview perhitungan tanpa membuat order (tugas 9). */
-  async quote(input: CheckoutInput) {
+  /**
+   * Batch 3 — SATU-SATUNYA perhitungan harga order (dipakai quote, pembuatan
+   * order untuk QRIS/VA/saldo, dan kiosk): harga dasar → B2B → happy hour →
+   * voucher/promo → accrual, plus estimasi durasi mesin. Tamu kiosk (tanpa
+   * customer/partner) dihitung sebagai RETAIL tanpa tier.
+   */
+  async priceOrder(input: CheckoutInput) {
     const ctx =
       input.customerId || input.partnerId
         ? await this.resolveContext(input)
-        : {
-            segment: UserSegment.RETAIL,
-            tier: null,
-            b2bTier: null,
-            walletId: '',
-          };
-    const { orderItems } = await this.ordersService.priceItems(input.outletId, input.items);
-    return this.pricingService.calculate({
-      segment: ctx.segment,
-      items: orderItems.map((it) => ({
-        serviceId: it.serviceId,
-        machineType: it.machineType,
-        quantity: it.quantity,
-        subtotal: it.subtotal,
-      })),
-      voucherCode: input.voucherCode,
-      promoCode: input.promoCode,
-      outletId: input.outletId,
-      customerId: input.customerId,
-      partnerId: input.partnerId,
-      tier: ctx.tier,
-      b2bTier: ctx.b2bTier,
-      deliveryFee: input.deliveryFee,
-    });
-  }
-
-  /** Checkout penuh: harga → order → bayar wallet → settle loyalty. */
-  async checkout(input: CheckoutInput): Promise<TransactionResult> {
-    const wantsBooking = !!(input.deviceId || input.deviceCode);
-    if (wantsBooking && !input.customerId && !input.kioskId) {
-      throw new BadRequestException('Booking mesin membutuhkan customer');
-    }
-    const bookingNow = new Date();
-    const scheduledAt = wantsBooking ? parseScheduledAt(input.scheduledAt, bookingNow) : null;
-    const ctx = await this.resolveContext(input);
-    const { orderItems, subtotal } = await this.ordersService.priceItems(
+        : { segment: UserSegment.RETAIL, tier: null, b2bTier: null, walletId: '' };
+    const { orderItems, subtotal, estimatedMinutes } = await this.ordersService.priceItems(
       input.outletId,
       input.items,
     );
-
     const pricing = await this.pricingService.calculate({
       segment: ctx.segment,
       items: orderItems.map((it) => ({
@@ -189,245 +157,128 @@ export class TransactionService {
       b2bTier: ctx.b2bTier,
       deliveryFee: input.deliveryFee,
     });
+    return { ctx, orderItems, subtotal, estimatedMinutes, pricing };
+  }
 
+  /** Pratinjau harga — identik dengan yang akan ditagih saat order dibuat. */
+  async quote(input: CheckoutInput) {
+    const { pricing, estimatedMinutes } = await this.priceOrder(input);
+    return { ...pricing, estimatedMinutes };
+  }
+
+  /**
+   * Batch 3 (T3/T10/S1) — buat order (+ booking mesin) dengan harga final dari
+   * mesin pricing tunggal. Order ini yang dibayar QRIS, VA, ATAU saldo.
+   * Voucher & kuota happy hour direservasi di transaksi yang sama.
+   */
+  async createOrder(input: CheckoutInput, createdBy?: string) {
+    const { orderItems, subtotal, estimatedMinutes, pricing } = await this.priceOrder(input);
     const deliveryFee = D(input.deliveryFee ?? 0);
-    const totalAmount = D(pricing.finalAmount);
-    const discountAmount = subtotal.minus(D(pricing.spendingAmount));
-
-    // Nomor order dibuat di luar transaksi utama (advisory lock punya tx sendiri).
-    const orderNumber = await generateDailySequence(
-      this.prisma,
-      'ORD',
-      'order',
-      'orderNumber',
-      6,
+    const snapshot: OrderPricingSnapshot = {
+      version: 1,
+      segment: input.partnerId ? 'B2B' : 'RETAIL',
+      basePrice: pricing.basePrice,
+      b2bDiscount: pricing.b2bDiscount,
+      happyHourDiscount: pricing.happyHourDiscount,
+      voucherDiscount: pricing.voucherDiscount,
+      promoDiscount: pricing.promoDiscount,
+      deliveryFee: pricing.deliveryFee,
+      spendingAmount: pricing.spendingAmount,
+      finalAmount: pricing.finalAmount,
+      pointsToEarn: pricing.pointsToEarn,
+      cashbackToCredit: pricing.cashbackToCredit,
+      voucherId: pricing.voucherId ?? null,
+      voucherCode: pricing.voucherCode ?? null,
+      promoId: pricing.promoId ?? null,
+      happyHourRules: pricing.happyHourRules ?? [],
+      b2bPricingRules: pricing.b2bPricingRules ?? [],
+      estimatedMinutes,
+    };
+    return this.ordersService.create(
+      {
+        customerId: input.customerId,
+        outletId: input.outletId,
+        kioskId: input.kioskId,
+        staffUserId: input.staffUserId,
+        sourcePlatform: input.sourcePlatform ?? 'MOBILE_APP',
+        items: input.items as any,
+        notes: input.notes,
+        customerAddressId: input.customerAddressId,
+        deviceId: input.deviceId,
+        deviceCode: input.deviceCode,
+        scheduledAt: input.scheduledAt,
+      } as any,
+      createdBy,
+      {
+        orderItems,
+        subtotal,
+        discountAmount: subtotal.minus(D(pricing.spendingAmount)),
+        deliveryFee,
+        totalAmount: D(pricing.finalAmount),
+        promoId: pricing.promoId ?? null,
+        partnerId: input.partnerId ?? null,
+        snapshot,
+      },
     );
+  }
 
+  /**
+   * Checkout saldo (kiosk, app lama, B2B). Batch 3: TIDAK lagi membuat
+   * pembayaran sendiri — membuat order ber-harga (atau memakai `orderId` yang
+   * sudah ada) lalu membayarnya lewat jalur bayar-saldo tunggal
+   * (PaymentsService → settlePaidInTx). Bila pembayaran gagal, order yang baru
+   * dibuat dibatalkan (voucher, kuota, dan mesin dilepas) — tidak ada order yatim.
+   */
+  async checkout(input: CheckoutInput): Promise<TransactionResult> {
+    const ctx = await this.resolveContext(input);
+    let orderId = input.orderId;
+    let createdHere = false;
+    if (!orderId) {
+      const order: any = await this.createOrder(input, input.customerId ?? input.staffUserId);
+      orderId = order.id as string;
+      createdHere = true;
+    }
+    const payer = input.partnerId ? { partnerId: input.partnerId } : { customerId: input.customerId };
     try {
-      const result = await this.prisma.$transaction(async (tx) => {
-        const order = await tx.order.create({
-          data: {
-            orderNumber,
-            customerId: input.customerId,
-            partnerId: input.partnerId,
-            outletId: input.outletId,
-            kioskId: input.kioskId,
-            staffUserId: input.staffUserId,
-            promoId: pricing.promoId,
-            sourcePlatform: input.sourcePlatform ?? 'MOBILE_APP',
-            subtotal,
-            discountAmount,
-            deliveryFee,
-            totalAmount,
-            status: OrderStatus.DRAFT,
-            items: { create: orderItems.map(({ machineType, ...item }) => item) },
-            statusLogs: {
-              create: { status: OrderStatus.DRAFT, notes: 'Order created', createdBy: input.staffUserId },
-            },
-          },
-        });
-
-        // K2/T2: booking mesin dibuat atomik bersama order (HOLD), lalu naik
-        // RESERVED setelah order PAID di transaksi yang sama.
-        if (wantsBooking) {
-          const device = await resolveBookableDevice(
-            tx,
-            { deviceId: input.deviceId, deviceCode: input.deviceCode },
-            input.outletId,
-          );
-          await createBookingInTx(tx, {
-            customerId: input.customerId ?? null,
-            deviceId: device.id,
-            orderId: order.id,
-            scheduledAt,
-            status: BookingStatus.HOLD,
-            bookingCode: 'BK-' + randomBytes(4).toString('hex').toUpperCase(),
-            now: bookingNow,
-          });
-        }
-        // App mobile versi lama: reservasi (POST /bookings) dibuat sebelum checkout.
-        let legacyBound = false;
-        if (!wantsBooking && input.customerId && !input.kioskId) {
-          const services = await tx.service.findMany({
-            where: { id: { in: input.items.map((it) => it.serviceId) } },
-            select: { machineType: true },
-          });
-          legacyBound = !!(await bindLegacyHoldToOrderInTx(tx, {
-            customerId: input.customerId,
-            outletId: input.outletId,
-            orderId: order.id,
-            machineTypes: [
-              ...input.items.map((it) => (it as { machineType?: string }).machineType),
-              ...services.map((sv) => sv.machineType),
-            ],
-            now: bookingNow,
-          }));
-        }
-
-        // Bayar wallet: BONUS dulu, sisanya MAIN (saldo tak boleh minus).
-        let bonusUsed = new Prisma.Decimal(0);
-        let mainUsed = new Prisma.Decimal(0);
-        if (totalAmount.gt(0)) {
-          const paid = await this.walletLedger.payWithWallet(tx, {
-            walletId: ctx.walletId,
-            amount: totalAmount,
-            orderId: order.id,
-            allowBonus: true,
-          });
-          bonusUsed = paid.bonusUsed;
-          mainUsed = paid.mainUsed;
-        }
-
-        const walletPayment = await tx.payment.create({
-          data: {
-            orderId: order.id,
-            provider: 'wallet',
-            paymentNumber: `PAY-${orderNumber}`,
-            paymentMethod: PaymentMethod.WALLET,
-            amount: totalAmount,
-            status: PaymentStatus.PAID,
-            paidAt: new Date(),
-            notes: 'Pembayaran wallet (loyalty checkout)',
-          },
-        });
-
-        await tx.order.update({
-          where: { id: order.id },
-          // Batch 2: pembayaran yang melunasi order dicatat (unik).
-          data: { status: OrderStatus.PAID, paidPaymentId: walletPayment.id },
-        });
-        await tx.orderStatusLog.create({
-          data: {
-            orderId: order.id,
-            status: OrderStatus.PAID,
-            notes: 'Dibayar via wallet',
-            createdBy: input.customerId ?? input.staffUserId,
-          },
-        });
-        if (wantsBooking || legacyBound) {
-          await promoteBookingOnPaidInTx(tx, order.id, bookingNow);
-        }
-
-        // --- Settle loyalty (semua dalam transaksi yang sama) ---
-        if (pricing.happyHourRules?.length) {
-          await this.campaignService.consumeHappyHourQuota(
-            tx,
-            pricing.happyHourRules.map((rule) => ({
-              ruleId: rule.ruleId,
-              quantity: rule.quantity,
-            })),
-          );
-        }
-
-        if (pricing.b2bPricingRules?.length) {
-          await (tx as any).b2BPricingRuleUsage.createMany({
-            data: pricing.b2bPricingRules.map((rule) => ({
-              orderId: order.id,
-              ruleId: rule.ruleId,
-              partnerId: input.partnerId,
-              discountAmount: new Prisma.Decimal(rule.discountAmount),
-            })),
-            skipDuplicates: true,
-          });
-        }
-
-        if (pricing.voucherId) {
-          await this.voucherService.redeem(tx, {
-            userVoucherId: pricing.voucherId,
-            orderId: order.id,
-            customerId: input.customerId,
-            partnerId: input.partnerId,
-            discountApplied: pricing.voucherDiscount,
-          });
-        }
-        if (pricing.promoId) {
-          await this.promosService.commitUsage(tx, order.id);
-        }
-
-        // Poin dari transaksi sukses (bukan top up).
-        if (pricing.pointsToEarn > 0) {
-          await this.pointService.earn({
-            walletId: ctx.walletId,
-            points: pricing.pointsToEarn,
-            orderId: order.id,
-            sourceType: 'ORDER',
-            idempotencyKey: `point-earn-${order.id}`,
-            tx,
-          });
-        }
-
-        // Cashback tier → BONUS_BALANCE.
-        let cashbackCredited = new Prisma.Decimal(0);
-        if (pricing.cashbackToCredit > 0) {
-          await this.walletLedger.creditCashback({
-            walletId: ctx.walletId,
-            amount: pricing.cashbackToCredit,
-            orderId: order.id,
-            referenceType: 'TIER_CASHBACK',
-            referenceId: order.id,
-            idempotencyKey: `cashback-tier-${order.id}`,
-            tx,
-          });
-          cashbackCredited = D(pricing.cashbackToCredit);
-        }
-
-        // Update tier (top up tidak ikut; basis = nilai transaksi).
-        if (input.customerId) {
-          await this.membershipTierService.recordSuccessfulTransaction(
-            tx,
-            input.customerId,
-            pricing.spendingAmount,
-          );
-          // Trigger REFERRAL: reward saat transaksi pertama referee (bukan saat daftar).
-          await this.campaignService.qualifyReferralOnFirstTransaction(
-            tx,
-            input.customerId,
-            order.id,
-          );
-        } else if (input.partnerId) {
-          await this.b2bPartnerService.recordSuccessfulTransaction(
-            tx,
-            input.partnerId,
-            pricing.spendingAmount,
-          );
-        }
-
-        return { order, bonusUsed, mainUsed, cashbackCredited };
-      });
-
-      // Aktivasi mesin di luar transaksi finansial (best-effort; tak menggagalkan
-      // checkout). No-op bila order tak terikat mesin (mis. tanpa booking).
-      await this.iotMachineService.activateMachineForOrder(result.order.id);
-
-      return {
-        orderId: result.order.id,
-        orderNumber: result.order.orderNumber,
-        status: OrderStatus.PAID,
-        segment: ctx.segment,
-        breakdown: {
-          basePrice: pricing.basePrice,
-          b2bDiscount: pricing.b2bDiscount,
-          happyHourDiscount: pricing.happyHourDiscount,
-          voucherDiscount: pricing.voucherDiscount,
-          promoDiscount: pricing.promoDiscount,
-          deliveryFee: pricing.deliveryFee,
-          finalAmount: pricing.finalAmount,
-          bonusBalanceUsed: toNum(result.bonusUsed),
-          mainBalanceUsed: toNum(result.mainUsed),
-          pointEarned: pricing.pointsToEarn,
-          cashbackCredited: toNum(result.cashbackCredited),
-          voucherCode: pricing.voucherCode,
-        },
-      };
+      await this.paymentsService.payOrderWithWalletForPayer(payer, orderId);
     } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002'
-      ) {
-        throw new ConflictException('Order sudah dibayar');
+      if (createdHere) {
+        await this.ordersService
+          .cancel(orderId, { cancelReason: 'Pembayaran saldo gagal' }, undefined, undefined, { requireUnpaid: true })
+          .catch(() => undefined);
       }
       throw err;
     }
+
+    const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    const snapshot = readSnapshot(order.pricingSnapshot);
+    const ledgers = await this.prisma.walletLedger.findMany({ where: { orderId, walletId: ctx.walletId } });
+    const sum = (pred: (l: (typeof ledgers)[number]) => boolean) =>
+      ledgers.filter(pred).reduce((s, l) => s + toNum(l.amount), 0);
+    const points = await this.prisma.pointLedger.aggregate({
+      where: { orderId, direction: LedgerDirection.CREDIT, sourceType: 'ORDER' },
+      _sum: { points: true },
+    });
+    return {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      segment: ctx.segment,
+      breakdown: {
+        basePrice: snapshot?.basePrice ?? toNum(order.subtotal),
+        b2bDiscount: snapshot?.b2bDiscount ?? 0,
+        happyHourDiscount: snapshot?.happyHourDiscount ?? 0,
+        voucherDiscount: snapshot?.voucherDiscount ?? 0,
+        promoDiscount: snapshot?.promoDiscount ?? 0,
+        deliveryFee: toNum(order.deliveryFee),
+        finalAmount: toNum(order.totalAmount),
+        bonusBalanceUsed: sum((l) => l.direction === LedgerDirection.DEBIT && l.walletType === WalletType.BONUS_BALANCE),
+        mainBalanceUsed: sum((l) => l.direction === LedgerDirection.DEBIT && l.walletType === WalletType.MAIN_BALANCE),
+        pointEarned: points._sum.points ?? 0,
+        cashbackCredited: sum((l) => l.direction === LedgerDirection.CREDIT && l.referenceType === 'TIER_CASHBACK'),
+        voucherCode: snapshot?.voucherCode ?? undefined,
+      },
+    };
   }
 
   /**

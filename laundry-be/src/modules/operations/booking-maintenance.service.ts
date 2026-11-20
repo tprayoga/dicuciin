@@ -20,6 +20,7 @@ import {
 } from "@prisma/client";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { PaymentsService } from "../payments/payments.service";
+import { OrdersService } from "../orders/orders.service";
 import {
   IotMachineService,
   IotCommandStatus,
@@ -27,6 +28,7 @@ import {
 } from "../iot/iot-machine.service";
 import { completeBookingForOrder } from "../bookings/booking-lifecycle";
 import { recordReconciliationInTx } from "../payments/reconciliation-record";
+import { releaseOrderPricingInTx } from "../orders/pricing-reservation";
 
 const num = (v: string | undefined, d: number) => {
   const n = Number(v);
@@ -63,6 +65,7 @@ export class BookingMaintenanceService {
     private readonly prisma: PrismaService,
     private readonly payments: PaymentsService,
     private readonly iot: IotMachineService,
+    private readonly orders: OrdersService,
   ) {}
 
   /** Kunci booking (lewati bila sedang dipegang worker lain). */
@@ -163,6 +166,7 @@ export class BookingMaintenanceService {
                   "Kedaluwarsa: tidak dibayar dalam batas waktu booking",
               },
             });
+            await releaseOrderPricingInTx(tx, order.id);
             await tx.orderStatusLog.create({
               data: {
                 orderId: order.id,
@@ -186,6 +190,55 @@ export class BookingMaintenanceService {
     // settle → order sudah CANCELLED → rekonsiliasi PAID_AFTER_CANCEL).
     await this.payments.cancelAttemptsAtGateway(retired);
     return { scanned: candidates.length, expired, skipped };
+  }
+
+  // ── A2. Order belum dibayar yang ditinggalkan (S1) ─────────────────────
+  /**
+   * Order DRAFT/WAITING_PAYMENT lebih tua dari ORDER_UNPAID_TTL_MINUTES tanpa
+   * tagihan aktif & tanpa HOLD hidup → dibatalkan lewat jalur pembatalan
+   * tunggal (voucher/kuota dikembalikan, tagihan di-expire). Tidak menyentuh
+   * order yang pelanggannya masih bisa membayar.
+   */
+  async expireUnpaidOrders(now = new Date()) {
+    const cfg = maintenanceConfig();
+    const ttl = num(process.env.ORDER_UNPAID_TTL_MINUTES, 60);
+    const candidates = await this.prisma.order.findMany({
+      where: {
+        status: { in: [OrderStatus.DRAFT, OrderStatus.WAITING_PAYMENT] },
+        createdAt: { lt: ago(now, ttl * 60_000) },
+        OR: [
+          { machineBooking: { is: null } },
+          { machineBooking: { status: { notIn: [BookingStatus.HOLD, BookingStatus.RESERVED, BookingStatus.IN_USE] } } },
+          { machineBooking: { status: BookingStatus.HOLD, expiresAt: { lt: now } } },
+        ],
+      },
+      select: { id: true },
+      take: cfg.batch,
+    });
+    let cancelled = 0;
+    for (const c of candidates) {
+      const active = await this.prisma.payment.findUnique({ where: { pendingSlot: c.id } });
+      if (
+        active &&
+        (!active.expiresAt ||
+          active.expiresAt.getTime() + cfg.paymentGraceSeconds * 1000 > now.getTime())
+      ) {
+        continue; // tagihan masih bisa dibayar
+      }
+      try {
+        await this.orders.cancel(
+          c.id,
+          { cancelReason: 'Kedaluwarsa: order tidak dibayar' },
+          undefined,
+          undefined,
+          { requireUnpaid: true },
+        );
+        cancelled++;
+      } catch {
+        // Sudah dibayar/dibatalkan worker lain di antara pembacaan & kunci — abaikan.
+      }
+    }
+    return { scanned: candidates.length, cancelled };
   }
 
   // ── B. Penyelesaian booking ────────────────────────────────────────────

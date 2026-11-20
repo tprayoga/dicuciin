@@ -329,16 +329,23 @@ export class KiosksService {
     const { customerLookup, scheduledAt: _scheduledAt, ...orderDto } = dto;
     this.assertMachineSelected(dto);
     const customerId = dto.customerId ?? await this.resolveCustomerLookup(customerLookup);
-    return this.ordersService.create({
-      ...orderDto,
-      // Kiosk = pemakaian di tempat, sekarang juga (tidak ada booking terjadwal).
-      scheduledAt: undefined,
+    // Batch 3: harga dari mesin pricing tunggal (promo, happy hour) — sama dengan
+    // mobile. Voucher pribadi TIDAK dipakai di sini: customer kiosk hanya
+    // diidentifikasi No. HP tanpa PIN (voucher kiosk hanya lewat checkout saldo ber-PIN).
+    return this.transactionService.createOrder({
       customerId,
       outletId: kiosk.outletId,
       kioskId: kiosk.id,
-      staffUserId: undefined,
       sourcePlatform: 'KIOSK',
+      items: orderDto.items as any,
+      promoCode: orderDto.promoCode,
+      voucherCode: undefined,
+      deliveryFee: orderDto.deliveryFee,
       notes: dto.notes || `Order dibuat dari ${kiosk.kioskCode}`,
+      deviceId: orderDto.deviceId,
+      deviceCode: orderDto.deviceCode,
+      // Kiosk = pemakaian di tempat, sekarang juga (tidak ada booking terjadwal).
+      scheduledAt: undefined,
     });
   }
 

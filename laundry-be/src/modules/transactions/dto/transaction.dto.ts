@@ -94,6 +94,14 @@ export class CheckoutDto {
   @IsDateString()
   @IsOptional()
   scheduledAt?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Batch 3 (S1): bayar order yang SUDAH ada dengan saldo (tidak membuat order baru)',
+  })
+  @IsString()
+  @IsOptional()
+  orderId?: string;
 }
 
 export class RefundTransactionDto {

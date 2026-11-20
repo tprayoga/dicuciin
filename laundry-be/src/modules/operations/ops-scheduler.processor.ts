@@ -21,7 +21,11 @@ export class OpsSchedulerProcessor extends WorkerHost {
   async process(job: Job) {
     switch (job.name) {
       case "expire-holds":
-        return this.log(job.name, await this.maintenance.expireHolds());
+        return this.log(job.name, {
+          ...(await this.maintenance.expireHolds()),
+          unpaidOrdersCancelled: (await this.maintenance.expireUnpaidOrders())
+            .cancelled,
+        });
       case "complete-bookings":
         return this.log(job.name, await this.maintenance.completeBookings());
       case "recover-stuck":

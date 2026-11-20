@@ -6,6 +6,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import * as crypto from "crypto";
+import { OrdersService } from "../orders/orders.service";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { IotService } from "../iot/iot.service";
 import { IotMachineService } from "../iot/iot-machine.service";
@@ -36,6 +37,7 @@ export class BookingsService {
     private prisma: PrismaService,
     private iot: IotService,
     private iotMachine: IotMachineService,
+    private orders: OrdersService,
   ) {}
 
   private async resolveCustomerId(userId: string): Promise<string> {
@@ -298,30 +300,26 @@ export class BookingsService {
         "Booking ini sudah dibayar dan tidak bisa dibatalkan sendiri. Hubungi admin.",
       );
     }
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.machineBooking.update({
+    if (order) {
+      // Batch 3: order belum dibayar dibatalkan lewat jalur pembatalan tunggal
+      // (kunci order, cek ulang belum dibayar, lepas booking + voucher/kuota,
+      // batalkan tagihan QRIS/VA aktif di gateway).
+      await this.orders.cancel(
+        order.id,
+        { cancelReason: "Booking dibatalkan pelanggan" },
+        userId,
+        undefined,
+        { requireUnpaid: true },
+      );
+      return this.prisma.machineBooking.findUniqueOrThrow({
         where: { id },
-        data: { status: BookingStatus.CANCELLED },
         include: bookingInclude,
       });
-      // Order belum dibayar ikut dibatalkan agar tidak ada order DRAFT yatim.
-      if (order) {
-        await tx.order.update({
-          where: { id: order.id },
-          data: {
-            status: OrderStatus.CANCELLED,
-            cancelledAt: new Date(),
-            cancelReason: "Booking dibatalkan pelanggan",
-            statusLogs: {
-              create: {
-                status: OrderStatus.CANCELLED,
-                notes: "Booking dibatalkan pelanggan",
-              },
-            },
-          },
-        });
-      }
-      return updated;
+    }
+    return this.prisma.machineBooking.update({
+      where: { id },
+      data: { status: BookingStatus.CANCELLED },
+      include: bookingInclude,
     });
   }
 
