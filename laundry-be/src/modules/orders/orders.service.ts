@@ -35,6 +35,8 @@ import {
 import { generateDailySequence } from "../../common/utils/sequence.util";
 import { toNum } from "../../common/utils/money.util";
 import { PromosService } from "../promos/promos.service";
+import { assertWithinOperatingHours } from "../../common/utils/operating-hours";
+
 
 @Injectable()
 export class OrdersService {
@@ -193,6 +195,8 @@ export class OrdersService {
     if (!outlet) {
       throw new NotFoundException("Outlet not found");
     }
+    // Batch 6 (T8): jadwal booking harus di dalam jam operasional outlet.
+    if (scheduledAt) assertWithinOperatingHours(outlet, scheduledAt);
 
     if (customerId) {
       const customer = await this.prisma.customer.findUnique({
@@ -293,6 +297,16 @@ export class OrdersService {
           { deviceId, deviceCode },
           outletId,
         );
+        // Batch 6 (S3): mesin dengan layanan terdaftar hanya menjalankan
+        // layanan itu (harga & durasi mesin, bukan tebakan aplikasi).
+        if (
+          device.serviceId &&
+          !orderItems.some((it) => it.serviceId === device.serviceId)
+        ) {
+          throw new BadRequestException(
+            "Layanan tidak sesuai dengan mesin yang dipilih. Muat ulang daftar mesin.",
+          );
+        }
         const booking = await createBookingInTx(tx, {
           customerId: customerId ?? null,
           deviceId: device.id,

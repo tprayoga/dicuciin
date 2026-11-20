@@ -20,6 +20,12 @@ export class MobileMemberController {
     return this.mobileMemberService.getVouchers(req.user.userId);
   }
 
+  @Get('rewards')
+  @ApiOperation({ summary: 'Katalog voucher yang bisa ditukar poin (Batch 6)' })
+  async rewards(@Request() req: any) {
+    return this.mobileMemberService.getRewards(req.user.userId);
+  }
+
   @Get('points')
   @ApiOperation({ summary: 'Saldo dan riwayat poin member login' })
   async points(@Request() req: any) {

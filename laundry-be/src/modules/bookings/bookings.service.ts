@@ -22,6 +22,11 @@ import {
   resolveBookableDevice,
   slotStart,
 } from "./booking-lifecycle";
+import {
+  assertWithinOperatingHours,
+  isWithinOperatingHours,
+  tzOffsetMinutes,
+} from "../../common/utils/operating-hours";
 
 const bookingInclude = {
   device: {
@@ -92,6 +97,14 @@ export class BookingsService {
 
     const booking = await this.prisma.$transaction(async (tx) => {
       const device = await resolveBookableDevice(tx, ref);
+      // Batch 6 (T8): jadwal di dalam jam operasional outlet.
+      if (scheduledAt) {
+        const outlet = await tx.outlet.findUnique({
+          where: { id: device.outletId },
+          select: { openTime: true, closeTime: true },
+        });
+        if (outlet) assertWithinOperatingHours(outlet, scheduledAt);
+      }
       return createBookingInTx(tx, {
         customerId,
         deviceId: device.id,
@@ -337,6 +350,23 @@ export class BookingsService {
     const devices = await this.prisma.iotDevice.findMany({
       where: { outletId, deviceType: { in: MACHINE_TYPES } },
       orderBy: { deviceCode: "asc" },
+      include: {
+        service: {
+          select: {
+            id: true,
+            name: true,
+            machineType: true,
+            capacityKg: true,
+            estimateMinutes: true,
+            isActive: true,
+            servicePrices: {
+              where: { outletId, isActive: true },
+              select: { price: true, unit: true, pricingType: true },
+              take: 1,
+            },
+          },
+        },
+      },
     });
 
     const statusByDevice = await this.activeBookingStatusByDevice(
@@ -345,6 +375,9 @@ export class BookingsService {
 
     const machines = devices.map((d) => {
       const status = this.effectiveStatus(d.status, statusByDevice.get(d.id));
+      // Batch 6 (S3): kapasitas & layanan dari data mesin. Layanan hanya
+      // dikirim bila aktif DAN punya harga aktif di outlet ini.
+      const price = d.service?.isActive ? d.service.servicePrices[0] : undefined;
       return {
         deviceId: d.id,
         deviceCode: d.deviceCode,
@@ -352,10 +385,34 @@ export class BookingsService {
         type: d.deviceType,
         status,
         bookable: status === "AVAILABLE",
+        capacityKg: d.capacityKg ?? d.service?.capacityKg ?? null,
+        service:
+          d.service && price
+            ? {
+                serviceId: d.service.id,
+                name: d.service.name,
+                machineType: d.service.machineType,
+                estimateMinutes: d.service.estimateMinutes,
+                price: Number(price.price),
+                unit: price.unit,
+                pricingType: price.pricingType,
+              }
+            : null,
       };
     });
 
-    return { outletId, occupancy: this.occupancyOf(machines), machines };
+    return {
+      outletId,
+      // Batch 6 (T8): jam operasional untuk slot booking di aplikasi.
+      operatingHours: {
+        openTime: outlet.openTime,
+        closeTime: outlet.closeTime,
+        utcOffsetMinutes: tzOffsetMinutes(),
+        openNow: isWithinOperatingHours(outlet, new Date()),
+      },
+      occupancy: this.occupancyOf(machines),
+      machines,
+    };
   }
 
   /** Ringkasan keramaian semua outlet aktif (untuk halaman daftar lokasi). */

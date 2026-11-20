@@ -432,6 +432,16 @@ export class AuthService {
     return { message: 'Password berhasil direset. Silakan login dengan password baru.' };
   }
 
+  /**
+   * Batch 6: re-autentikasi untuk tindakan sensitif (mis. hapus akun) —
+   * password + penguncian login yang sama dengan login.
+   */
+  async verifyPasswordForSensitiveAction(userId: string, password: string) {
+    const check = await this.checkPassword(userId, password);
+    if (check.outcome === 'LOCKED') throw this.lockedError(check.until);
+    if (check.outcome !== 'OK') throw new BadRequestException('Kata sandi salah');
+  }
+
   /** Ganti password dari aplikasi: wajib password lama; sesi lain dicabut. */
   async changePassword(actor: AuthUser, currentPassword: string, newPassword: string) {
     if (currentPassword === newPassword) {

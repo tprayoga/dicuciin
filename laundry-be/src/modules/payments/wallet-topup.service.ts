@@ -32,6 +32,7 @@ import { toNum } from "../../common/utils/money.util";
 import { generateDailySequence } from "../../common/utils/sequence.util";
 import { WalletLedgerService } from "../wallets/wallet-ledger.service";
 import { CampaignService } from "../campaigns/campaign.service";
+import { notifyCustomerInTx, rupiah } from "../notifications/notify";
 import {
   GatewayWebhookResult,
   PAYMENT_GATEWAY,
@@ -267,6 +268,14 @@ export class WalletTopupService {
           pendingSlot: null,
           ledgerId: ledger.id,
         },
+      });
+      // Batch 6 (R1): notifikasi dalam aplikasi, satu kali per top-up.
+      await notifyCustomerInTx(tx, t.customerId, {
+        type: "TOPUP_PAID",
+        title: "Top up berhasil",
+        body: `Saldo bertambah ${rupiah(t.amount)} (${t.topupNumber}).`,
+        data: { topupNumber: t.topupNumber },
+        dedupeKey: `topup-paid-${t.id}`,
       });
       // Cashback top-up hanya bila ada kampanye CASHBACK_TOPUP aktif (default: tidak ada).
       await this.campaigns.handleTopupCashback(tx, {

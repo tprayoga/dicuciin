@@ -41,6 +41,7 @@ import {
 import { recordReconciliationInTx } from './reconciliation-record';
 import { WalletTopupService } from './wallet-topup.service';
 import { confirmOrderPricingInTx } from '../orders/pricing-reservation';
+import { notifyCustomerInTx, rupiah } from '../notifications/notify';
 
 @Injectable()
 export class PaymentsService {
@@ -576,6 +577,14 @@ export class PaymentsService {
         notes: note,
         createdBy: order.customerId ?? undefined,
       },
+    });
+    // Batch 6 (R1): notifikasi dalam aplikasi, satu kali per order.
+    await notifyCustomerInTx(tx, order.customerId, {
+      type: 'ORDER_PAID',
+      title: 'Pembayaran berhasil',
+      body: `Order ${order.orderNumber} lunas (${rupiah(order.totalAmount)}). Datang sesuai jadwal, lalu scan QR di mesin untuk mulai.`,
+      data: { orderId: order.id, orderNumber: order.orderNumber },
+      dedupeKey: `order-paid-${order.id}`,
     });
 
     // Percobaan lain yang masih aktif tidak lagi berlaku.

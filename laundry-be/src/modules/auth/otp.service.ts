@@ -70,9 +70,13 @@ export class OtpService {
     }
 
     // Untuk RESET_PASSWORD / LOGIN: nomor HARUS sudah terdaftar.
-    if (purpose === OtpPurpose.RESET_PASSWORD || purpose === OtpPurpose.LOGIN) {
+    if (
+      purpose === OtpPurpose.RESET_PASSWORD ||
+      purpose === OtpPurpose.LOGIN ||
+      purpose === OtpPurpose.ACCOUNT_DELETION
+    ) {
       const existing = await this.prisma.user.findFirst({
-        where: { phone: { in: variants } },
+        where: { phone: { in: variants }, deletedAt: null },
         select: { id: true },
       });
       if (!existing) throw new NotFoundException('Nomor HP tidak terdaftar');

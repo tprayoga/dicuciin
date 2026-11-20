@@ -6,7 +6,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { Prisma, LedgerDirection, UserRole } from '@prisma/client';
+import { Prisma, LedgerDirection, UserRole, UserSegment } from '@prisma/client';
+import { REWARD_BLOCKER_MESSAGE, rewardBlockers } from './reward-eligibility';
 import { VoucherService } from '../vouchers/voucher.service';
 import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 
@@ -229,6 +230,9 @@ export class PointService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+        // Batch 6 (R3): kunci baris template → kuota & batas per pengguna
+        // tidak bisa dilewati dengan penukaran paralel.
+        await tx.$queryRaw`SELECT id FROM voucher_templates WHERE id = ${input.templateId} FOR UPDATE`;
         const template = await tx.voucherTemplate.findUnique({
           where: { id: input.templateId },
         });
@@ -240,6 +244,34 @@ export class PointService {
         const pointCost = template.pointCost ?? 0;
         if (pointCost <= 0) {
           throw new BadRequestException('Template voucher tidak bisa ditebus dengan point');
+        }
+
+        // Batch 6 (R3): periode, kuota, segmen, tier, batas per pengguna.
+        const ownedCount = await tx.userVoucher.count({
+          where: {
+            templateId: template.id,
+            ...(wallet.customerId ? { customerId: wallet.customerId } : { partnerId: wallet.partnerId }),
+          },
+        });
+        const membership = wallet.customerId
+          ? await tx.userMembershipStatus.findUnique({
+              where: { customerId: wallet.customerId },
+              select: { currentTier: true },
+            })
+          : null;
+        const partner = wallet.partnerId
+          ? await tx.b2BPartner.findUnique({ where: { id: wallet.partnerId }, select: { tier: true } })
+          : null;
+        const blockers = rewardBlockers(template, {
+          now: new Date(),
+          segment: wallet.customerId ? UserSegment.RETAIL : UserSegment.B2B,
+          tier: membership?.currentTier ?? null,
+          b2bTier: partner?.tier ?? null,
+          ownedCount,
+          pointBalance: Number.MAX_SAFE_INTEGER, // saldo poin dicek atomik oleh redeem()
+        });
+        if (blockers.length) {
+          throw new BadRequestException(REWARD_BLOCKER_MESSAGE[blockers[0]]);
         }
 
         const pointLedger = await this.redeem({

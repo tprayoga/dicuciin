@@ -27,6 +27,7 @@ import { QueuesModule } from './modules/queues/queues.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { AccountModule } from './modules/account/account.module';
 import { PointsModule } from './modules/points/points.module';
 import { VouchersModule } from './modules/vouchers/vouchers.module';
 import { MembershipsModule } from './modules/memberships/memberships.module';
@@ -78,6 +79,7 @@ import { MobileMemberModule } from './modules/mobile/mobile-member.module';
     UploadsModule,
     ReportsModule,
     NotificationsModule,
+    AccountModule,
     // Promotion & Loyalty Engine
     PointsModule,
     VouchersModule,

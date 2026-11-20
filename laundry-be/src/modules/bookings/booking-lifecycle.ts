@@ -17,6 +17,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { BookingStatus, DeviceType, Prisma } from "@prisma/client";
+import { notifyCustomerInTx } from "../notifications/notify";
 
 const logger = new Logger("BookingLifecycle");
 
@@ -403,6 +404,14 @@ export async function completeBookingForOrder(
       await tx.order.update({
         where: { id: orderId },
         data: { status: "COMPLETED", completedAt: new Date() },
+      });
+      // Batch 6 (R1, S8): cucian selesai → minta ulasan (sekali per order).
+      await notifyCustomerInTx(tx, order.customerId, {
+        type: "ORDER_COMPLETED",
+        title: "Cucian selesai",
+        body: `Order ${order.orderNumber} selesai. Ambil cucianmu, lalu beri ulasan untuk layanan kami.`,
+        data: { orderId, orderNumber: order.orderNumber, reviewRequested: true },
+        dedupeKey: `order-completed-${orderId}`,
       });
       await tx.orderStatusLog.create({
         data: {

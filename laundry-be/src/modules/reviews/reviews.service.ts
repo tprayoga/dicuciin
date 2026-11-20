@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   ConflictException,
@@ -6,7 +7,20 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateReviewDto } from './dto/review.dto';
-import { ReviewSource, Prisma } from '@prisma/client';
+import { ReviewSource, Prisma, OrderStatus } from '@prisma/client';
+
+/** Batch 6 (S8): status order yang boleh diulas pelanggan. */
+const REVIEWABLE_STATUSES: OrderStatus[] = [
+  OrderStatus.PAID,
+  OrderStatus.RECEIVED,
+  OrderStatus.WASHING,
+  OrderStatus.DRYING,
+  OrderStatus.IRONING,
+  OrderStatus.PACKING,
+  OrderStatus.READY_PICKUP,
+  OrderStatus.OUT_FOR_DELIVERY,
+  OrderStatus.COMPLETED,
+];
 
 const reviewInclude = {
   customer: { include: { user: { select: { name: true } } } },
@@ -35,8 +49,13 @@ export class ReviewsService {
     if (orderId) {
       const order = await this.prisma.order.findUnique({ where: { id: orderId } });
       if (!order) throw new NotFoundException('Order not found');
-      if (customerId && order.customerId && order.customerId !== customerId) {
+      if (customerId && order.customerId !== customerId) {
         throw new ForbiddenException('Tidak boleh mengulas order milik orang lain');
+      }
+      // Batch 6 (S8): pelanggan mengulas layanan yang sudah dibayar/dipakai,
+      // bukan order yang belum dibayar atau dibatalkan. (Ulasan kiosk tetap.)
+      if (customerId && !REVIEWABLE_STATUSES.includes(order.status)) {
+        throw new BadRequestException('Ulasan bisa diberikan setelah order dibayar');
       }
       const existing = await this.prisma.review.findUnique({ where: { orderId } });
       if (existing) throw new ConflictException('Order ini sudah diulas');
