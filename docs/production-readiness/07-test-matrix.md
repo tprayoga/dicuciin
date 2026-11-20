@@ -23,7 +23,7 @@ File: `laundry-be/src/common/auth/authorization.http.spec.ts` (HTTP, controller 
 | Top-up langsung (2 jalur) | customer | 403 | ✅ |
 | Refund mandiri | customer | 403 | ✅ |
 | Refund rute lama untuk order customer lain | admin outlet | 404 | ✅ |
-| Bayar pakai wallet customer lain / kirim `amount` | customer | 403 / 400 | ✅ |
+| Bayar pakai wallet customer lain / kirim `amount` | customer | 403 / (Batch 1.5: `amount` diterima & diabaikan) | ✅ |
 | Nominal bayar saldo = total order (abaikan nilai klien) | — | debit = total | ✅ |
 | Bayar order CANCELLED/REFUNDED/COMPLETED | — | 400 | ✅ |
 | Checkout/quote/pricing atas nama customer/partner lain | customer | 403 | ✅ |
@@ -82,6 +82,79 @@ File: `test/integration/booking-activation.int-spec.ts`, `sequence.int-spec.ts`,
 | Nomor order: 30 paralel → 30 unik; melanjutkan nomor lama | ✅ |
 | `AppModule` terakit (DI) | ✅ |
 
+
+## Batch 1.5 — Kiosk, kompatibilitas, rekonsiliasi (TESTED, PostgreSQL nyata)
+
+Semua lewat HTTP dengan **JWT asli** (JwtStrategy, token ditandatangani) dan **token perangkat kiosk asli** (hash SHA-256 di DB). Di-mock: broker MQTT, gateway Midtrans, perhitungan harga, modul loyalty. "START" = perintah tercatat + dikirim ke broker tiruan — **bukan** verifikasi mesin fisik.
+
+### `kiosk-compat.int-spec.ts` (22)
+
+| Skenario | Hasil |
+|---|---|
+| `/pricing/calculate` token kiosk → 201 (dulu 401); outlet/identitas dipaksa dari kiosk | ✅ |
+| Token kiosk dicabut / tak dikenal / kiosk nonaktif / tanpa token → 401 | ✅ |
+| JWT customer asli tetap jalan & dipaksa atas nama sendiri; JWT tanda tangan palsu → 401 | ✅ |
+| Token kiosk ditolak di rute JWT lain (`GET/POST /orders`) | ✅ |
+| Order kiosk tanpa mesin → 400 sebelum bayar, tanpa order | ✅ |
+| Order tamu + booking HOLD (customer null) terikat order/kiosk/mesin; jadwal klien diabaikan | ✅ |
+| Mesin outlet lain → 400; mesin ter-HOLD → 409 tanpa order yatim | ✅ |
+| **Konkurensi**: 8 order kiosk paralel mesin sama → tepat 1 | ✅ |
+| Booking mobile yang dibayar memblokir kiosk | ✅ |
+| Sebelum bayar: 0 START, retry ditolak | ✅ |
+| QRIS + webhook → RESERVED → START **sekali**; webhook ganda + 5 retry paralel → tetap 1 | ✅ |
+| START FAILED → retry kiosk percobaan ke-2; RUNNING → IN_USE; retry setelah jalan tidak menambah | ✅ |
+| Order "PAID" tanpa Payment PAID → tidak START | ✅ |
+| Order mobile yang menyusupkan `kioskId` → dibuang, tidak auto-START | ✅ |
+| Isolasi antar-kiosk (status bayar/simulate 404; status mesin/retry/batal/buat tagihan 403) | ✅ |
+| Batal kiosk → mesin lepas; QRIS dibayar setelah batal → PAID tercatat, order tetap CANCELLED, 0 START, log refund | ✅ |
+| Batal vs webhook paralel (5×) → konsisten | ✅ |
+| Saldo kiosk tanpa PIN / PIN salah → ditolak, saldo utuh | ✅ |
+| 5× PIN salah → terkunci (403, bukan 401); terbuka setelah waktu kunci | ✅ |
+| PIN belum diatur → pesan jelas | ✅ |
+| PIN benar → PAID + RESERVED + saldo sekali + START sekali | ✅ |
+| Saldo kiosk tanpa mesin / mesin terpakai → ditolak tanpa potongan | ✅ |
+
+### `mobile-compat.int-spec.ts` (13) — payload persis app lama (`main`)
+
+| Skenario | Hasil |
+|---|---|
+| reserve → order → bayar saldo (`amount` palsu diabaikan) → RESERVED → scan → START sekali; bentuk respons lama | ✅ |
+| reserve → order → QRIS + webhook → scan → START | ✅ |
+| "Booking & Pakai" tanpa bayar → ditolak, 0 START | ✅ |
+| 2 reservasi sejenis (ambigu) → tidak diikat → tidak bisa START | ✅ |
+| Reservasi kedaluwarsa / orang lain / outlet lain → tidak diikat | ✅ |
+| Rute bayar lama: saldo kurang 400 tanpa potongan; order orang lain 403; tak ada 404; sudah bayar 409 | ✅ |
+| 4 bayar paralel (rute lama + baru) → 1 pembayaran | ✅ |
+| Order CANCELLED/REFUNDED/COMPLETED → bayar rute lama 400, saldo utuh (3) | ✅ |
+| QRIS aktif → bayar saldo rute lama 409 | ✅ |
+| `PATCH /users/:id` diri sendiri: nama OK; HP berubah 400; role/isActive 403; user lain 403 | ✅ |
+| Owner tetap bisa ubah user lain | ✅ |
+
+### `legacy-reconciliation.int-spec.ts` (4)
+
+| Skenario | Hasil |
+|---|---|
+| Dry-run mengklasifikasikan 7 kategori, tidak menulis | ✅ |
+| CLI dry-run menulis laporan; `--apply` tanpa `--actor` ditolak | ✅ |
+| Apply: hanya EXPIRE/CANCEL; IN_USE & bukti mesin jalan tak tersentuh; tanpa hapus; AuditLog; baris berubah dilewati; idempoten | ✅ |
+| Audit outlet staf: NO_OUTLET / MULTI / outlet nonaktif terdeteksi; data tidak berubah | ✅ |
+
+### Uji mutasi (bukti test benar-benar menangkap defect)
+
+Setiap perbaikan dibatalkan sementara → test terkait **gagal**, lalu dipulihkan: `@AllowKioskDevice`, pembuangan `kioskId`, verifikasi PIN, guard order CANCELLED, cek kepemilikan payment kiosk, pengikatan HOLD lama, cek nomor HP, aturan "tepat satu kandidat".
+
+### Unit
+
+255/255 (24 suite). 261 + 4 test kiosk baru − 10 unit test `WalletsService.pay` (7 + `it.each` 3 status) yang dihapus bersama kodenya (rute lama kini `LegacyWalletPayController` → jalur tunggal; skenarionya pindah ke `mobile-compat.int-spec.ts`).
+
+### Flutter / Admin
+
+| | Hasil |
+|---|---|
+| Kiosk: `flutter analyze`, `flutter test`, `flutter build web --release` | bersih / 1 lulus / sukses |
+| Mobile: `flutter analyze`, `flutter test`, `flutter build web --release` | bersih / 1 lulus / sukses |
+| Admin: `npm run build` (Nuxt) | sukses (tidak ada test otomatis di proyek admin) |
+
 ## NOT_VERIFIED
 
 | Item | Alasan |
@@ -89,4 +162,7 @@ File: `test/integration/booking-activation.int-spec.ts`, `sequence.int-spec.ts`,
 | E2E Midtrans sandbox dengan kode Batch 1 | Kode belum dideploy ke server; key sandbox Core API hanya ada di server. E2E sandbox terakhir (19 Nov) berjalan pada kode lama. |
 | Aktivasi mesin fisik / event IoT nyata | Belum ada perangkat IoT; event diuji dengan pemanggilan `handleDeviceEvent` |
 | Aplikasi Flutter di perangkat | Diverifikasi lewat `flutter analyze` + `flutter build web`; test Flutter hanya placeholder |
-| Panel admin di browser | Diuji di level API (16 endpoint); UI tidak dijalankan |
+| Panel admin di browser | Diuji di level API (16 endpoint) + build; UI tidak dijalankan |
+| Aplikasi kiosk di perangkat kiosk | Hanya analyze/test/build web |
+| Laporan rekonsiliasi & audit outlet di data production/dev | Production butuh izin; `.env` dev menunjuk DB proyek lain (lihat 12) |
+| Mobile versi lama di perangkat terhadap backend baru | Diuji dengan payload app lama via HTTP, bukan APK di HP |

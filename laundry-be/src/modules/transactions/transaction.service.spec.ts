@@ -54,6 +54,9 @@ describe('TransactionService', () => {
       },
       orderStatusLog: { create: jest.fn().mockResolvedValue({}) },
       b2BPricingRuleUsage: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      // Batch 1.5: pengikatan HOLD app lama (tidak ada HOLD → tidak diikat).
+      service: { findMany: jest.fn().mockResolvedValue([{ machineType: 'WASHER' }]) },
+      machineBooking: { findMany: jest.fn().mockResolvedValue([]) },
     };
     prisma = {
       order: { findUnique: jest.fn() },

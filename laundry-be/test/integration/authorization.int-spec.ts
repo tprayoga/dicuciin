@@ -22,6 +22,8 @@ import { ConfigService } from '@nestjs/config';
 import { OrderStatus, PaymentMethod, PaymentStatus, UserRole } from '@prisma/client';
 import * as request from 'supertest';
 import { JwtAuthGuard } from '../../src/common/guards/jwt-auth.guard';
+import { JwtOrKioskDeviceGuard } from '../../src/common/guards/jwt-or-kiosk-device.guard';
+import { LegacyWalletPayController } from '../../src/modules/payments/legacy-wallet-pay.controller';
 import { RolesGuard } from '../../src/common/guards/roles.guard';
 import { PrismaService } from '../../src/common/prisma/prisma.service';
 import { UsersController } from '../../src/modules/users/users.controller';
@@ -77,6 +79,7 @@ describe('Security gate (PostgreSQL nyata)', () => {
         UsersController, CustomersController, OrdersController, WalletsController,
         TransactionsController, PricingController, IotController, KiosksController,
         ReviewsController, UploadsController, PaymentsController, BookingsController,
+        LegacyWalletPayController,
       ],
       providers: [
         PrismaService,
@@ -88,6 +91,18 @@ describe('Security gate (PostgreSQL nyata)', () => {
       .useMocker(() => okService())
       .overrideGuard(JwtAuthGuard)
       .useClass(TestAuthGuard)
+      // Rute @AllowKioskDevice memakai identitas uji yang sama; guard ASLI
+      // (JWT + token kiosk) diuji di kiosk-compat.int-spec.ts.
+      .overrideGuard(JwtOrKioskDeviceGuard)
+      .useValue({
+        canActivate: (ctx: ExecutionContext) => {
+          const req = ctx.switchToHttp().getRequest();
+          const raw = req.headers['x-test-user'];
+          if (!raw) throw new UnauthorizedException();
+          req.user = JSON.parse(raw as string);
+          return true;
+        },
+      })
       .compile();
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
@@ -191,7 +206,9 @@ describe('Security gate (PostgreSQL nyata)', () => {
     await post('custA', '/transactions/topup', { customerId: id.custA, amount: 100000 }).expect(403);
     await post('custA', `/wallets/customer/${id.custA}/refund`, { orderId: id.ordAPaid, description: 'alasan uji' }).expect(403);
     await post('custB', `/wallets/customer/${id.custA}/pay`, { orderId: id.ordA }).expect(403);
-    await post('custA', `/wallets/customer/${id.custA}/pay`, { orderId: id.ordA, amount: 1 }).expect(400);
+    // Batch 1.5: `amount` app lama diterima & DIABAIKAN (nominal = total order,
+    // diuji dengan service asli di mobile-compat.int-spec.ts); field asing tetap 400.
+    await post('custA', `/wallets/customer/${id.custA}/pay`, { orderId: id.ordA, role: 'x' }).expect(400);
   });
 
   it('K8: checkout/quote/pricing atas nama customer/partner lain ditolak; partner milik sendiri boleh', async () => {

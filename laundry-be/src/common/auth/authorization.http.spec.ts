@@ -21,6 +21,9 @@ import { ConfigService } from '@nestjs/config';
 import { OrderStatus } from '@prisma/client';
 import * as request from 'supertest';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { JwtOrKioskDeviceGuard } from '../guards/jwt-or-kiosk-device.guard';
+import { LegacyWalletPayController } from '../../modules/payments/legacy-wallet-pay.controller';
+import { PaymentsService } from '../../modules/payments/payments.service';
 import { RolesGuard } from '../guards/roles.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersController } from '../../modules/users/users.controller';
@@ -100,6 +103,7 @@ const prismaMock = {
   },
   order: { findUnique: jest.fn(async ({ where }: any) => orderView(ORDERS[where.id])) },
   payment: { findUnique: jest.fn(async ({ where }: any) => PAYMENTS[where.paymentNumber] ?? null) },
+  wallet: { findUnique: jest.fn(async () => ({ balance: 0 })) },
   outletUser: {
     findMany: jest.fn(async ({ where }: any) => OUTLET_USERS.filter((l) => l.userId === where.userId)),
     findFirst: jest.fn(async ({ where }: any) =>
@@ -133,12 +137,13 @@ describe('Otorisasi HTTP — security gate Fase 0', () => {
   let usersService: any;
   let ordersService: any;
 
+  let paymentsService: any;
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [
         UsersController, CustomersController, OrdersController, WalletsController,
         TransactionsController, PricingController, IotController, KiosksController,
-        ReviewsController, UploadsController, PaymentsController,
+        ReviewsController, UploadsController, PaymentsController, LegacyWalletPayController,
       ],
       providers: [
         { provide: PrismaService, useValue: prismaMock },
@@ -150,6 +155,10 @@ describe('Otorisasi HTTP — security gate Fase 0', () => {
       .useMocker(() => okService())
       .overrideGuard(JwtAuthGuard)
       .useClass(TestAuthGuard)
+      // Rute @AllowKioskDevice: identitas user tetap dari TestAuthGuard global
+      // (jalur kiosk + JWT asli diuji di test/integration/kiosk-*.int-spec.ts).
+      .overrideGuard(JwtOrKioskDeviceGuard)
+      .useClass(TestAuthGuard)
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -157,6 +166,7 @@ describe('Otorisasi HTTP — security gate Fase 0', () => {
     await app.init();
     usersService = moduleRef.get(UsersService);
     ordersService = moduleRef.get(OrdersService);
+    paymentsService = moduleRef.get(PaymentsService);
   });
 
   afterAll(() => app.close());
@@ -256,10 +266,13 @@ describe('Otorisasi HTTP — security gate Fase 0', () => {
       await post('adminOutlet', '/wallets/customer/cust-B/refund', { orderId: 'ord-A-paid', description: 'alasan uji' }).expect(404);
       await post('adminOutlet', '/wallets/customer/cust-A/refund', { orderId: 'ord-A-paid', description: 'alasan uji' }).expect(201);
     });
-    it('bayar saldo: customer B tidak bisa memakai wallet A; field amount ditolak', async () => {
+    it('bayar saldo (rute app lama): customer B tidak bisa memakai wallet A; amount klien diabaikan', async () => {
       await post('custB', '/wallets/customer/cust-A/pay', { orderId: 'ord-A' }).expect(403);
-      await post('custA', '/wallets/customer/cust-A/pay', { orderId: 'ord-A', amount: 1 }).expect(400);
-      await post('custA', '/wallets/customer/cust-A/pay', { orderId: 'ord-A' }).expect(201);
+      // Batch 1.5: `amount` DITERIMA (kompatibilitas app lama) tetapi tidak
+      // diteruskan — nominal = total order (diuji nyata di mobile-compat.int-spec).
+      await post('custA', '/wallets/customer/cust-A/pay', { orderId: 'ord-A', amount: 1 }).expect(201);
+      expect(paymentsService.payOrderWithWalletForCustomer).toHaveBeenLastCalledWith('cust-A', 'ord-A');
+      await post('custA', '/wallets/customer/cust-A/pay', { orderId: 'ord-A', role: 'x' }).expect(400);
     });
   });
 

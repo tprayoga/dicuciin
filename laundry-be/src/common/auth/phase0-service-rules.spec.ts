@@ -34,13 +34,16 @@ describe('K7 — aturan transisi status order manual', () => {
 
 describe('K7/K11 — OrdersService', () => {
   function service(order: { status: OrderStatus; ownerUserId?: string }) {
+    const row = {
+      id: 'ord-1',
+      status: order.status,
+      customer: order.ownerUserId ? { userId: order.ownerUserId } : null,
+    };
     const prisma: any = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
       order: {
-        findUnique: jest.fn().mockResolvedValue({
-          id: 'ord-1',
-          status: order.status,
-          customer: order.ownerUserId ? { userId: order.ownerUserId } : null,
-        }),
+        findUnique: jest.fn().mockResolvedValue(row),
+        findUniqueOrThrow: jest.fn().mockResolvedValue(row),
         update: jest.fn().mockResolvedValue({ id: 'ord-1' }),
       },
       machineBooking: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },

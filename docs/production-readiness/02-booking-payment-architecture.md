@@ -55,11 +55,14 @@ Satu-satunya kode yang mempublikasikan perintah ke broker: `IotMachineService.ma
 |---|---|---|
 | `POST /bookings/verify` (scan QR) | Ya — via `requestMachineStart` | customer login, mesin dikenal & tipe mesin, booking milik customer untuk mesin ini, RESERVED & dalam jendela, order milik customer & PAID, Payment PAID ada; lock mesin; START idempoten (anti replay/paralel) |
 | Hook PAID (`settlePaid`, `/payments/wallet`, `/transactions/checkout`) → `activateMachineForOrder` | Tidak untuk order booking (ditunda ke scan). Order tanpa mesin → tidak ada perangkat | `createStartMachineCommand` juga mensyaratkan order PAID & mesin = mesin booking |
+| Hook PAID untuk **order kiosk** → `startKioskOrder` (Batch 1.5) | Ya — via `requestMachineStart` | `order.kioskId` (hanya bisa di-set rute perangkat kiosk; rute JWT membuangnya), order PAID **dan** Payment PAID ada, booking RESERVED tanpa jadwal & belum kedaluwarsa; idempoten |
+| `POST /kiosks/device/orders/:id/machine-start` (Batch 1.5) | Ya — sama dengan baris di atas | token kiosk + order milik kiosk ini; ≤3 percobaan bila FAILED |
 | `POST /iot/devices/:id/commands` | Tidak — hanya menulis baris PENDING (tidak dipublikasikan) | Role admin/teknisi (Fase 0, K10) |
 | `POST /iot/devices/:id/heartbeat` | Tidak (status) | Role admin/teknisi |
 | `POST /bookings/:id/complete` | Tidak (LOCK, baris DB) | pemilik booking |
 | Antrean BullMQ `iot-command` | Tidak — processor stub tanpa produsen | — |
-| Endpoint kiosk `/kiosks/device/*` | Tidak memanggil aktivasi | token perangkat |
+| Endpoint kiosk `/kiosks/device/*` lainnya | Tidak memanggil aktivasi | token perangkat |
+| Rute bayar-saldo lama `/wallets/customer/:id/pay` (Batch 1.5) | Sama dengan `/payments/wallet` (jalur tunggal) | — |
 | `POST /payments/:n/simulate` | Tidak langsung (settle → RESERVED, tetap butuh scan) | ditolak saat `APP_ENV=production` |
 | Event MQTT masuk | Tidak (hanya transisi status) | device code dikenal; **kepercayaan bergantung ACL broker** |
 

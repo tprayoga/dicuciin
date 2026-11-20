@@ -5,6 +5,7 @@ import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 describe('PaymentsService loyalty settlement', () => {
   function setup() {
     const tx: any = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
       payment: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({
           id: 'pay-1',
