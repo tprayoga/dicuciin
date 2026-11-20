@@ -287,6 +287,33 @@ class AuthController extends ChangeNotifier {
     );
   }
 
+  /// Batch 6: pratinjau hapus akun. Melempar [ApiException] (mis. 403 bila
+  /// fitur belum diaktifkan — pesannya mengarahkan ke layanan pelanggan).
+  Future<Map<String, dynamic>> accountDeletionPreview() {
+    final token = _accessToken;
+    if (token == null) throw ApiException(sessionExpiredMessage, statusCode: 401);
+    return _authService.accountDeletionPreview(accessToken: token);
+  }
+
+  /// Batch 6: hapus akun. COMPLETED → logout lokal; PENDING_REVIEW → akun
+  /// tetap aktif (ada saldo/transaksi yang harus dituntaskan dulu).
+  Future<Map<String, dynamic>> deleteAccount({
+    required String password,
+    String? reason,
+  }) async {
+    final token = _accessToken;
+    if (token == null) throw ApiException(sessionExpiredMessage, statusCode: 401);
+    final result = await _authService.deleteAccount(
+      accessToken: token,
+      password: password,
+      reason: reason,
+    );
+    if (result['status'] == 'COMPLETED') {
+      await signOut(localOnly: true);
+    }
+    return result;
+  }
+
   /// Batch 5: keluar dari semua perangkat, lalu logout lokal.
   Future<void> signOutEverywhere() async {
     final token = _accessToken;

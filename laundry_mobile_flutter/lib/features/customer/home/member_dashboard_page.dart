@@ -49,7 +49,7 @@ class _MemberDashboardPage extends StatelessWidget {
                   const SizedBox(height: 12),
                   _tierProgressCard(summary, membership, wallet),
                   const SizedBox(height: 12),
-                  _pointCard(summary, points),
+                  _pointCard(context, summary, points),
                   if (partner != null) ...[
                     const SizedBox(height: 12),
                     _b2bPartnerCard(partner),
@@ -322,13 +322,20 @@ class _MemberDashboardPage extends StatelessWidget {
               'Progress ${summary.membership.tierProgressPercent}% menuju ${summary.membership.nextTier}',
               style: const TextStyle(fontSize: 12, color: _textMuted),
             ),
+          ] else if (summary != null) ...[
+            // Batch 6 (S6): server mengirim nextTier null di tier tertinggi.
+            const SizedBox(height: 4),
+            const Text(
+              'Kamu sudah di tier tertinggi 🎉',
+              style: TextStyle(fontSize: 12, color: _textMuted),
+            ),
           ],
         ],
       ),
     );
   }
 
-  Widget _pointCard(MemberSummary? summary, MemberPoints? points) {
+  Widget _pointCard(BuildContext context, MemberSummary? summary, MemberPoints? points) {
     final currentPoints =
         summary?.membership.currentPoints ?? points?.currentPoints ?? 0;
     final lastLedger = points?.ledger.isNotEmpty == true
@@ -370,6 +377,13 @@ class _MemberDashboardPage extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+          // Batch 6 (R3): tukar poin dengan voucher.
+          TextButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const _RewardsPage()),
+            ),
+            child: const Text('Tukar Poin'),
           ),
         ],
       ),

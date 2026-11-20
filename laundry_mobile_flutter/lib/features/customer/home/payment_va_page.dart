@@ -49,19 +49,9 @@ class _PaymentVaPageState extends State<_PaymentVaPage>
     super.dispose();
   }
 
-  String get _bankShortName {
-    if (widget.bank.contains('BCA')) return 'BCA';
-    if (widget.bank.contains('BRI')) return 'BRI';
-    if (widget.bank.contains('BNI')) return 'BNI';
-    return 'PERMATA';
-  }
+  String get _bankShortName => BankBrand.of(widget.bank)?.code ?? widget.bank;
 
-  Color get _bankColor {
-    if (widget.bank.contains('BCA')) return PaymentBrandColors.bca;
-    if (widget.bank.contains('BRI')) return PaymentBrandColors.bri;
-    if (widget.bank.contains('BNI')) return PaymentBrandColors.bni;
-    return PaymentBrandColors.permata;
-  }
+  Color get _bankColor => BankBrand.of(widget.bank)?.color ?? PaymentBrandColors.permata;
 
   String get _vaNumber => _payment?.vaNumber ?? '-';
 
@@ -249,6 +239,12 @@ class _PaymentVaPageState extends State<_PaymentVaPage>
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1.2,
                   ),
+                ),
+                const SizedBox(height: 6),
+                // Batch 6 (R4): nama penerima yang muncul di m-banking.
+                Text(
+                  'a.n. ${AppConfig.merchantName}',
+                  style: const TextStyle(fontSize: 12, color: _textMuted),
                 ),
               ],
             ),

@@ -235,7 +235,15 @@ class _TopUpPageState extends State<_TopUpPage> {
                         initialValue: _bank,
                         items: [
                           for (final b in _banks)
-                            DropdownMenuItem(value: b, child: Text(b)),
+                            DropdownMenuItem(
+                              value: b,
+                              child: Row(
+                                children: [
+                                  SizedBox(width: 92, child: BankBrandMark(bank: b, scale: 0.7)),
+                                  Text(b),
+                                ],
+                              ),
+                            ),
                         ],
                         onChanged: _submitting
                             ? null

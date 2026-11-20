@@ -1153,41 +1153,7 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
     );
   }
 
-  Widget _bankLogo(String bank) {
-    const style = TextStyle(fontWeight: FontWeight.w700);
-    if (bank == 'Bank BCA') {
-      return Text(
-        'BCA',
-        style: style.copyWith(color: PaymentBrandColors.bca, fontSize: 24),
-      );
-    }
-    if (bank == 'Bank BRI') {
-      return Text(
-        'BRI',
-        style: style.copyWith(color: PaymentBrandColors.bri, fontSize: 24),
-      );
-    }
-    if (bank == 'Bank BNI') {
-      return Text(
-        'BNI',
-        style: style.copyWith(color: PaymentBrandColors.bni, fontSize: 24),
-      );
-    }
-    if (bank == 'Bank Mandiri') {
-      return Text(
-        'mandiri',
-        style: style.copyWith(color: PaymentBrandColors.mandiri, fontSize: 17),
-      );
-    }
-    if (bank == 'Bank BSI') {
-      return Text(
-        'BSI',
-        style: style.copyWith(color: PaymentBrandColors.permata, fontSize: 20),
-      );
-    }
-    return Text(
-      'CIMBNIAGA',
-      style: style.copyWith(color: PaymentBrandColors.cimb, fontSize: 12),
-    );
-  }
+  /// Batch 6 (R4): merek bank dari widget bersama (Permata kini benar).
+  Widget _bankLogo(String bank) => BankBrandMark(bank: bank);
+
 }

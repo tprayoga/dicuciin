@@ -167,17 +167,28 @@ class _AccountPage extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const _AccountItem(
+                          // Batch 6 (R2): dulu tanpa aksi.
+                          _AccountItem(
                             icon: Icons.settings_phone_outlined,
                             title: 'Hubungi Kami',
+                            onTap: () => _showSupportSheet(context),
                           ),
-                          const _AccountItem(
+                          _AccountItem(
                             icon: Icons.list_alt_outlined,
                             title: 'Ketentuan Layanan',
+                            onTap: () => _openBannerLink(context, AppConfig.termsUrl),
                           ),
-                          const _AccountItem(
+                          _AccountItem(
                             icon: Icons.note_alt_outlined,
                             title: 'Kebijakan Privasi',
+                            onTap: () => _openBannerLink(context, AppConfig.privacyUrl),
+                          ),
+                          _AccountItem(
+                            icon: Icons.person_remove_outlined,
+                            title: 'Hapus Akun',
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const _DeleteAccountPage()),
+                            ),
                           ),
                           _AccountItem(
                             icon: Icons.devices_other_outlined,

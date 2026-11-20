@@ -415,26 +415,6 @@ class OrderStatusLogEntry {
   }
 }
 
-class PaymentProofUploadResult {
-  PaymentProofUploadResult({
-    required this.orderId,
-    required this.filename,
-    required this.url,
-  });
-
-  final String orderId;
-  final String filename;
-  final String url;
-
-  factory PaymentProofUploadResult.fromJson(Map<String, dynamic> json) {
-    return PaymentProofUploadResult(
-      orderId: (json['orderId'] as String?) ?? '',
-      filename: (json['filename'] as String?) ?? '',
-      url: (json['url'] as String?) ?? '',
-    );
-  }
-}
-
 /// Reservasi mesin dari endpoint `/bookings`.
 class MachineBooking {
   MachineBooking({
@@ -507,6 +487,8 @@ class OutletMachine {
     required this.type,
     required this.status,
     required this.bookable,
+    this.capacityKg,
+    this.service,
   });
 
   final String deviceId;
@@ -515,6 +497,11 @@ class OutletMachine {
   final String type; // WASHING_MACHINE | DRYER_MACHINE
   final String status; // AVAILABLE | RESERVED | IN_USE | OFFLINE
   final bool bookable;
+
+  /// Batch 6 (S3): kapasitas & layanan dari data mesin (server). null =
+  /// belum diatur admin → aplikasi memakai layanan yang cocok tipe mesin.
+  final double? capacityKg;
+  final MachineService? service;
 
   bool get isWasher => type == 'WASHING_MACHINE';
 
@@ -525,17 +512,131 @@ class OutletMachine {
     type: (json['type'] as String?) ?? '',
     status: (json['status'] as String?) ?? 'OFFLINE',
     bookable: json['bookable'] == true,
+    capacityKg: (json['capacityKg'] as num?)?.toDouble(),
+    service: json['service'] is Map<String, dynamic>
+        ? MachineService.fromJson(json['service'] as Map<String, dynamic>)
+        : null,
   );
+}
+
+/// Batch 6 (S3): layanan yang dijalankan mesin + harga di outlet ini.
+class MachineService {
+  MachineService({
+    required this.serviceId,
+    required this.name,
+    required this.price,
+    this.estimateMinutes,
+    this.machineType,
+  });
+
+  final String serviceId;
+  final String name;
+  final double price;
+  final int? estimateMinutes;
+  final String? machineType;
+
+  factory MachineService.fromJson(Map<String, dynamic> json) => MachineService(
+    serviceId: (json['serviceId'] as String?) ?? '',
+    name: (json['name'] as String?) ?? 'Layanan',
+    price: (json['price'] as num?)?.toDouble() ?? 0,
+    estimateMinutes: (json['estimateMinutes'] as num?)?.toInt(),
+    machineType: json['machineType'] as String?,
+  );
+}
+
+/// Batch 6 (T8): jam operasional outlet ("HH:mm", zona outlet).
+class OperatingHours {
+  const OperatingHours({this.openTime, this.closeTime, this.utcOffsetMinutes = 420});
+
+  final String? openTime;
+  final String? closeTime;
+  final int utcOffsetMinutes;
+
+  factory OperatingHours.fromJson(Map<String, dynamic>? json) => OperatingHours(
+    openTime: json?['openTime'] as String?,
+    closeTime: json?['closeTime'] as String?,
+    utcOffsetMinutes: (json?['utcOffsetMinutes'] as num?)?.toInt() ?? 420,
+  );
+
+  static int? _parse(String? v) {
+    final m = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(v?.trim() ?? '');
+    if (m == null) return null;
+    final h = int.parse(m.group(1)!);
+    final min = int.parse(m.group(2)!);
+    if (h > 24 || min > 59 || (h == 24 && min != 0)) return null;
+    return h * 60 + min;
+  }
+
+  /// Menit buka/tutup; null = tanpa batasan (data kosong/tidak valid).
+  ({int open, int close})? get minutes {
+    final o = _parse(openTime);
+    final c = _parse(closeTime);
+    if (o == null || c == null) return null;
+    return (open: o, close: c);
+  }
+
+  bool get isUnrestricted {
+    final m = minutes;
+    return m == null || m.open == m.close || (m.open == 0 && m.close == 1440);
+  }
+
+  String get label {
+    if (minutes == null) return '';
+    if (isUnrestricted) return 'Buka 24 jam';
+    return '$openTime – $closeTime';
+  }
+
+  /// Label jam dinding outlet ("HH:mm") untuk sebuah instant.
+  String wallLabel(DateTime instant) {
+    final w = instant.toUtc().add(Duration(minutes: utcOffsetMinutes));
+    return '${w.hour.toString().padLeft(2, '0')}:${w.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// Jam mulai booking (per jam) untuk hari ke-[dayOffset] dari [now]
+  /// (waktu lokal outlet). Hari ini: mulai jam penuh berikutnya. Slot hanya
+  /// bila waktu mulai di [buka, tutup) — sama dengan validasi server.
+  List<DateTime> hourlySlots({required DateTime now, required int dayOffset}) {
+    // Waktu "dinding" outlet sebagai DateTime UTC agar tidak tergantung zona HP.
+    final local = now.toUtc().add(Duration(minutes: utcOffsetMinutes));
+    final day = DateTime.utc(local.year, local.month, local.day).add(Duration(days: dayOffset));
+    final m = minutes;
+    final slots = <DateTime>[];
+    for (var h = 0; h < 24; h++) {
+      final startMin = h * 60;
+      final wall = day.add(Duration(minutes: startMin));
+      if (dayOffset == 0 && !wall.isAfter(local)) continue;
+      if (!isUnrestricted && m != null) {
+        final within = m.open < m.close
+            ? startMin >= m.open && startMin < m.close
+            : startMin >= m.open || startMin < m.close;
+        if (!within) continue;
+      } else if (m == null && (h < 8 || h > 21)) {
+        // Tanpa data jam: perilaku lama 08:00–21:00.
+        continue;
+      }
+      // Kembalikan instant sebenarnya (UTC) dari waktu dinding outlet.
+      slots.add(wall.subtract(Duration(minutes: utcOffsetMinutes)));
+    }
+    return slots;
+  }
 }
 
 /// Daftar mesin outlet + ringkasan keramaian.
 class OutletMachines {
-  OutletMachines({required this.occupancy, required this.machines});
+  OutletMachines({
+    required this.occupancy,
+    required this.machines,
+    this.operatingHours = const OperatingHours(),
+  });
 
   final OutletOccupancy occupancy;
   final List<OutletMachine> machines;
+  final OperatingHours operatingHours;
 
   factory OutletMachines.fromJson(Map<String, dynamic> json) => OutletMachines(
+    operatingHours: OperatingHours.fromJson(
+      json['operatingHours'] as Map<String, dynamic>?,
+    ),
     occupancy: OutletOccupancy.fromJson(
       json['occupancy'] as Map<String, dynamic>? ?? {},
     ),
@@ -1187,4 +1288,104 @@ double _toDouble(dynamic value) {
   if (value is double) return value;
   if (value is String) return double.tryParse(value) ?? 0;
   return 0;
+}
+
+
+/// Batch 6 (R1): notifikasi dalam aplikasi (`GET /notifications/me`).
+class AppNotification {
+  AppNotification({
+    required this.id,
+    required this.type,
+    required this.title,
+    required this.body,
+    required this.createdAt,
+    this.readAt,
+    this.data = const {},
+  });
+
+  final String id;
+  final String type;
+  final String title;
+  final String body;
+  final DateTime createdAt;
+  final DateTime? readAt;
+  final Map<String, dynamic> data;
+
+  bool get isRead => readAt != null;
+  String? get orderId => data['orderId'] as String?;
+  bool get asksReview => data['reviewRequested'] == true;
+
+  factory AppNotification.fromJson(Map<String, dynamic> json) => AppNotification(
+    id: (json['id'] as String?) ?? '',
+    type: (json['type'] as String?) ?? '',
+    title: (json['title'] as String?) ?? '',
+    body: (json['body'] as String?) ?? '',
+    createdAt: DateTime.tryParse((json['createdAt'] as String?) ?? '')?.toLocal() ?? DateTime.now(),
+    readAt: DateTime.tryParse((json['readAt'] as String?) ?? '')?.toLocal(),
+    data: json['data'] is Map<String, dynamic> ? json['data'] as Map<String, dynamic> : const {},
+  );
+}
+
+class NotificationInbox {
+  NotificationInbox({required this.items, required this.unreadCount});
+
+  final List<AppNotification> items;
+  final int unreadCount;
+
+  factory NotificationInbox.fromJson(Map<String, dynamic> json) => NotificationInbox(
+    items: ((json['items'] as List?) ?? [])
+        .map((e) => AppNotification.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
+  );
+}
+
+/// Batch 6 (R3): voucher yang bisa ditukar poin (`GET /mobile/me/rewards`).
+class RewardItem {
+  RewardItem({
+    required this.templateId,
+    required this.name,
+    required this.pointCost,
+    required this.canRedeem,
+    this.description,
+    this.reason,
+    this.value = 0,
+    this.voucherType = '',
+  });
+
+  final String templateId;
+  final String name;
+  final String? description;
+  final int pointCost;
+  final bool canRedeem;
+  final String? reason;
+  final double value;
+  final String voucherType;
+
+  factory RewardItem.fromJson(Map<String, dynamic> json) => RewardItem(
+    templateId: (json['templateId'] as String?) ?? '',
+    name: (json['name'] as String?) ?? 'Voucher',
+    description: json['description'] as String?,
+    pointCost: (json['pointCost'] as num?)?.toInt() ?? 0,
+    canRedeem: json['canRedeem'] == true,
+    reason: json['reason'] as String?,
+    value: (json['value'] as num?)?.toDouble() ?? 0,
+    voucherType: (json['voucherType'] as String?) ?? '',
+  );
+}
+
+class RewardCatalog {
+  RewardCatalog({required this.walletId, required this.pointBalance, required this.items});
+
+  final String? walletId;
+  final int pointBalance;
+  final List<RewardItem> items;
+
+  factory RewardCatalog.fromJson(Map<String, dynamic> json) => RewardCatalog(
+    walletId: json['walletId'] as String?,
+    pointBalance: (json['pointBalance'] as num?)?.toInt() ?? 0,
+    items: ((json['items'] as List?) ?? [])
+        .map((e) => RewardItem.fromJson(e as Map<String, dynamic>))
+        .toList(),
+  );
 }

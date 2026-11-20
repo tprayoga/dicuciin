@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../core/network/api_exception.dart';
@@ -42,7 +44,6 @@ class CustomerController extends ChangeNotifier {
 
   bool _isLoading = false;
   bool _isSubmittingOrder = false;
-  bool _isUploadingPaymentProof = false;
   bool _isCancellingOrder = false;
   String? _errorMessage;
   WalletData? _wallet;
@@ -60,7 +61,6 @@ class CustomerController extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
   bool get isSubmittingOrder => _isSubmittingOrder;
-  bool get isUploadingPaymentProof => _isUploadingPaymentProof;
   bool get isCancellingOrder => _isCancellingOrder;
   String? get errorMessage => _errorMessage;
   WalletData? get wallet => _wallet;
@@ -108,6 +108,8 @@ class CustomerController extends ChangeNotifier {
     final memberSummaryF = _guard(
       () => _customerService.getMemberSummary(accessToken: accessToken),
     );
+    // Batch 6 (R1): jumlah notifikasi belum dibaca untuk badge lonceng.
+    unawaited(refreshUnreadCount(accessToken: accessToken));
     final memberPointsF = _guard(
       () => _customerService.getMemberPoints(accessToken: accessToken),
     );
@@ -228,6 +230,43 @@ class CustomerController extends ChangeNotifier {
       outletId: outletId,
     );
   }
+
+  // ---------------------------------------------------- Batch 6: notifikasi
+  int _unreadNotifications = 0;
+  int get unreadNotifications => _unreadNotifications;
+
+  Future<NotificationInbox> loadNotifications({required String accessToken}) async {
+    final inbox = await _customerService.getNotifications(accessToken: accessToken);
+    _unreadNotifications = inbox.unreadCount;
+    notifyListeners();
+    return inbox;
+  }
+
+  /// Hanya jumlah belum dibaca (badge lonceng); gagal → diam (bukan fitur kritis).
+  Future<void> refreshUnreadCount({required String accessToken}) async {
+    try {
+      await loadNotifications(accessToken: accessToken);
+    } catch (_) {}
+  }
+
+  Future<void> markNotificationRead({
+    required String accessToken,
+    required String id,
+  }) async {
+    await _customerService.markNotificationRead(accessToken: accessToken, id: id);
+    if (_unreadNotifications > 0) _unreadNotifications--;
+    notifyListeners();
+  }
+
+  Future<void> markAllNotificationsRead({required String accessToken}) async {
+    await _customerService.markAllNotificationsRead(accessToken: accessToken);
+    _unreadNotifications = 0;
+    notifyListeners();
+  }
+
+  // ------------------------------------------------ Batch 6: tukar poin (R3)
+  Future<RewardCatalog> getRewards({required String accessToken}) =>
+      _customerService.getRewards(accessToken: accessToken);
 
   /// Ringkasan keramaian semua outlet (map by outletId).
   Future<Map<String, OutletOccupancy>> getOccupancyMap({
@@ -651,33 +690,6 @@ class CustomerController extends ChangeNotifier {
       return null;
     } finally {
       _isSubmittingOrder = false;
-      notifyListeners();
-    }
-  }
-
-  Future<PaymentProofUploadResult?> uploadPaymentProof({
-    required String accessToken,
-    required String orderId,
-    required String imagePath,
-  }) async {
-    _isUploadingPaymentProof = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      return await _customerService.uploadPaymentProof(
-        accessToken: accessToken,
-        orderId: orderId,
-        imagePath: imagePath,
-      );
-    } on ApiException catch (e) {
-      _errorMessage = e.message;
-      return null;
-    } catch (_) {
-      _errorMessage = 'Gagal upload bukti pembayaran.';
-      return null;
-    } finally {
-      _isUploadingPaymentProof = false;
       notifyListeners();
     }
   }

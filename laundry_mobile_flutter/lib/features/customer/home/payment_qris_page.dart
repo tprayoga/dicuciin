@@ -104,6 +104,7 @@ class _PaymentQrisPageState extends State<_PaymentQrisPage>
                               items: [
                                 'Scan QR dari m-banking, e-wallet, atau aplikasi pembayaran lain.',
                                 'Pastikan nama merchant dan nominal sudah sesuai.',
+                                'Bayar dari HP yang sama? Simpan QR ke galeri, lalu pilih gambar QR di aplikasi pembayaran.',
                                 'Status akan diperbarui otomatis setelah pembayaran berhasil.',
                               ],
                             ),
@@ -168,6 +169,27 @@ class _PaymentQrisPageState extends State<_PaymentQrisPage>
     );
   }
 
+  bool _savingQr = false;
+
+  Future<void> _saveQr() async {
+    final url = _payment?.qrString;
+    if (url == null || _savingQr) return;
+    setState(() => _savingQr = true);
+    final result = await saveQrImage(url, name: 'QRIS-${_payment?.paymentNumber ?? 'dicuciin'}');
+    if (!mounted) return;
+    setState(() => _savingQr = false);
+    switch (result) {
+      case QrSaveResult.saved:
+        AppToast.success(context, 'QR tersimpan di galeri.');
+      case QrSaveResult.openedInBrowser:
+        AppToast.info(context, 'QR dibuka di browser — simpan gambarnya dari sana.');
+      case QrSaveResult.permissionDenied:
+        AppToast.error(context, 'Izin galeri ditolak. Aktifkan di pengaturan HP.');
+      case QrSaveResult.failed:
+        AppToast.error(context, 'Gagal menyimpan QR. Coba lagi atau screenshot layar.');
+    }
+  }
+
   Widget _qrisCard() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
@@ -221,6 +243,21 @@ class _PaymentQrisPageState extends State<_PaymentQrisPage>
                 : const Icon(Icons.qr_code_2_rounded, size: 192),
           ),
           const SizedBox(height: 8),
+          // Batch 6 (R4/R5): nama merchant yang harus tampil di aplikasi
+          // pembayar + simpan QR ke galeri (bayar dari m-banking di HP sama).
+          Text(
+            'Merchant: ${AppConfig.merchantName}',
+            style: const TextStyle(fontSize: 13, color: _textDark, fontWeight: FontWeight.w600),
+          ),
+          if (_payment?.qrString != null)
+            TextButton.icon(
+              onPressed: _savingQr ? null : _saveQr,
+              icon: _savingQr
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.download_rounded, size: 18),
+              label: const Text('Simpan QR ke Galeri'),
+            ),
+          const SizedBox(height: 4),
           // Menunggu pembayaran (status real dari gateway).
           Row(
             mainAxisAlignment: MainAxisAlignment.center,

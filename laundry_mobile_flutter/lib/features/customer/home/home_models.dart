@@ -4,7 +4,8 @@ enum _MainTab { home, promo, location, order }
 
 enum _PaymentMethod { saldo, qris, va }
 
-enum _MachineStatus { available, inUse, maintenance }
+/// Batch 6 (S7): `offline` terpisah dari `maintenance` (dulu OFFLINE tampil "Maintenance").
+enum _MachineStatus { available, inUse, maintenance, offline }
 
 enum _MachineType { washer, dryer }
 
@@ -93,6 +94,17 @@ class _CheckoutData {
   /// (mesin hanya bisa dipakai setelah order lunas). `scheduledAt` null = sekarang.
   final String deviceId;
   final DateTime? scheduledAt;
+
+  /// Batch 6 (S8): jadwal pakai sebenarnya (dulu teks tetap "11:00 s/d 11:30").
+  String get scheduleLabel {
+    final start = (scheduledAt ?? DateTime.now()).toLocal();
+    final minutes = int.tryParse(RegExp(r'\d+').firstMatch(estimasi)?.group(0) ?? '') ?? 30;
+    final end = start.add(Duration(minutes: minutes));
+    String hm(DateTime t) =>
+        '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    final prefix = scheduledAt == null ? 'Mulai sekarang' : _formatDateId(start);
+    return '$prefix • ${hm(start)} s/d ${hm(end)}';
+  }
 }
 
 const _idMonths = [

@@ -9,7 +9,8 @@ class _MachineCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDisabled = machine.status == _MachineStatus.maintenance;
+    final isDisabled = machine.status == _MachineStatus.maintenance ||
+        machine.status == _MachineStatus.offline;
     final isAvailable = machine.status == _MachineStatus.available;
     final isInUse = machine.status == _MachineStatus.inUse;
 
@@ -145,6 +146,13 @@ class _MachineCard extends StatelessWidget {
           bgColor: AppColors.errorBg,
           textColor: AppColors.error,
           dotColor: AppColors.error,
+        );
+      case _MachineStatus.offline:
+        return _chip(
+          label: 'Offline',
+          bgColor: AppColors.surfaceAlt,
+          textColor: AppColors.textMutedLight,
+          dotColor: AppColors.textMutedLight,
         );
     }
   }

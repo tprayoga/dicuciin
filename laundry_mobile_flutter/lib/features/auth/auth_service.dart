@@ -231,6 +231,34 @@ class AuthService {
     );
   }
 
+  /// Batch 6: pratinjau hapus akun (penghalang & poin/bonus yang hangus).
+  Future<Map<String, dynamic>> accountDeletionPreview({required String accessToken}) async {
+    final payload = await _apiClient.get(
+      '/account/deletion/preview',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return payload as Map<String, dynamic>;
+  }
+
+  /// Batch 6: hapus akun (re-autentikasi kata sandi + ketik HAPUS).
+  /// Mengembalikan `{status: COMPLETED|PENDING_REVIEW, blockers: [...]}`.
+  Future<Map<String, dynamic>> deleteAccount({
+    required String accessToken,
+    required String password,
+    String? reason,
+  }) async {
+    final payload = await _apiClient.post(
+      '/account/deletion',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({
+        'password': password,
+        'confirm': 'HAPUS',
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      }),
+    );
+    return payload as Map<String, dynamic>;
+  }
+
   /// Batch 5: keluar dari semua perangkat (semua sesi dicabut di server).
   Future<void> logoutAll({required String accessToken}) async {
     await _apiClient.post(

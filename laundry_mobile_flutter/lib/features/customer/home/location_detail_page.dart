@@ -1,16 +1,22 @@
 part of '../home_screen.dart';
 
 class _LocationDetailPage extends StatefulWidget {
-  const _LocationDetailPage({required this.outlet});
+  const _LocationDetailPage({
+    required this.outlet,
+    this.initialType = _MachineType.washer,
+  });
 
   final OutletOption outlet;
+
+  /// Batch 6 (S7): tab awal sesuai tombol yang dipilih di beranda.
+  final _MachineType initialType;
 
   @override
   State<_LocationDetailPage> createState() => _LocationDetailPageState();
 }
 
 class _LocationDetailPageState extends State<_LocationDetailPage> {
-  _MachineType _type = _MachineType.washer;
+  late _MachineType _type = widget.initialType;
   bool _isMachineLoading = true;
   String? _machineError;
   List<_MachineData> _washerMachines = const [];
@@ -391,20 +397,24 @@ class _LocationDetailPageState extends State<_LocationDetailPage> {
       final dryers = <_MachineData>[];
       for (final m in outletMachines.machines) {
         final type = m.isWasher ? _MachineType.washer : _MachineType.dryer;
-        // Tarif/kapasitas/estimasi diambil dari layanan yang cocok tipe mesin.
-        final svc = _serviceForType(type, prices);
+        // Batch 6 (S3): layanan & kapasitas dari DATA MESIN (server). Bila
+        // admin belum mengatur, kembali ke layanan yang cocok tipe mesin.
+        final own = m.service == null
+            ? null
+            : prices.where((p) => p.serviceId == m.service!.serviceId).firstOrNull;
+        final svc = own ?? _serviceForType(type, prices);
+        final capacityKg = m.capacityKg ?? svc?.capacityKg;
+        final minutes = m.service?.estimateMinutes ?? svc?.estimateMinutes;
         final machine = _MachineData(
           name: m.name,
           status: _statusFromApi(m.status),
           type: type,
-          capacity: svc?.capacityKg != null
-              ? '${svc!.capacityKg!.toStringAsFixed(0)} KG'
+          capacity: capacityKg != null
+              ? '${capacityKg.toStringAsFixed(0)} KG'
               : '—',
-          estimasi: svc?.estimateMinutes != null
-              ? '${svc!.estimateMinutes} Menit'
-              : '—',
-          price: svc?.price.round() ?? 0,
-          serviceId: svc?.serviceId ?? '',
+          estimasi: minutes != null ? '$minutes Menit' : '—',
+          price: (m.service?.price ?? svc?.price ?? 0).round(),
+          serviceId: m.service?.serviceId ?? svc?.serviceId ?? '',
           outletId: (svc != null && svc.outletId.isNotEmpty)
               ? svc.outletId
               : widget.outlet.id,
@@ -452,7 +462,8 @@ class _LocationDetailPageState extends State<_LocationDetailPage> {
         'AVAILABLE' => _MachineStatus.available,
         'IN_USE' => _MachineStatus.inUse,
         'RESERVED' => _MachineStatus.inUse,
-        _ => _MachineStatus.maintenance, // OFFLINE / tak dikenal
+        'MAINTENANCE' => _MachineStatus.maintenance,
+        _ => _MachineStatus.offline, // OFFLINE / tak dikenal
       };
 
   /// Klasifikasi tipe mesin dari `machineType` katalog Service.

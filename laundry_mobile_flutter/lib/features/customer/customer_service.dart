@@ -237,6 +237,41 @@ class CustomerService {
     return OutletMachines.fromJson(payload as Map<String, dynamic>);
   }
 
+  /// Batch 6 (R1): notifikasi dalam aplikasi.
+  Future<NotificationInbox> getNotifications({required String accessToken}) async {
+    final payload = await _apiClient.get(
+      '/notifications/me',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return NotificationInbox.fromJson(payload as Map<String, dynamic>);
+  }
+
+  Future<void> markNotificationRead({
+    required String accessToken,
+    required String id,
+  }) async {
+    await _apiClient.post(
+      '/notifications/me/$id/read',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+  }
+
+  Future<void> markAllNotificationsRead({required String accessToken}) async {
+    await _apiClient.post(
+      '/notifications/me/read-all',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+  }
+
+  /// Batch 6 (R3): katalog voucher yang bisa ditukar poin.
+  Future<RewardCatalog> getRewards({required String accessToken}) async {
+    final payload = await _apiClient.get(
+      '/mobile/me/rewards',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return RewardCatalog.fromJson(payload as Map<String, dynamic>);
+  }
+
   /// Ringkasan keramaian semua outlet → map keyed by outletId.
   Future<Map<String, OutletOccupancy>> getOccupancyMap({
     required String accessToken,
@@ -549,20 +584,6 @@ class CustomerService {
       headers: {'Authorization': 'Bearer $accessToken'},
     );
     return OrderDetail.fromJson(payload as Map<String, dynamic>);
-  }
-
-  Future<PaymentProofUploadResult> uploadPaymentProof({
-    required String accessToken,
-    required String orderId,
-    required String imagePath,
-  }) async {
-    final payload = await _apiClient.postMultipart(
-      '/uploads/payment/$orderId/proof',
-      headers: {'Authorization': 'Bearer $accessToken'},
-      fileField: 'file',
-      filePath: imagePath,
-    );
-    return PaymentProofUploadResult.fromJson(payload as Map<String, dynamic>);
   }
 
   Future<OrderDetail> cancelOrder({

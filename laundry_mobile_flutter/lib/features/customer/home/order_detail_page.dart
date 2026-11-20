@@ -83,7 +83,10 @@ class _OrderDetailPageState extends State<_OrderDetailPage> {
               ('Saldo', Icons.account_balance_wallet_outlined),
             ])
               ListTile(
-                leading: Icon(option.$2),
+                // Batch 6 (R4): merek bank yang sama dengan checkout.
+                leading: option.$1.startsWith('Bank ')
+                    ? SizedBox(width: 72, child: BankBrandMark(bank: option.$1, scale: 0.75))
+                    : Icon(option.$2),
                 title: Text(
                   option.$1 == 'QRIS' || option.$1 == 'Saldo'
                       ? option.$1
@@ -336,6 +339,11 @@ class _OrderDetailPageState extends State<_OrderDetailPage> {
                                 right: _formatDateId(log.createdAt.toLocal()),
                               ),
                           ]),
+                          // Batch 6 (S8): ulasan diminta setelah cucian selesai.
+                          if (d.status == 'COMPLETED') ...[
+                            const SizedBox(height: 12),
+                            _ReviewCard(orderId: d.id),
+                          ],
                         ],
                       ),
                     ),
