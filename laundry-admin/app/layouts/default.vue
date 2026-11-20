@@ -12,6 +12,7 @@ const navItems = [
   { label: 'Kelola Layanan', icon: 'i-heroicons-wrench-screwdriver', to: '/services' },
   { label: 'Kelola Staff', icon: 'i-heroicons-users', to: '/users' },
   { label: 'Kelola Member', icon: 'i-heroicons-user-group', to: '/customers' },
+  { label: 'Hapus Akun', icon: 'i-heroicons-user-minus', to: '/users/deletion-requests' },
   { label: 'Transaksi/Order', icon: 'i-heroicons-credit-card', to: '/orders' },
   { label: 'Laporan Keuangan', icon: 'i-heroicons-chart-bar-square', to: '/reports/finance' },
   { label: 'Rekonsiliasi & Refund', icon: 'i-heroicons-arrow-uturn-left', to: '/reports/reconciliations' },

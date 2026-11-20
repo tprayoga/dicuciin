@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { useApi } from '~/composables/useApi'
-import type { PaginatedResponse, IotDevice, Outlet } from '~/types'
+import type { PaginatedResponse, IotDevice, Outlet, Service } from '~/types'
 
 const api = useApi()
 const toast = useToast()
 
 const devices = ref<IotDevice[]>([])
 const outlets = ref<Outlet[]>([])
+const services = ref<Service[]>([])
 const loading = ref(false)
 const search = ref('')
 
@@ -18,7 +19,33 @@ const form = reactive({
   deviceCode: '',
   deviceType: 'WASHING_MACHINE',
   name: '',
+  // Batch 6 (S3): sumber kebenaran kapasitas & harga mesin di aplikasi.
+  capacityKg: '' as string,
+  serviceId: '' as string,
 })
+
+const NO_SERVICE = '__none__'
+const isMachine = computed(() => form.deviceType === 'WASHING_MACHINE' || form.deviceType === 'DRYER_MACHINE')
+/** Layanan yang cocok tipe mesin (pengering ↔ DRYER; cuci ↔ WASHER/WASHER_DRYER). */
+const serviceOptions = computed(() => {
+  const wantDryer = form.deviceType === 'DRYER_MACHINE'
+  const items = services.value
+    .filter(s => s.isActive)
+    .filter((s) => {
+      const mt = (s.machineType || '').toUpperCase()
+      return wantDryer ? mt === 'DRYER' : mt === 'WASHER' || mt === 'WASHER_DRYER'
+    })
+    .map(s => ({ label: `${s.name}${s.capacityKg ? ` (${s.capacityKg} kg)` : ''}`, value: s.id }))
+  return [{ label: '— Belum diatur —', value: NO_SERVICE }, ...items]
+})
+
+function machinePayload() {
+  const cap = Number(form.capacityKg)
+  return {
+    capacityKg: form.capacityKg === '' || !Number.isFinite(cap) ? null : cap,
+    serviceId: !form.serviceId || form.serviceId === NO_SERVICE ? null : form.serviceId,
+  }
+}
 
 const deviceTypeItems = [
   { label: 'Mesin Cuci (Washer)', value: 'WASHING_MACHINE' },
@@ -48,12 +75,14 @@ function machineActive(status: string) {
 async function load() {
   loading.value = true
   try {
-    const [devRes, outletRes] = await Promise.all([
+    const [devRes, outletRes, svcRes] = await Promise.all([
       api.get<PaginatedResponse<IotDevice>>('/iot/devices?page=1&limit=100'),
       api.get<PaginatedResponse<Outlet>>('/outlets?page=1&limit=100'),
+      api.get<PaginatedResponse<Service>>('/services?page=1&limit=100'),
     ])
     devices.value = devRes.data
     outlets.value = outletRes.data
+    services.value = svcRes.data
   } catch (e: any) {
     toast.add({ title: 'Gagal memuat mesin', description: e.message, color: 'error' })
   } finally {
@@ -68,6 +97,8 @@ function openCreate() {
     deviceCode: '',
     deviceType: 'WASHING_MACHINE',
     name: '',
+    capacityKg: '',
+    serviceId: NO_SERVICE,
   })
   showModal.value = true
 }
@@ -79,6 +110,8 @@ function openEdit(device: IotDevice) {
     deviceCode: device.deviceCode,
     deviceType: device.deviceType,
     name: device.name,
+    capacityKg: device.capacityKg != null ? String(device.capacityKg) : '',
+    serviceId: device.serviceId || NO_SERVICE,
   })
   showModal.value = true
 }
@@ -88,6 +121,7 @@ async function save() {
     if (editTarget.value) {
       await api.patch(`/iot/devices/${editTarget.value.id}`, {
         name: form.name,
+        ...(isMachine.value ? machinePayload() : {}),
       })
       toast.add({ title: 'Mesin diperbarui', color: 'success' })
     } else {
@@ -96,6 +130,7 @@ async function save() {
         deviceCode: form.deviceCode,
         deviceType: form.deviceType,
         name: form.name,
+        ...(isMachine.value ? machinePayload() : {}),
       })
       toast.add({ title: 'Mesin ditambahkan', color: 'success' })
     }
@@ -138,6 +173,7 @@ onMounted(load)
           <tr class="bg-[#0349a8] text-white text-left">
             <th class="px-3 py-3 font-semibold">ID MESIN/ MERK</th>
             <th class="px-3 py-3 font-semibold">TIPE MESIN</th>
+            <th class="px-3 py-3 font-semibold">LAYANAN / KAPASITAS</th>
             <th class="px-3 py-3 font-semibold">OUTLET/CABANG</th>
             <th class="px-3 py-3 font-semibold">KONDISI</th>
             <th class="px-3 py-3 font-semibold">STATUS</th>
@@ -147,7 +183,7 @@ onMounted(load)
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="7" class="px-3 py-4 text-[#6f809f]">Memuat data mesin...</td>
+            <td colspan="8" class="px-3 py-4 text-[#6f809f]">Memuat data mesin...</td>
           </tr>
           <tr
             v-for="(device, idx) in filteredDevices"
@@ -159,6 +195,10 @@ onMounted(load)
               <p class="text-[#6f809f]">{{ device.manufacturer || '-' }}</p>
             </td>
             <td class="px-3 py-3">{{ deviceTypeItems.find(i => i.value === device.deviceType)?.label || device.deviceType }}</td>
+            <td class="px-3 py-3">
+              <p>{{ device.service?.name || 'Belum diatur' }}</p>
+              <p class="text-[#6f809f]">{{ device.capacityKg ? `${device.capacityKg} kg` : '-' }}</p>
+            </td>
             <td class="px-3 py-3">{{ device.outlet?.name || '-' }}</td>
             <td class="px-3 py-3">
               <span class="rounded-full px-3 py-1 text-xs font-semibold" :class="machineCondition(device.status).className">{{ machineCondition(device.status).label }}</span>
@@ -191,10 +231,18 @@ onMounted(load)
             <UFormField label="Tipe Mesin">
               <USelect v-model="form.deviceType" :items="deviceTypeItems" class="w-full" :disabled="!!editTarget" />
             </UFormField>
-            <UFormField label="Kapasitas Mesin">
-              <UInput placeholder="Pilih Kapasitas" class="w-full" />
+            <UFormField v-if="isMachine" label="Kapasitas Mesin (kg)">
+              <UInput v-model="form.capacityKg" type="number" min="1" max="100" placeholder="mis. 10" class="w-full" />
             </UFormField>
           </div>
+
+          <UFormField
+            v-if="isMachine"
+            label="Layanan Mesin"
+            help="Harga & durasi di aplikasi diambil dari layanan ini (harga per outlet di menu Layanan). Pelanggan tidak bisa memilih layanan lain untuk mesin ini."
+          >
+            <USelect v-model="form.serviceId" :items="serviceOptions" class="w-full" />
+          </UFormField>
 
           <UFormField label="Kode Mesin" v-if="!editTarget">
             <UInput v-model="form.deviceCode" placeholder="DEV-001" class="w-full" required />
