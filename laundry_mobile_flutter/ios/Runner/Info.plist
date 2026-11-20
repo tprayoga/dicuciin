@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Kamera dipakai untuk memindai QR mesin laundry.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Aplikasi membutuhkan akses galeri untuk upload bukti pembayaran.</string>
 	<key>UIApplicationSceneManifest</key>

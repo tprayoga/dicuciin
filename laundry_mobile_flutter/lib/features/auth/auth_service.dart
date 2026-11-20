@@ -214,6 +214,31 @@ class AuthService {
     );
   }
 
+  /// Batch 5: ganti kata sandi (wajib kata sandi lama). Server mengeluarkan
+  /// perangkat lain; sesi di HP ini tetap berlaku.
+  Future<void> changePassword({
+    required String accessToken,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await _apiClient.post(
+      '/auth/password/change',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      }),
+    );
+  }
+
+  /// Batch 5: keluar dari semua perangkat (semua sesi dicabut di server).
+  Future<void> logoutAll({required String accessToken}) async {
+    await _apiClient.post(
+      '/auth/logout-all',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+  }
+
   /// Ubah profil sendiri lewat PATCH /users/me (nama & email saja; nomor HP
   /// diubah lewat alur OTP).
   Future<AppUser> updateProfile({

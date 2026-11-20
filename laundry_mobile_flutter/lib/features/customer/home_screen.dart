@@ -17,6 +17,8 @@ import '../../shared/widgets/pin_pad.dart';
 import '../../shared/widgets/status_badge.dart';
 import '../../shared/widgets/user_avatar.dart';
 import '../auth/auth_controller.dart';
+import '../auth/change_password_screen.dart';
+import '../auth/edit_profile_screen.dart';
 import 'customer_controller.dart';
 import 'models/customer_models.dart';
 import 'wallet_controller.dart';

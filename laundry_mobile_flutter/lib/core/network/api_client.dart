@@ -6,11 +6,30 @@ import 'package:http/http.dart' as http;
 
 import 'api_exception.dart';
 
+/// Dipanggil saat request ber-token mendapat 401. Mengembalikan access token
+/// baru (request diulang SEKALI) atau null (sesi berakhir).
+typedef UnauthorizedHandler = Future<String?> Function(String failedAccessToken);
+
 class ApiClient {
   ApiClient({required String baseUrl}) : _baseUrl = _normalizeBaseUrl(baseUrl);
 
   final String _baseUrl;
   static const Duration _requestTimeout = Duration(seconds: 15);
+
+  /// Batch 5 (T1): dipasang oleh AuthController — refresh token sekali untuk
+  /// semua request paralel, lalu request yang gagal diulang dengan token baru.
+  UnauthorizedHandler? onUnauthorized;
+
+  /// Endpoint yang 401-nya bukan "access token kedaluwarsa".
+  static const _noRefreshPaths = <String>{
+    '/auth/login',
+    '/auth/register',
+    '/auth/refresh',
+    '/auth/logout',
+    '/auth/otp/request',
+    '/auth/otp/verify',
+    '/auth/password/reset',
+  };
 
   Future<dynamic> get(
     String path, {
@@ -141,8 +160,10 @@ class ApiClient {
     Map<String, String>? headers,
     Map<String, String>? queryParameters,
     Object? body,
+    bool isRetry = false,
   }) async {
-    final uri = Uri.parse('$_baseUrl${_normalizePath(path)}').replace(
+    final normalizedPath = _normalizePath(path);
+    final uri = Uri.parse('$_baseUrl$normalizedPath').replace(
       queryParameters: queryParameters,
     );
 
@@ -179,6 +200,28 @@ class ApiClient {
       throw ApiException('Tidak bisa terhubung ke server. Cek API base URL dan jaringan.');
     }
 
+    // 401 = guard menolak SEBELUM handler berjalan, sehingga aman mengulang
+    // request (termasuk POST) satu kali dengan access token baru.
+    final failedToken = _bearerOf(requestHeaders);
+    final handler = onUnauthorized;
+    if (response.statusCode == 401 &&
+        !isRetry &&
+        handler != null &&
+        failedToken != null &&
+        !_noRefreshPaths.contains(normalizedPath)) {
+      final newToken = await handler(failedToken);
+      if (newToken != null && newToken != failedToken) {
+        return _request(
+          method: method,
+          path: path,
+          headers: {...?headers, 'Authorization': 'Bearer $newToken'},
+          queryParameters: queryParameters,
+          body: body,
+          isRetry: true,
+        );
+      }
+    }
+
     dynamic payload;
     if (response.body.isNotEmpty) {
       try {
@@ -193,6 +236,13 @@ class ApiClient {
     }
 
     return _unwrap(payload);
+  }
+
+  static String? _bearerOf(Map<String, String> headers) {
+    final value = headers['Authorization'] ?? headers['authorization'];
+    if (value == null || !value.startsWith('Bearer ')) return null;
+    final token = value.substring(7).trim();
+    return token.isEmpty ? null : token;
   }
 
   dynamic _unwrap(dynamic payload) {
