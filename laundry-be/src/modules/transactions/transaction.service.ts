@@ -34,6 +34,7 @@ import {
   parseScheduledAt,
   promoteBookingOnPaidInTx,
   resolveBookableDevice,
+  bindLegacyHoldToOrderInTx,
 } from '../bookings/booking-lifecycle';
 
 export interface CheckoutInput {
@@ -160,7 +161,7 @@ export class TransactionService {
   /** Checkout penuh: harga → order → bayar wallet → settle loyalty. */
   async checkout(input: CheckoutInput): Promise<TransactionResult> {
     const wantsBooking = !!(input.deviceId || input.deviceCode);
-    if (wantsBooking && !input.customerId) {
+    if (wantsBooking && !input.customerId && !input.kioskId) {
       throw new BadRequestException('Booking mesin membutuhkan customer');
     }
     const bookingNow = new Date();
@@ -235,7 +236,7 @@ export class TransactionService {
             input.outletId,
           );
           await createBookingInTx(tx, {
-            customerId: input.customerId!,
+            customerId: input.customerId ?? null,
             deviceId: device.id,
             orderId: order.id,
             scheduledAt,
@@ -243,6 +244,24 @@ export class TransactionService {
             bookingCode: 'BK-' + randomBytes(4).toString('hex').toUpperCase(),
             now: bookingNow,
           });
+        }
+        // App mobile versi lama: reservasi (POST /bookings) dibuat sebelum checkout.
+        let legacyBound = false;
+        if (!wantsBooking && input.customerId && !input.kioskId) {
+          const services = await tx.service.findMany({
+            where: { id: { in: input.items.map((it) => it.serviceId) } },
+            select: { machineType: true },
+          });
+          legacyBound = !!(await bindLegacyHoldToOrderInTx(tx, {
+            customerId: input.customerId,
+            outletId: input.outletId,
+            orderId: order.id,
+            machineTypes: [
+              ...input.items.map((it) => (it as { machineType?: string }).machineType),
+              ...services.map((sv) => sv.machineType),
+            ],
+            now: bookingNow,
+          }));
         }
 
         // Bayar wallet: BONUS dulu, sisanya MAIN (saldo tak boleh minus).
@@ -283,7 +302,7 @@ export class TransactionService {
             createdBy: input.customerId ?? input.staffUserId,
           },
         });
-        if (wantsBooking) {
+        if (wantsBooking || legacyBound) {
           await promoteBookingOnPaidInTx(tx, order.id, bookingNow);
         }
 

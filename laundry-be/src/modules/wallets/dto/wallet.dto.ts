@@ -24,18 +24,8 @@ export class TopupWalletDto {
   idempotencyKey?: string;
 }
 
-export class PayWithWalletDto {
-  @ApiProperty()
-  @IsString()
-  orderId: string;
-
-  // `amount` sengaja dihapus (K4): nominal diambil dari total order di server.
-
-  @ApiProperty({ required: false })
-  @IsString()
-  @IsOptional()
-  idempotencyKey?: string;
-}
+// PayWithWalletDto dihapus (Batch 1.5): rute bayar-saldo lama kini
+// LegacyWalletPayController + LegacyPayWithWalletDto di modul payments.
 
 export class RefundWalletDto {
   @ApiProperty()

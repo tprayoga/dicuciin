@@ -167,7 +167,8 @@ export async function resolveBookableDevice(
 export async function createBookingInTx(
   tx: Prisma.TransactionClient,
   input: {
-    customerId: string;
+    /** null = booking tamu kiosk (order kiosk tanpa akun customer). */
+    customerId: string | null;
     deviceId: string;
     orderId: string | null;
     scheduledAt: Date | null;
@@ -188,7 +189,7 @@ export async function createBookingInTx(
           Math.max(start.getTime(), now.getTime()) + minutes(cfg.graceMinutes),
         );
 
-  if (input.orderId) {
+  if (input.orderId && input.customerId) {
     // Pakai ulang HOLD tanpa order milik customer ini untuk slot yang sama.
     const ownHolds = await tx.machineBooking.findMany({
       where: {
@@ -295,4 +296,63 @@ export async function releaseBookingForOrderInTx(
     },
     data: { status: BookingStatus.CANCELLED },
   });
+}
+
+const MACHINE_TYPE_TO_DEVICE: Record<string, DeviceType> = {
+  WASHER: DeviceType.WASHING_MACHINE,
+  DRYER: DeviceType.DRYER_MACHINE,
+};
+
+/**
+ * Kompatibilitas aplikasi mobile versi lama (Batch 1.5).
+ *
+ * App lama memesan mesin dengan `POST /bookings` (HOLD tanpa order) LALU membuat
+ * order tanpa `deviceId`. Agar alur itu tetap berfungsi TANPA membuka kembali
+ * aktivasi tanpa bayar, HOLD tersebut diikat ke order baru bila dan hanya bila:
+ *  - milik customer yang sama, belum punya order, status HOLD, belum kedaluwarsa;
+ *  - mesinnya di outlet order dan jenisnya cocok dengan `machineType` item order;
+ *  - kandidatnya TEPAT SATU (ambigu → tidak diikat).
+ * Setelah terikat, aturan Batch 1 berlaku penuh: HOLD → RESERVED hanya saat
+ * order PAID, dan mesin hanya START lewat scan QR pemilik.
+ */
+export async function bindLegacyHoldToOrderInTx(
+  tx: Prisma.TransactionClient,
+  input: {
+    customerId: string;
+    outletId: string;
+    orderId: string;
+    machineTypes: (string | null | undefined)[];
+    now?: Date;
+  },
+) {
+  const now = input.now ?? new Date();
+  const deviceTypes = input.machineTypes
+    .map((t) => (t ? MACHINE_TYPE_TO_DEVICE[t.toUpperCase()] : undefined))
+    .filter((t): t is DeviceType => !!t);
+  if (deviceTypes.length === 0) return null;
+
+  const candidates = await tx.machineBooking.findMany({
+    where: {
+      customerId: input.customerId,
+      orderId: null,
+      status: BookingStatus.HOLD,
+      expiresAt: { gt: now },
+      device: { outletId: input.outletId, deviceType: { in: deviceTypes } },
+    },
+  });
+  if (candidates.length !== 1) {
+    if (candidates.length > 1) {
+      logger.warn(
+        `Order ${input.orderId}: ${candidates.length} HOLD lama cocok — tidak diikat (ambigu)`,
+      );
+    }
+    return null;
+  }
+  const hold = candidates[0];
+  await lockDevice(tx, hold.deviceId);
+  const bound = await tx.machineBooking.updateMany({
+    where: { id: hold.id, orderId: null, status: BookingStatus.HOLD },
+    data: { orderId: input.orderId },
+  });
+  return bound.count === 1 ? hold.id : null;
 }

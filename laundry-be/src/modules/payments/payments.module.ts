@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { LegacyWalletPayController } from './legacy-wallet-pay.controller';
 import { ConfigService } from '@nestjs/config';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
@@ -23,7 +24,7 @@ import { IotModule } from '../iot/iot.module';
     CampaignsModule,
     IotModule,
   ],
-  controllers: [PaymentsController],
+  controllers: [PaymentsController, LegacyWalletPayController],
   providers: [
     PaymentsService,
     {

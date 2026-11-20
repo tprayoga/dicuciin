@@ -1,4 +1,4 @@
-import { IsString, IsIn, IsOptional } from 'class-validator';
+import { IsString, IsIn, IsOptional, IsNumber } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateGatewayPaymentDto {
@@ -31,4 +31,25 @@ export class PayOrderWithWalletDto {
   @ApiProperty({ description: 'ID order yang akan dibayar' })
   @IsString()
   orderId: string;
+}
+
+/**
+ * Body rute lama `POST /wallets/customer/:customerId/pay` (aplikasi mobile
+ * versi lama). `amount` DITERIMA demi kompatibilitas tetapi DIABAIKAN — nominal
+ * selalu total order dari server (K4).
+ */
+export class LegacyPayWithWalletDto {
+  @ApiProperty()
+  @IsString()
+  orderId: string;
+
+  @ApiProperty({ required: false, description: 'Diabaikan (kompatibilitas app lama)' })
+  @IsOptional()
+  @IsNumber()
+  amount?: number;
+
+  @ApiProperty({ required: false, description: 'Diabaikan (pembayaran ganda dicegah per order)' })
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
 }

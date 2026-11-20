@@ -10,7 +10,6 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   TopupWalletDto,
-  PayWithWalletDto,
   RefundWalletDto,
 } from './dto/wallet.dto';
 import {
@@ -205,109 +204,7 @@ export class WalletsService {
     }
   }
 
-  async pay(customerId: string, payWithWalletDto: PayWithWalletDto) {
-    const { orderId, idempotencyKey } = payWithWalletDto;
 
-    const wallet = await this.getOrCreateWallet(customerId);
-
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-    });
-
-    if (!order) {
-      throw new NotFoundException('Order not found');
-    }
-
-    // Hanya boleh membayar order milik customer ini (jika order ber-owner).
-    if (order.customerId && order.customerId !== customerId) {
-      throw new UnauthorizedException('Order bukan milik customer ini');
-    }
-
-    if (order.status === OrderStatus.PAID) {
-      throw new ConflictException('Order sudah dibayar');
-    }
-    // K4: hanya order yang belum dibayar, dan nominal SELALU dari server
-    // (total order), bukan dari klien.
-    if (
-      order.status !== OrderStatus.DRAFT &&
-      order.status !== OrderStatus.WAITING_PAYMENT
-    ) {
-      throw new BadRequestException(
-        `Order berstatus ${order.status} tidak bisa dibayar`,
-      );
-    }
-    const amount = toNum(order.totalAmount);
-    if (!(amount > 0)) {
-      throw new BadRequestException('Total order tidak valid');
-    }
-
-    try {
-      return await this.prisma.$transaction(async (tx) => {
-        // Potong saldo lewat satu pintu WalletLedgerService (MAIN_BALANCE saja —
-        // perilaku sama seperti sebelumnya). Guard saldo cukup + potong atomik
-        // (cegah overspend/lost-update) ditangani di dalam service ledger; saldo
-        // kurang → BadRequestException.
-        const ledger = await this.walletLedger.debit(WalletType.MAIN_BALANCE, {
-          tx,
-          walletId: wallet.id,
-          amount,
-          orderId,
-          referenceType: 'PAYMENT',
-          description: `Payment for order ${order.orderNumber}`,
-          idempotencyKey,
-        });
-
-        const transaction = mapLedgerToTransaction(ledger);
-
-        // Catat pembayaran (paymentNumber unik diturunkan dari orderNumber →
-        // pembayaran kedua atas order yang sama akan ditolak constraint unik).
-        const payment = await tx.payment.create({
-          data: {
-            orderId,
-            paymentNumber: `PAY-${order.orderNumber}`,
-            paymentMethod: PaymentMethod.WALLET,
-            amount,
-            status: PaymentStatus.PAID,
-            paidAt: new Date(),
-            notes: 'Pembayaran via saldo wallet',
-          },
-        });
-
-        const updatedOrder = await tx.order.update({
-          where: { id: orderId },
-          data: { status: OrderStatus.PAID },
-        });
-
-        await tx.orderStatusLog.create({
-          data: {
-            orderId,
-            status: OrderStatus.PAID,
-            notes: 'Dibayar via saldo wallet',
-            createdBy: customerId,
-          },
-        });
-
-        // Pemakaian promo dicatat saat order benar-benar dibayar.
-        await this.promosService.commitUsage(tx, orderId);
-
-        return {
-          wallet: { ...wallet, balance: ledger.balanceAfter },
-          transaction,
-          payment,
-          order: updatedOrder,
-        };
-      });
-    } catch (err) {
-      // Bentrok unik (idempotencyKey atau paymentNumber) → pembayaran ganda.
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002'
-      ) {
-        throw new ConflictException('Order sudah dibayar');
-      }
-      throw err;
-    }
-  }
 
   async refund(
     customerId: string,

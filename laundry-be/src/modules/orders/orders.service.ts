@@ -19,6 +19,7 @@ import {
 import { OrderStatus, UserRole, Prisma, BookingStatus } from "@prisma/client";
 import { randomBytes } from "crypto";
 import {
+  bindLegacyHoldToOrderInTx,
   createBookingInTx,
   parseScheduledAt,
   releaseBookingForOrderInTx,
@@ -121,7 +122,9 @@ export class OrdersService {
       ...orderData
     } = createOrderDto;
     const wantsBooking = !!(deviceId || deviceCode);
-    if (wantsBooking && !customerId) {
+    // Booking tanpa customer hanya untuk order tamu kiosk (kioskId hanya bisa
+    // di-set rute perangkat kiosk — rute JWT membuangnya).
+    if (wantsBooking && !customerId && !orderData.kioskId) {
       throw new BadRequestException("Booking mesin membutuhkan customer");
     }
     const now = new Date();
@@ -220,7 +223,7 @@ export class OrdersService {
           outletId,
         );
         const booking = await createBookingInTx(tx, {
-          customerId: customerId!,
+          customerId: customerId ?? null,
           deviceId: device.id,
           orderId: created.id,
           scheduledAt,
@@ -229,6 +232,16 @@ export class OrdersService {
           now,
         });
         return { ...created, booking };
+      }
+      // App mobile versi lama: reservasi (POST /bookings) dibuat sebelum order.
+      if (customerId && !orderData.kioskId) {
+        await bindLegacyHoldToOrderInTx(tx, {
+          customerId,
+          outletId,
+          orderId: created.id,
+          machineTypes: orderItems.map((it) => it.machineType),
+          now,
+        });
       }
       return created;
     });
@@ -554,31 +567,42 @@ export class OrdersService {
     cancelOrderDto: CancelOrderDto,
     cancelledBy?: string,
     actor?: AuthUser,
+    opts: { requireUnpaid?: boolean } = {},
   ) {
-    const order = await this.prisma.order.findUnique({
+    const exists = await this.prisma.order.findUnique({
       where: { id },
-      include: { customer: { select: { userId: true } } },
+      select: { id: true },
     });
-    if (!order) {
+    if (!exists) {
       throw new NotFoundException("Order not found");
     }
 
-    if (FINAL_STATUSES.has(order.status)) {
-      throw new BadRequestException("Cannot cancel this order");
-    }
+    // Batch 1.5: kunci baris order lalu periksa ulang status DI DALAM transaksi,
+    // agar pembatalan tidak berselang-seling dengan webhook PAID (settlePaidInTx
+    // mengunci baris yang sama).
+    const cancelledOrder = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`;
+      const order = await tx.order.findUniqueOrThrow({
+        where: { id },
+        include: { customer: { select: { userId: true } } },
+      });
 
-    if (actor && !isStaff(actor)) {
-      if (order.customer?.userId !== actor.userId) {
+      if (FINAL_STATUSES.has(order.status)) {
+        throw new BadRequestException("Cannot cancel this order");
+      }
+
+      const customerActor = !!actor && !isStaff(actor);
+      if (customerActor && order.customer?.userId !== actor!.userId) {
         throw new ForbiddenException("Tidak boleh membatalkan order ini");
       }
-      if (!UNPAID_STATUSES.has(order.status)) {
-        throw new BadRequestException(
-          "Order yang sudah dibayar tidak bisa dibatalkan sendiri. Hubungi admin.",
-        );
+      if (customerActor || opts.requireUnpaid) {
+        if (!UNPAID_STATUSES.has(order.status)) {
+          throw new BadRequestException(
+            "Order yang sudah dibayar tidak bisa dibatalkan sendiri. Hubungi admin.",
+          );
+        }
       }
-    }
 
-    const cancelledOrder = await this.prisma.$transaction(async (tx) => {
       await releaseBookingForOrderInTx(tx, id);
       return tx.order.update({
         where: { id },
@@ -603,6 +627,7 @@ export class OrdersService {
 
     return cancelledOrder;
   }
+
 
   private async generateOrderNumber(): Promise<string> {
     // Deprecated: digantikan oleh generateDailySequence di sequence.util.ts

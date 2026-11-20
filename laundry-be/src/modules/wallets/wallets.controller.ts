@@ -20,7 +20,6 @@ import {
 import { WalletsService } from './wallets.service';
 import {
   TopupWalletDto,
-  PayWithWalletDto,
   RefundWalletDto,
   AdminRefundWalletDto,
 } from './dto/wallet.dto';
@@ -75,16 +74,8 @@ export class WalletsController {
     return this.walletsService.topup(customerId, topupWalletDto);
   }
 
-  @Post('customer/:customerId/pay')
-  @ApiOperation({ summary: 'Pay with wallet (nominal = total order dari server)' })
-  async pay(
-    @Param('customerId') customerId: string,
-    @Body() payWithWalletDto: PayWithWalletDto,
-    @Request() req: any,
-  ) {
-    await assertCustomerAccess(this.prisma, req.user, customerId);
-    return this.walletsService.pay(customerId, payWithWalletDto);
-  }
+  // Rute `POST customer/:customerId/pay` dipindah ke LegacyWalletPayController
+  // (modul payments) — Batch 1.5: satu jalur bayar-saldo dengan booking & kunci order.
 
   // K3: refund mandiri oleh customer ditutup; refund lewat admin
   // (POST /wallets/orders/:orderId/refund) sesuai kebijakan owner.

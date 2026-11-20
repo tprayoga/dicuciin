@@ -267,10 +267,33 @@ export class PaymentsService {
       data: { status: PaymentStatus.PAID, paidAt: new Date() },
     });
 
+    // Kunci baris order: serial dengan pembatalan (OrdersService.cancel) dan
+    // pembayaran paralel lain atas order yang sama.
+    await tx.$queryRaw`SELECT id FROM orders WHERE id = ${payment.orderId} FOR UPDATE`;
     const order = await tx.order.findUnique({
       where: { id: payment.orderId },
     });
     if (!order || order.status === OrderStatus.PAID) return null;
+    if (
+      order.status === OrderStatus.CANCELLED ||
+      order.status === OrderStatus.REFUNDED
+    ) {
+      // Batch 1.5: uang masuk untuk order yang sudah batal (mis. QRIS dibayar
+      // setelah transaksi kiosk dibatalkan). Pembayaran TETAP tercatat PAID
+      // (jejak keuangan), order TIDAK dihidupkan lagi, mesin tidak menyala —
+      // ditandai untuk refund manual oleh admin.
+      await tx.orderStatusLog.create({
+        data: {
+          orderId: order.id,
+          status: order.status,
+          notes: `Pembayaran ${payment.paymentNumber} diterima setelah order ${order.status} — PERLU REFUND MANUAL`,
+        },
+      });
+      this.logger.error(
+        `Pembayaran ${payment.paymentNumber} diterima untuk order ${order.orderNumber} berstatus ${order.status} — perlu refund manual`,
+      );
+      return null;
+    }
 
     await tx.order.update({
       where: { id: order.id },
@@ -322,6 +345,16 @@ export class PaymentsService {
       select: { id: true },
     });
     if (!customer) throw new ForbiddenException('Hanya customer yang bisa membayar dengan saldo');
+    return this.payOrderWithWalletForCustomer(customer.id, orderId);
+  }
+
+  /**
+   * Inti bayar-saldo untuk customer tertentu (pemanggil sudah memvalidasi akses).
+   * Dipakai `POST /payments/wallet` dan rute lama `/wallets/customer/:id/pay`
+   * (aplikasi mobile versi lama) — satu jalur, satu set aturan.
+   */
+  async payOrderWithWalletForCustomer(customerId: string, orderId: string) {
+    const customer = { id: customerId };
 
     try {
       const result = await this.prisma.$transaction(async (tx) => {

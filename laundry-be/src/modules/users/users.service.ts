@@ -191,9 +191,20 @@ export class UsersService {
   }
 
   /** Ubah profil sendiri (field terbatas). */
-  async updateMe(userId: string, dto: UpdateMyProfileDto) {
+  async updateMe(
+    userId: string,
+    dto: UpdateMyProfileDto & { phone?: string },
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
+    if (dto.name !== undefined && dto.name.trim().length < 2) {
+      throw new BadRequestException('Nama minimal 2 karakter');
+    }
+    // Nomor HP = identitas login OTP; hanya diterima bila tidak berubah
+    // (app lama selalu mengirim nomor yang sama).
+    if (dto.phone !== undefined && dto.phone !== user.phone) {
+      throw new BadRequestException('Nomor HP tidak bisa diubah dari aplikasi');
+    }
 
     if (dto.email && dto.email !== user.email) {
       const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });

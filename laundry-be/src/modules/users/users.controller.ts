@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Request, ForbiddenException } from '@nestjs/common';
 import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { USER_ADMIN_ROLES } from '../../common/auth/access-policy';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -51,13 +52,33 @@ export class UsersController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER)
-  @ApiOperation({ summary: 'Update user (admin)' })
+  @ApiOperation({
+    summary:
+      'Update user (admin: SUPER_ADMIN/OWNER). Kompatibilitas app lama: user boleh mengubah nama/email DIRINYA SENDIRI',
+  })
   async update(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
     @Request() req: any,
   ) {
+    const isUserAdmin = (USER_ADMIN_ROLES as string[]).includes(req.user.role);
+    if (!isUserAdmin) {
+      if (req.user.userId !== id) {
+        throw new ForbiddenException('Insufficient permissions');
+      }
+      // Batch 1.5 — app mobile lama memanggil PATCH /users/:id untuk profil
+      // sendiri ({name, email, phone}). Hanya nama & email yang boleh berubah
+      // (aturan sama dengan PATCH /users/me); field istimewa → 403.
+      const privileged = ['role', 'password', 'isActive', 'outletId', 'shiftName'] as const;
+      if (privileged.some((k) => updateUserDto[k] !== undefined)) {
+        throw new ForbiddenException('Tidak boleh mengubah field ini');
+      }
+      return this.usersService.updateMe(id, {
+        name: updateUserDto.name,
+        email: updateUserDto.email ?? undefined,
+        phone: updateUserDto.phone ?? undefined,
+      });
+    }
     return this.usersService.update(id, updateUserDto, req.user);
   }
 
