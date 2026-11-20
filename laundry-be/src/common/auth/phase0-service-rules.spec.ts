@@ -47,6 +47,7 @@ describe('K7/K11 — OrdersService', () => {
         update: jest.fn().mockResolvedValue({ id: 'ord-1' }),
       },
       machineBooking: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      payment: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() },
       $transaction: jest.fn((fn: any) => fn(prisma)),
     };
     return { svc: new OrdersService(prisma, {} as any), prisma };

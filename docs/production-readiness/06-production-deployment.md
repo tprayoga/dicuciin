@@ -1,4 +1,4 @@
-# 06 — Checklist Deployment (Fase 0 + Fase 1 Batch 1 + Batch 1.5)
+# 06 — Checklist Deployment (Fase 0 + Fase 1 Batch 1, 1.5, 2)
 
 > Belum dideploy. Setiap langkah yang mengubah server/production **menunggu persetujuan eksplisit owner**.
 > Urutan rilis & matriks kompatibilitas: **11-deployment-compatibility.md**.
@@ -7,14 +7,17 @@
 
 - [ ] Review commit di branch `feat/production-readiness` (`git log --oneline main..feat/production-readiness`).
 - [ ] Jalankan di mesin developer:
-  - `cd laundry-be && npx jest` — harus **255/255**.
-  - `TEST_DATABASE_URL=postgresql://test:test@127.0.0.1:55499/dicuciin_test npm run test:integration` — harus **79/79**.
+  - `cd laundry-be && npx jest` — harus **262/262**.
+  - `TEST_DATABASE_URL=postgresql://test:test@127.0.0.1:55499/dicuciin_test npm run test:integration` — harus **120/120**.
   - `npm run build`.
   - `cd laundry_mobile_flutter && flutter analyze && flutter build apk --release --dart-define=API_BASE_URL=https://api.dicuciin.com/api/v1`.
   - `cd laundry_kiosk_flutter && flutter analyze && flutter test && flutter build <target> --release --dart-define=API_BASE_URL=https://api.dicuciin.com/api/v1`.
 - [ ] (Izin) Laporan baca-saja di server: `npm run audit:staff-outlets -- --out staff.json` → owner menugaskan outlet untuk semua `NO_OUTLET` yang masih aktif.
 - [ ] Keputusan owner: kebijakan refund; `BOOKING_HOLD_MINUTES` masa transisi (usul 15).
 - [ ] Jendela deploy saat outlet sepi (kiosk tidak bisa menjual sampai aplikasi kiosk diperbarui).
+
+- [ ] (Batch 2) Redis tersedia untuk worker (sudah dipakai scheduler loyalty). Env opsional: lihat 14 §Konfigurasi. Untuk instance API tambahan tanpa worker: `OPS_SCHEDULER_ENABLED=false`.
+- [ ] (Batch 2) Pastikan `PAYMENT_GATEWAY=midtrans` di server; endpoint `simulate`/`/payments/webhook` otomatis tidak berfungsi.
 
 ## Deploy (setelah disetujui)
 
@@ -35,6 +38,9 @@
 - [ ] (Izin) Kiosk saldo: PIN salah → ditolak; PIN benar → mesin menyala.
 - [ ] (Izin, sandbox) Mobile baru: order mesin → bayar QRIS → booking RESERVED → scan QR → START; scan sebelum bayar → ditolak.
 - [ ] (Izin) Mobile lama: reserve → bayar saldo → scan → START.
+- [ ] (Izin, sandbox) Ganti metode QRIS → VA: tagihan QRIS lama `expire` di dashboard sandbox; bayar VA → order PAID.
+- [ ] (Izin, sandbox) Bayar QR lama setelah ganti metode → admin melihat `DUPLICATE_PAYMENT` di menu Rekonsiliasi & Refund.
+- [ ] Log: `Ops scheduler terdaftar`; job `expire-holds` berjalan tiap menit.
 - [ ] Log 24 jam pertama: cari `PERLU REFUND MANUAL`, `slot terambil`, `Aktivasi mesin order kiosk`.
 
 ## Rollback

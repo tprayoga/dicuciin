@@ -212,4 +212,47 @@ describe('MidtransPaymentGateway', () => {
       'MIDTRANS_SERVER_KEY wajib diisi',
     );
   });
+
+  // ── Batch 2: expire/status (adaptor; perilaku sandbox NOT_VERIFIED) ──────
+  const res = (body: Record<string, unknown>, ok = true) =>
+    ({ ok, json: async () => body }) as Response;
+
+  it('charge memakai paymentNumber percobaan sebagai order_id Midtrans', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(
+      res({ transaction_id: 't', va_numbers: [{ bank: 'bca', va_number: '123' }] }),
+    );
+    await gateway().createCharge({ orderNumber: 'ORD-1', paymentNumber: 'PG-ORD-1-2', amount: 1000, method: 'VA', bank: 'BCA' });
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.transaction_details.order_id).toBe('PG-ORD-1-2');
+  });
+
+  it('cancelCharge: expire sukses → EXPIRED (POST /v2/{id}/expire)', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(
+      res({ status_code: '407', transaction_status: 'expire' }),
+    );
+    await expect(gateway().cancelCharge('PG-ORD-1')).resolves.toBe('EXPIRED');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.sandbox.midtrans.com/v2/PG-ORD-1/expire');
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('POST');
+  });
+
+  it('cancelCharge: ditolak karena sudah settlement → cek status → PAID', async () => {
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(res({ status_code: '412', status_message: 'cannot modify' }, false))
+      .mockResolvedValueOnce(res({ status_code: '200', transaction_status: 'settlement' }));
+    await expect(gateway().cancelCharge('PG-ORD-1')).resolves.toBe('PAID');
+    expect(fetchMock.mock.calls[1][0]).toBe('https://api.sandbox.midtrans.com/v2/PG-ORD-1/status');
+    expect((fetchMock.mock.calls[1][1] as RequestInit).method).toBe('GET');
+  });
+
+  it('getChargeStatus: 404 → NOT_FOUND; pending → PENDING; deny → FAILED', async () => {
+    const g = gateway();
+    jest.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(res({ status_code: '404' }, false))
+      .mockResolvedValueOnce(res({ status_code: '201', transaction_status: 'pending' }))
+      .mockResolvedValueOnce(res({ status_code: '202', transaction_status: 'deny' }));
+    await expect(g.getChargeStatus('a')).resolves.toBe('NOT_FOUND');
+    await expect(g.getChargeStatus('b')).resolves.toBe('PENDING');
+    await expect(g.getChargeStatus('c')).resolves.toBe('FAILED');
+  });
 });

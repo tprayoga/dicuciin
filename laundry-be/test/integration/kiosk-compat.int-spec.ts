@@ -657,6 +657,7 @@ describe("Batch 1.5 — kiosk, autentikasi perangkat, aktivasi (PostgreSQL nyata
     }
   });
   async function resetDbKeepFixtures() {
+    await prisma.paymentReconciliation.deleteMany();
     await prisma.iotCommand.deleteMany();
     await prisma.machineBooking.deleteMany();
     await prisma.payment.deleteMany();

@@ -361,16 +361,19 @@ describe("Batch 1.5 — app mobile versi lama ↔ backend baru (PostgreSQL nyata
       },
     );
 
-    it("tagihan QRIS aktif → bayar saldo lewat rute lama ditolak (cegah bayar dobel)", async () => {
+    it("Batch 2: tagihan QRIS aktif → bayar saldo lewat rute lama MEMBATALKAN QRIS & memotong saldo sekali", async () => {
       const c = await createCustomer(prisma, { balance: 50000 });
       const o = (await oldCreateOrder(c).expect(201)).body;
-      await http()
+      const pg = await http()
         .post("/payments/gateway")
         .set(auth(c.user.id))
         .send({ orderId: o.id, method: "QRIS" })
         .expect(201);
-      await oldWalletPay(c, o.id).expect(409);
-      expect(await balance(c.customer.id)).toBe(50000);
+      await oldWalletPay(c, o.id).expect(201);
+      expect(await balance(c.customer.id)).toBe(40000);
+      const qr = await prisma.payment.findUniqueOrThrow({ where: { paymentNumber: pg.body.paymentNumber } });
+      expect(qr.status).toBe("CANCELLED");
+      expect(qr.pendingSlot).toBeNull();
     });
   });
 

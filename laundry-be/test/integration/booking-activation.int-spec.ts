@@ -330,12 +330,22 @@ describe('K2/T2 — booking ↔ order ↔ pembayaran ↔ aktivasi (PostgreSQL ny
     expect(Number(w.balance)).toBe(40000);
   });
 
-  it('bayar saldo ditolak selama tagihan QRIS/VA masih aktif (cegah bayar dobel)', async () => {
+  it('Batch 2: beralih QRIS → saldo membatalkan tagihan QRIS; QR lama dibayar belakangan → rekonsiliasi, bukan lunas ganda', async () => {
     const c = await createCustomer(prisma, { balance: 50000 });
     const order: any = await orders.create(orderDto(c.customer.id) as any, c.user.id);
-    await payments.createGatewayPayment(c.user.id, { orderId: order.id, method: 'QRIS' } as any);
-    await expect(payments.payOrderWithWallet(c.user.id, order.id)).rejects.toBeInstanceOf(ConflictException);
-    expect(Number((await prisma.wallet.findUniqueOrThrow({ where: { customerId: c.customer.id } })).balance)).toBe(50000);
+    const qr: any = await payments.createGatewayPayment(c.user.id, { orderId: order.id, method: 'QRIS' } as any);
+    await payments.payOrderWithWallet(c.user.id, order.id);
+    const qrRow = await prisma.payment.findUniqueOrThrow({ where: { paymentNumber: qr.paymentNumber } });
+    expect(qrRow.status).toBe(PaymentStatus.CANCELLED);
+    expect(Number((await prisma.wallet.findUniqueOrThrow({ where: { customerId: c.customer.id } })).balance)).toBe(40000);
+    // Gateway tetap menerima pembayaran QR lama (pembatalan gagal/terlambat).
+    await payments.handleWebhook({ externalId: qrRow.externalId!, status: 'PAID' } as any);
+    const o = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(o.paidPaymentId).not.toBe(qrRow.id);
+    const rec = await prisma.paymentReconciliation.findMany({ where: { orderId: order.id } });
+    expect(rec).toHaveLength(1);
+    expect(rec[0]).toMatchObject({ reason: 'DUPLICATE_PAYMENT', paymentId: qrRow.id, status: 'OPEN' });
+    expect(Number((await prisma.wallet.findUniqueOrThrow({ where: { customerId: c.customer.id } })).balance)).toBe(40000);
   });
 
   it('bayar saldo order milik orang lain → 403; saldo kurang → gagal tanpa efek', async () => {

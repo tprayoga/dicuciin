@@ -61,6 +61,9 @@ describe('WalletsService', () => {
         update: jest.fn().mockResolvedValue({ status: OrderStatus.PAID }),
       },
       orderStatusLog: { create: jest.fn().mockResolvedValue({}) },
+      // Batch 2: refund melepas booking & menutup permintaan refund terbuka.
+      machineBooking: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      paymentReconciliation: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     };
     prisma = {
       wallet: {

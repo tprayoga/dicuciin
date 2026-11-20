@@ -155,10 +155,16 @@ Setiap perbaikan dibatalkan sementara → test terkait **gagal**, lalu dipulihka
 | Mobile: `flutter analyze`, `flutter test`, `flutter build web --release` | bersih / 1 lulus / sukses |
 | Admin: `npm run build` (Nuxt) | sukses (tidak ada test otomatis di proyek admin) |
 
+## Batch 2 — Siklus pembayaran, scheduler, rekonsiliasi (TESTED, PostgreSQL nyata)
+
+Lihat **16-batch2-test-report.md** (payment-lifecycle 18, booking-scheduler 12, reconciliation 11; total integration 120/120, unit 262/262).
+
 ## NOT_VERIFIED
 
 | Item | Alasan |
 |---|---|
+| Midtrans `expire`/`status` (Batch 2) | Adaptor diuji dengan respons tiruan; perilaku sandbox belum dicoba |
+| Redis/BullMQ nyata untuk scheduler | Logika job diuji langsung di PostgreSQL |
 | E2E Midtrans sandbox dengan kode Batch 1 | Kode belum dideploy ke server; key sandbox Core API hanya ada di server. E2E sandbox terakhir (19 Nov) berjalan pada kode lama. |
 | Aktivasi mesin fisik / event IoT nyata | Belum ada perangkat IoT; event diuji dengan pemanggilan `handleDeviceEvent` |
 | Aplikasi Flutter di perangkat | Diverifikasi lewat `flutter analyze` + `flutter build web`; test Flutter hanya placeholder |

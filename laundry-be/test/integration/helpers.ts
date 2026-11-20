@@ -63,3 +63,30 @@ export async function createServiceWithPrice(prisma: PrismaClient, outletId: str
 }
 
 export const inMinutes = (m: number) => new Date(Date.now() + m * 60_000);
+
+/** Gateway tiruan yang bisa dikendalikan test. */
+export function controllableGateway() {
+  const charges = new Map<string, string>();
+  const gw = {
+    name: 'mock',
+    charges,
+    createCharge: jest.fn(async (input: any) => {
+      charges.set(input.paymentNumber, 'PENDING');
+      return {
+        externalId: `ext-${input.paymentNumber}`,
+        qrString: input.method === 'QRIS' ? `qr-${input.paymentNumber}` : undefined,
+        vaNumber: input.method === 'VA' ? `8808${input.paymentNumber.length}000` : undefined,
+        bank: input.bank,
+        expiresAt: inMinutes(15),
+      };
+    }),
+    cancelCharge: jest.fn(async (pn: string) => {
+      if (charges.get(pn) === 'PAID') return 'PAID';
+      charges.set(pn, 'CANCELLED');
+      return 'CANCELLED';
+    }),
+    getChargeStatus: jest.fn(async (pn: string) => charges.get(pn) ?? 'NOT_FOUND'),
+  };
+  return gw;
+}
+
