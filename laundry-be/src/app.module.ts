@@ -1,3 +1,4 @@
+import { OperationsModule } from './modules/operations/operations.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
@@ -71,6 +72,7 @@ import { MobileMemberModule } from './modules/mobile/mobile-member.module';
     ReviewsModule,
     BookingsModule,
     KiosksModule,
+    OperationsModule,
     IotModule,
     HealthModule,
     UploadsModule,

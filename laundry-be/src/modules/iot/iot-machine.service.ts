@@ -8,7 +8,7 @@ import {
 import { BookingStatus, OrderStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { IncomingDeviceEvent, IotMqttService } from "./iot-mqtt.service";
-import { bookingConfig } from "../bookings/booking-lifecycle";
+import { bookingConfig, completeBookingForOrder } from "../bookings/booking-lifecycle";
 
 /** Lifecycle status command mesin (disimpan di IotCommand.status). */
 export const IotCommandStatus = {
@@ -193,15 +193,20 @@ export class IotMachineService implements OnModuleInit {
     if (!command) throw new NotFoundException("Command tidak ditemukan");
     if (command.status !== IotCommandStatus.PENDING) return command;
 
-    this.mqtt.publishCommand(command.device.deviceCode, command.command, {
-      commandId: command.id,
-      ...((command.payload as Record<string, unknown>) ?? {}),
-    });
-
-    return this.prisma.iotCommand.update({
-      where: { id: command.id },
+    // Batch 2: klaim atomik PENDING → PUBLISHED SEBELUM publish. Hanya satu
+    // pemanggil (request/scan paralel, worker scheduler) yang menang → perintah
+    // tidak pernah terkirim dua kali ke mesin.
+    const claimed = await this.prisma.iotCommand.updateMany({
+      where: { id: command.id, status: IotCommandStatus.PENDING },
       data: { status: IotCommandStatus.PUBLISHED, sentAt: new Date() },
     });
+    if (claimed.count === 1) {
+      this.mqtt.publishCommand(command.device.deviceCode, command.command, {
+        commandId: command.id,
+        ...((command.payload as Record<string, unknown>) ?? {}),
+      });
+    }
+    return this.prisma.iotCommand.findUniqueOrThrow({ where: { id: command.id } });
   }
 
   /**
@@ -219,7 +224,10 @@ export class IotMachineService implements OnModuleInit {
       orderBy: { createdAt: "desc" },
     });
     const latest = previous[0];
-    if (latest && latest.status !== IotCommandStatus.FAILED) {
+    const retryable =
+      latest?.status === IotCommandStatus.FAILED ||
+      latest?.status === IotCommandStatus.TIMEOUT;
+    if (latest && !retryable) {
       // Sudah ada START aktif/selesai → jangan kirim lagi (anti-replay).
       if (latest.status === IotCommandStatus.PENDING)
         return this.markPublished(latest.id);
@@ -399,7 +407,13 @@ export class IotMachineService implements OnModuleInit {
           orderBy: { createdAt: "desc" },
         });
 
-    if (!command || TERMINAL_STATUSES.includes(command.status)) {
+    // Event terlambat (RUNNING/COMPLETED) untuk perintah yang sudah dicap TIMEOUT
+    // oleh scheduler tetap diterima — mesin ternyata berjalan.
+    const lateEvent =
+      command?.status === IotCommandStatus.TIMEOUT &&
+      (targetStatus === IotCommandStatus.RUNNING ||
+        targetStatus === IotCommandStatus.COMPLETED);
+    if (!command || (TERMINAL_STATUSES.includes(command.status) && !lateEvent)) {
       return {
         trusted: true as const,
         eventType: event.eventType,
@@ -429,13 +443,7 @@ export class IotMachineService implements OnModuleInit {
           data: { status: BookingStatus.IN_USE, startedAt: new Date() },
         });
       } else if (targetStatus === IotCommandStatus.COMPLETED) {
-        await this.prisma.machineBooking.updateMany({
-          where: {
-            orderId: command.orderId,
-            status: { in: [BookingStatus.RESERVED, BookingStatus.IN_USE] },
-          },
-          data: { status: BookingStatus.DONE, endedAt: new Date() },
-        });
+        await completeBookingForOrder(this.prisma, command.orderId, "IOT_COMPLETED_EVENT");
       }
     }
 

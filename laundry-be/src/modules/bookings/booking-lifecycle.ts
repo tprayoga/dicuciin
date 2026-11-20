@@ -356,3 +356,47 @@ export async function bindLegacyHoldToOrderInTx(
   });
   return bound.count === 1 ? hold.id : null;
 }
+
+/**
+ * Selesaikan booking & order secara konsisten (Batch 2): booking
+ * RESERVED/IN_USE → DONE dan order PAID → COMPLETED, dalam SATU transaksi
+ * dengan urutan kunci order → booking (sama dengan webhook & scheduler →
+ * tidak ada deadlock). Idempoten: booking yang sudah DONE dilewati.
+ */
+export async function completeBookingForOrder(
+  prisma: {
+    $transaction: <T>(fn: (tx: Prisma.TransactionClient) => Promise<T>) => Promise<T>;
+  },
+  orderId: string,
+  source: "IOT_COMPLETED_EVENT" | "DURATION_FALLBACK",
+) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
+    const done = await tx.machineBooking.updateMany({
+      where: {
+        orderId,
+        status: { in: [BookingStatus.RESERVED, BookingStatus.IN_USE] },
+      },
+      data: { status: BookingStatus.DONE, endedAt: new Date() },
+    });
+    if (done.count === 0) return false;
+    const order = await tx.order.findUnique({ where: { id: orderId } });
+    if (order?.status === "PAID") {
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: "COMPLETED", completedAt: new Date() },
+      });
+      await tx.orderStatusLog.create({
+        data: {
+          orderId,
+          status: "COMPLETED",
+          notes:
+            source === "IOT_COMPLETED_EVENT"
+              ? "Mesin melaporkan selesai"
+              : "Selesai otomatis (batas durasi, tanpa event mesin)",
+        },
+      });
+    }
+    return true;
+  });
+}
