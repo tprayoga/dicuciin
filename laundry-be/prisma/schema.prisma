@@ -201,19 +201,25 @@ enum ReferralStatus {
 // ============================================
 
 model User {
-  id              String    @id @default(uuid())
-  name            String
-  email           String?   @unique
-  phone           String?   @unique
-  passwordHash    String
-  role            UserRole  @default(CUSTOMER)
-  isActive        Boolean   @default(true)
-  avatarUrl       String?
-  phoneVerifiedAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                  String    @id @default(uuid())
+  name                String
+  email               String?   @unique
+  phone               String?   @unique
+  passwordHash        String
+  role                UserRole  @default(CUSTOMER)
+  isActive            Boolean   @default(true)
+  avatarUrl           String?
+  phoneVerifiedAt     DateTime?
+  /// Batch 5: waktu password terakhir diubah (token lama / token verifikasi sebelum ini ditolak).
+  passwordChangedAt   DateTime?
+  /// Batch 5: penguncian login per akun.
+  failedLoginAttempts Int       @default(0)
+  loginLockedUntil    DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   customer      Customer?
+  authSessions  AuthSession[]
   outletUsers   OutletUser[]
   auditLogs     AuditLog[]
   refreshTokens RefreshToken[]
@@ -740,17 +746,44 @@ model AuditLog {
 model RefreshToken {
   id        String    @id @default(uuid())
   userId    String
+  /// Batch 5: sesi pemilik token (null = token sebelum Batch 5).
+  sessionId String?
   tokenHash String    @unique
   expiresAt DateTime
   revokedAt DateTime?
+  /// Batch 5: diisi saat token ditukar (rotasi); pemakaian ulang setelahnya = indikasi pencurian.
+  rotatedAt DateTime?
   createdAt DateTime  @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session AuthSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([sessionId])
   @@index([tokenHash])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+/// Batch 5: satu login di satu perangkat. Access token membawa `sid`; mencabut
+/// sesi langsung menolak access & refresh token-nya.
+model AuthSession {
+  id            String    @id @default(uuid())
+  userId        String
+  createdAt     DateTime  @default(now())
+  lastUsedAt    DateTime  @default(now())
+  /// Umur maksimum sesi (AUTH_SESSION_MAX_DAYS); null = tanpa batas absolut.
+  expiresAt     DateTime?
+  revokedAt     DateTime?
+  revokedReason String?
+  userAgent     String?
+  ipAddress     String?
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
+
+  @@index([userId, revokedAt])
+  @@map("auth_sessions")
 }
 
 model OtpCode {
