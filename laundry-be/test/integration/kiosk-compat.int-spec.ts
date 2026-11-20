@@ -12,6 +12,7 @@
  * CATATAN: "START dipublikasikan" = perintah tercatat & dikirim ke broker MQTT
  * tiruan. Ini BUKAN verifikasi perangkat IoT fisik.
  */
+import { OrderCreateController } from '../../src/modules/transactions/order-create.controller';
 import { Test } from "@nestjs/testing";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
@@ -112,7 +113,7 @@ describe("Batch 1.5 — kiosk, autentikasi perangkat, aktivasi (PostgreSQL nyata
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [PassportModule, JwtModule.register({ secret: JWT_SECRET })],
-      controllers: [KiosksController, PricingController, OrdersController],
+      controllers: [KiosksController, PricingController, OrdersController, OrderCreateController],
       providers: [
         PrismaService,
         JwtStrategy,

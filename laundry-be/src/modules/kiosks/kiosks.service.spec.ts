@@ -52,7 +52,7 @@ describe('KiosksService enrollment', () => {
       getStatus: jest.fn(),
       simulatePaid: jest.fn(),
     };
-    const transactionService = { checkout: jest.fn() };
+    const transactionService = { checkout: jest.fn(), createOrder: jest.fn() };
     const config = { get: jest.fn().mockReturnValue('development') };
     return {
       prisma,
@@ -216,13 +216,14 @@ describe('KiosksService enrollment', () => {
       }),
     ).rejects.toThrow('Pilih mesin');
     expect(ordersService.create).not.toHaveBeenCalled();
+    expect(transactionService.createOrder).not.toHaveBeenCalled();
     expect(transactionService.checkout).not.toHaveBeenCalled();
   });
 
-  it('order kiosk mengikat mesin & mengabaikan jadwal/identitas kiosk dari klien', async () => {
-    const { prisma, service, ordersService } = setup();
+  it('order kiosk mengikat mesin & mengabaikan jadwal/identitas kiosk/voucher dari klien', async () => {
+    const { prisma, service, transactionService } = setup();
     prisma.kiosk.findUnique.mockResolvedValue(baseKiosk);
-    ordersService.create.mockResolvedValue({ id: 'o1' });
+    transactionService.createOrder.mockResolvedValue({ id: 'o1' });
     await service.createDeviceOrder('device-token', {
       outletId: 'outlet-lain',
       kioskId: 'kiosk-lain',
@@ -230,17 +231,21 @@ describe('KiosksService enrollment', () => {
       items: [{ serviceId: 'svc-1', quantity: 1 }],
       deviceId: 'dev-1',
       scheduledAt: '2099-01-01T00:00:00Z',
+      voucherCode: 'VOUCHER-ORANG',
     } as any);
-    expect(ordersService.create).toHaveBeenCalledWith(
+    // Batch 3: harga terpadu lewat TransactionService.createOrder.
+    expect(transactionService.createOrder).toHaveBeenCalledWith(
       expect.objectContaining({
         outletId: 'outlet-1',
         kioskId: 'kiosk-1',
         sourcePlatform: 'KIOSK',
         deviceId: 'dev-1',
         scheduledAt: undefined,
+        voucherCode: undefined,
       }),
     );
   });
+
 
   it('status pembayaran/order kiosk lain → 404/403', async () => {
     const { prisma, service } = setup();

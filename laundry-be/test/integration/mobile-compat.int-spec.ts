@@ -8,6 +8,7 @@
  * "START" = perintah tercatat & dikirim ke broker MQTT tiruan — BUKAN uji
  * perangkat IoT fisik.
  */
+import { OrderCreateController } from '../../src/modules/transactions/order-create.controller';
 import { Test } from "@nestjs/testing";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
@@ -97,6 +98,7 @@ describe("Batch 1.5 — app mobile versi lama ↔ backend baru (PostgreSQL nyata
       imports: [PassportModule, JwtModule.register({ secret: JWT_SECRET })],
       controllers: [
         OrdersController,
+        OrderCreateController,
         BookingsController,
         PaymentsController,
         LegacyWalletPayController,

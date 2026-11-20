@@ -7,6 +7,7 @@
  * di-mock agar yang diuji murni otorisasi. JwtAuthGuard diganti guard uji yang
  * membaca identitas dari header (tanpa JWT).
  */
+import { OrderCreateController } from '../../src/modules/transactions/order-create.controller';
 import {
   CanActivate,
   ExecutionContext,
@@ -79,7 +80,7 @@ describe('Security gate (PostgreSQL nyata)', () => {
         UsersController, CustomersController, OrdersController, WalletsController,
         TransactionsController, PricingController, IotController, KiosksController,
         ReviewsController, UploadsController, PaymentsController, BookingsController,
-        LegacyWalletPayController,
+        LegacyWalletPayController, OrderCreateController,
       ],
       providers: [
         PrismaService,

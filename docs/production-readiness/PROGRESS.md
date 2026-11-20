@@ -1,7 +1,7 @@
 # PROGRESS — Di.Cuciin Production Readiness
 
 Status: NOT_STARTED · IN_PROGRESS · IMPLEMENTED · TESTED · BLOCKED · ACCEPTED
-Terakhir diperbarui: 20 Nov 2026
+Terakhir diperbarui: 21 Nov 2026
 
 | Fase | Temuan | Status | Bukti |
 |---|---|---|---|
@@ -10,27 +10,30 @@ Terakhir diperbarui: 20 Nov 2026
 | **1 — Batch 1** | **K2, T2** + kebijakan outlet | **TESTED** (PostgreSQL nyata) · belum deploy | [02](02-booking-payment-architecture.md), [07](07-test-matrix.md), [08](08-migration-rollback.md) |
 | **1 — Batch 1.5** | Kompatibilitas kiosk, rekonsiliasi booking lama, kompatibilitas deployment, outlet staf | **TESTED** (PostgreSQL nyata) · belum deploy | [10](10-kiosk-compatibility.md), [11](11-deployment-compatibility.md), [12](12-legacy-booking-reconciliation.md), [07](07-test-matrix.md) |
 | **1 — Batch 2** | **T4, T5, T9, S2** + rekonsiliasi keuangan & refund | **TESTED** (PostgreSQL nyata; Midtrans sandbox NOT_VERIFIED) · belum deploy | [13](13-payment-lifecycle.md), [14](14-booking-scheduler.md), [15](15-financial-reconciliation.md), [16](16-batch2-test-report.md) |
-| 1 — Batch 3 (sisa) | T3 (sisa UI), T10, S1 (sisa), S4 | NOT_STARTED | — |
+| **1 — Batch 3** | **T3, T10, S1, S4** — checkout & pengalaman mobile | **TESTED** (PostgreSQL nyata, pricing asli) · belum deploy | [17](17-batch3-checkout.md) |
+| IoT perangkat fisik | integrasi & uji mesin | **DITUNDA** (keputusan owner) | — |
 | 2 — Top-up Midtrans & PIN | K1 (fitur), S5 | NOT_STARTED | — |
 | 3 — Auth & akun | T1, T6, T7, T11 | NOT_STARTED | — |
 | 4 — Kualitas alur | T8, S3, S6–S8, R1–R5, R7 | NOT_STARTED | — |
 | 5 — Rilis & operasional | R6 + checklist | IN_PROGRESS ([06](06-production-deployment.md), [11](11-deployment-compatibility.md)) | — |
 
-## Quality gate (20 Nov 2026, setelah Batch 2)
+## Quality gate (21 Nov 2026, setelah Batch 3)
 
 | Gate | Hasil |
 |---|---|
-| Unit backend (`npx jest`) | **262/262** (24 suite) |
-| Integration PostgreSQL nyata (`npm run test:integration`) | **120/120** (10 suite); suite konkurensi diulang 3× → stabil |
-| `tsc --noEmit`, `npm run build` | exit 0 |
-| `prisma migrate diff` | kosong |
-| Flutter mobile / kiosk: analyze, test, build web | bersih / lulus / sukses |
+| Unit backend | **264/264** (24 suite) |
+| Integration PostgreSQL nyata | **137/137** (11 suite) |
+| Pengulangan suite konkurensi | ±60 run: **1 kegagalan intermiten tidak terulang** (lihat bawah) |
+| `tsc --noEmit`, `npm run build`, `prisma migrate diff` | exit 0 / sukses / kosong |
+| Flutter mobile: analyze / test / build web | bersih / 6 lulus / sukses |
+| Flutter kiosk (regresi): analyze / test / build web | bersih / 2 lulus / sukses |
 | Admin `npm run build` | sukses |
-| Gate Fase 0 (K1–K12), Batch 1 (K2, T2), Batch 1.5 | tetap lulus (suite yang sama) |
-| E2E Midtrans sandbox (kode Batch 1–2) | **NOT_VERIFIED** (belum deploy) |
-| IoT fisik, kiosk fisik, app di HP, UI admin di browser, Redis/BullMQ production | **NOT_VERIFIED** |
+| Gate Fase 0, Batch 1, 1.5, 2 | tetap lulus (suite yang sama) |
+| Midtrans sandbox, IoT fisik (ditunda), app di HP, UI admin di browser | **NOT_VERIFIED** |
 
-Rincian: [16-batch2-test-report.md](16-batch2-test-report.md). Lingkungan uji: Docker `postgres:16-alpine` (`127.0.0.1:55499/dicuciin_test`), terpisah dari DB development, DB proyek lain, dan server.
+**Kegagalan intermiten**: pada pengulangan ke-3 dari 3 run suite gabungan (checkout-pricing, payment-lifecycle, booking-scheduler, kiosk-compat, mobile-compat) satu test gagal; output tidak tersimpan sehingga nama test tidak diketahui. 58+ run berikutnya (gabungan & per kelompok) bersih. Belum ditemukan penyebab; semua assertion konkurensi telah ditinjau ulang. Tindak lanjut: jalankan suite dengan log tersimpan di CI dan selidiki bila muncul lagi. **Tidak dinyatakan lulus 100% stabil.**
+
+Lingkungan uji: Docker `postgres:16-alpine` (`127.0.0.1:55499/dicuciin_test`), terpisah dari DB development, DB HWMS, dan server.
 
 ## Gate Fase 0
 
@@ -78,6 +81,16 @@ Rincian: [16-batch2-test-report.md](16-batch2-test-report.md). Lingkungan uji: D
 - [ ] Midtrans sandbox (expire/status) — NOT_VERIFIED
 - [ ] **ACCEPTED** — butuh deploy + sandbox + uji perangkat + kebijakan refund owner
 
+## Gate Batch 3 (checkout)
+
+- [x] Semua pintu pilih mesin memakai alur order+booking tunggal; jalan pintas lama dihapus
+- [x] QRIS, VA, saldo menagih order yang sama dengan harga server (voucher & happy hour di semua metode)
+- [x] Voucher/kuota direservasi → tidak terpakai ganda; dilepas saat batal/kedaluwarsa
+- [x] Detail order: lanjutkan pembayaran & batalkan; DRAFT ditinggalkan dibersihkan scheduler
+- [x] Dryer 1–3 siklus: harga, durasi, lama booking dihitung server
+- [ ] Siklus dryer ke perangkat — menunggu integrasi IoT (ditunda)
+- [ ] **ACCEPTED** — butuh deploy + sandbox + uji di HP
+
 ## Temuan baru
 
 | Temuan | Status |
@@ -100,6 +113,10 @@ Rincian: [16-batch2-test-report.md](16-batch2-test-report.md). Lingkungan uji: D
 | Refund admin me-refund pembayaran terakhir & tidak melepas booking | **TESTED** (Batch 2) |
 | `markPublished` baca-lalu-tulis → publikasi START ganda bila paralel | **TESTED** (Batch 2 — klaim atomik) |
 | START tanpa ACK tidak pernah bisa dicoba ulang | **TESTED** (Batch 2 — TIMEOUT) |
+| Jumlah item order tanpa batas bawah (0/negatif lolos validasi) | **TESTED** (Batch 3 — validasi server) |
+| Voucher app dikirim sebagai `promoCode` → tidak berlaku di QRIS/VA | **TESTED** (Batch 3) |
+| Batal booking tidak membatalkan tagihan QRIS/VA aktif & tanpa kunci order | **TESTED** (Batch 3 — lewat OrdersService.cancel) |
+| Refund order ber-voucher tidak mengembalikan voucher (alur rekonsiliasi/refund langsung) | Dicatat — keputusan kebijakan |
 
 ## Keputusan owner yang tertunda
 

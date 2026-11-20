@@ -12,6 +12,8 @@
 | `20261120120000_payment_status_cancelled` (Batch 2) | `PaymentStatus` + `CANCELLED` | Aditif | Sebelum rollback kode: `UPDATE payments SET status='EXPIRED' WHERE status='CANCELLED';` (kode lama tidak mengenal nilai ini). Nilai enum dibiarkan. |
 | `20261120120100_payment_lifecycle_reconciliation` (Batch 2) | `payments.expiresAt/provider/cancelledAt/pendingSlot` (unik), `orders.paidPaymentId` (unik, FK), tabel `payment_reconciliations` + 3 enum, **trigger `orders_financial_guard`**, backfill (`expiresAt`/`provider` dari JSON, `pendingSlot` untuk PENDING terbaru, `paidPaymentId` = pembayaran lunas pertama) | Aditif; backfill hanya mengisi kolom baru | Kode lama tidak membaca kolom/tabel baru. Trigger aman untuk kode lama (tidak ada alur sah CANCELLED→PAID). Bila perlu: `DROP TRIGGER orders_financial_guard ON orders; DROP FUNCTION orders_financial_guard();`. **Jangan** drop `payment_reconciliations` bila sudah berisi — ekspor dulu (catatan keuangan). |
 
+| `20261121090000_order_pricing_snapshot` (Batch 3) | `orders.pricingSnapshot` (JSONB), `orders.pricingReleasedAt`, `machine_bookings.durationMinutes` | Aditif, tanpa backfill | Kode lama tidak membaca kolom ini. Sebelum rollback kode: lepaskan reservasi voucher order belum bayar — `UPDATE user_vouchers SET status='ACTIVE', "usedAt"=NULL WHERE id IN (SELECT "userVoucherId" FROM voucher_redemptions WHERE status='RESERVED'); UPDATE voucher_redemptions SET status='RELEASED' WHERE status='RESERVED';` (kode lama tidak mengenal status RESERVED). |
+
 Verifikasi skema ↔ migrasi: `prisma migrate diff --from-url <test-db> --to-schema-datamodel prisma/schema.prisma` → **kosong** (dijalankan 19 Nov di DB uji).
 
 ## Prosedur

@@ -24,6 +24,8 @@ import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { JwtOrKioskDeviceGuard } from '../guards/jwt-or-kiosk-device.guard';
 import { LegacyWalletPayController } from '../../modules/payments/legacy-wallet-pay.controller';
 import { PaymentsService } from '../../modules/payments/payments.service';
+import { OrderCreateController } from '../../modules/transactions/order-create.controller';
+import { TransactionService } from '../../modules/transactions/transaction.service';
 import { RolesGuard } from '../guards/roles.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersController } from '../../modules/users/users.controller';
@@ -138,12 +140,13 @@ describe('Otorisasi HTTP — security gate Fase 0', () => {
   let ordersService: any;
 
   let paymentsService: any;
+  let transactionService: any;
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [
         UsersController, CustomersController, OrdersController, WalletsController,
         TransactionsController, PricingController, IotController, KiosksController,
-        ReviewsController, UploadsController, PaymentsController, LegacyWalletPayController,
+        ReviewsController, UploadsController, PaymentsController, LegacyWalletPayController, OrderCreateController,
       ],
       providers: [
         { provide: PrismaService, useValue: prismaMock },
@@ -167,6 +170,7 @@ describe('Otorisasi HTTP — security gate Fase 0', () => {
     usersService = moduleRef.get(UsersService);
     ordersService = moduleRef.get(OrdersService);
     paymentsService = moduleRef.get(PaymentsService);
+    transactionService = moduleRef.get(TransactionService);
   });
 
   afterAll(() => app.close());
@@ -242,7 +246,14 @@ describe('Otorisasi HTTP — security gate Fase 0', () => {
       post('custA', '/orders', { customerId: 'cust-B', outletId: 'o-1', sourcePlatform: 'MOBILE_APP', items: [{ serviceId: 's', quantity: 1 }] }).expect(403));
     it('customer membuat order → customerId dipaksa miliknya', async () => {
       await post('custA', '/orders', { outletId: 'o-1', sourcePlatform: 'MOBILE_APP', items: [{ serviceId: 's', quantity: 1 }] }).expect(201);
-      expect(ordersService.create.mock.calls.at(-1)[0].customerId).toBe('cust-A');
+      // Batch 3: POST /orders → OrderCreateController → TransactionService.createOrder (harga terpadu).
+      expect(transactionService.createOrder.mock.calls.at(-1)[0].customerId).toBe('cust-A');
+    });
+    it('customer tidak bisa menyusupkan staffUserId/kioskId saat membuat order', async () => {
+      await post('custA', '/orders', { outletId: 'o-1', sourcePlatform: 'MOBILE_APP', staffUserId: 'u-cashier', items: [{ serviceId: 's', quantity: 1 }] }).expect(201);
+      const input = transactionService.createOrder.mock.calls.at(-1)[0];
+      expect(input.staffUserId).toBeUndefined();
+      expect(input.kioskId).toBeUndefined();
     });
     it('customer tidak bisa membatalkan order orang lain', () =>
       post('custA', '/orders/ord-B/cancel', { cancelReason: 'batal uji' }).expect(403));
