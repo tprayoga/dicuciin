@@ -319,8 +319,26 @@ describe("Batch 2 — siklus hidup pembayaran (PostgreSQL nyata, gateway tiruan)
       }
     });
 
+    it("regresi: order PAID tetap menahan mesin (order berikutnya 409); order CANCELLED melepasnya", async () => {
+      const a = await createCustomer(prisma);
+      const b = await createCustomer(prisma);
+      const paid = await newOrder(a);
+      const p: any = await charge(a, paid.id, "QRIS");
+      await customerPays(p.paymentNumber);
+      await expect(newOrder(b)).rejects.toBeInstanceOf(ConflictException);
+      machine = await createMachine(prisma, outlet.id);
+      const cancelled = await newOrder(a);
+      await orders.cancel(cancelled.id, { cancelReason: "batal" }, a.user.id, a.auth as any);
+      await expect(newOrder(b)).resolves.toBeTruthy();
+    });
+
     it("batal vs pelunasan paralel (8×) → PAID tanpa rekonsiliasi, ATAU CANCELLED + PAID_AFTER_CANCEL", async () => {
       for (let i = 0; i < 8; i++) {
+        // Batch 4 (akar flaky Batch 3): mesin BARU per iterasi. Dulu satu mesin
+        // dipakai bersama; bila pembayaran menang balapan, booking RESERVED
+        // (benar) menahan mesin → order iterasi berikutnya 409. Terbukti
+        // deterministik dengan memaksa pembayaran menang di iterasi pertama.
+        machine = await createMachine(prisma, outlet.id);
         const c = await createCustomer(prisma);
         const o = await newOrder(c);
         const p: any = await charge(c, o.id, "QRIS");

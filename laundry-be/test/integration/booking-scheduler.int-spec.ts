@@ -24,6 +24,7 @@ import { MembershipTierService } from "../../src/modules/memberships/membership-
 import { B2BPartnerService } from "../../src/modules/partners/b2b-partner.service";
 import { CampaignService } from "../../src/modules/campaigns/campaign.service";
 import { LoyaltyConfigService } from "../../src/modules/loyalty-config/loyalty-config.service";
+import { WalletTopupService } from "../../src/modules/payments/wallet-topup.service";
 import { BookingMaintenanceService } from "../../src/modules/operations/booking-maintenance.service";
 import {
   controllableGateway,
@@ -56,6 +57,8 @@ describe("Batch 2 — scheduler booking (PostgreSQL nyata, multi-worker)", () =>
         IotMachineService,
         WalletLedgerService,
         BookingMaintenanceService,
+        // Batch 4: sapuan top-up diuji di wallet-topup.int-spec.
+        { provide: WalletTopupService, useValue: { syncPending: jest.fn() } },
         { provide: IotMqttService, useValue: mqtt },
         { provide: PAYMENT_GATEWAY, useValue: gw },
         {

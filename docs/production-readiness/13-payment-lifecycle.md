@@ -109,6 +109,13 @@ sequenceDiagram
 | `POST /kiosks/device/payments` | jalur yang sama (pemilik = kiosk) |
 | `POST /payments/:n/simulate`, `/payments/webhook` | hanya gateway mock |
 
+## Batch 4 — top-up & PIN pada arsitektur yang sama
+
+- Top-up saldo (`wallet_topups`, order_id Midtrans `TOP-…`) memakai gateway, webhook, verifikasi status provider, dan scheduler yang sama; `PaymentsService.handleProviderWebhook` meneruskan event yang bukan milik pembayaran order ke `WalletTopupService`. Detail: **18-wallet-topup.md**.
+- Semua debit saldo customer lewat JWT kini melewati `requireWalletAuthorization` (PIN atau bukti PIN sekali pakai). Detail: **19-wallet-pin-security.md**.
+- `payment_reconciliations` dapat merujuk top-up (`topupId`, `orderId` nullable) dengan alasan `TOPUP_LATE_SETTLEMENT`: ditutup (pelanggan menyimpan saldo) atau, setelah disetujui, dieksekusi sebagai refund `EXTERNAL` yang **dalam transaksi yang sama** mendebit kredit saldo (`TOPUP_REFUND`); saldo yang sudah terpakai → ditolak 409. Lihat 18.
+- Refund order: voucher dikembalikan hanya bila layanan belum dikonsumsi & voucher masih berlaku (`REFUND_RESTORE_VOUCHER`, diaudit) — berlaku untuk refund admin langsung, alur rekonsiliasi, dan `TransactionService.refund`.
+
 ## Rollback
 
 Lihat 08. Kode lama tidak membaca kolom baru; nilai enum `CANCELLED` harus diubah ke `EXPIRED` sebelum rollback kode (kode lama tidak mengenalnya). Trigger dapat dihapus: `DROP TRIGGER orders_financial_guard ON orders;`.

@@ -1,3 +1,15 @@
+// Batch 4: logika PIN (penguncian, bukti, paralel) & kebijakan voucher refund diuji
+// nyata di integration (wallet-pin.int-spec, refund-voucher-policy). Di sini hanya
+// delegasi & kepemilikan.
+jest.mock('../../common/auth/wallet-pin', () => ({
+  setWalletPin: jest.fn().mockResolvedValue(undefined),
+  verifyWalletPinWithLockout: jest.fn().mockResolvedValue(undefined),
+  walletPinStatus: jest.fn().mockResolvedValue({ hasPin: true, lockedUntil: null }),
+}));
+jest.mock('../orders/voucher-refund-policy', () => ({
+  restoreVoucherAfterRefundInTx: jest.fn().mockResolvedValue({ restored: false, reason: 'NO_APPLIED_VOUCHER' }),
+}));
+import { setWalletPin, verifyWalletPinWithLockout } from '../../common/auth/wallet-pin';
 import { Test } from '@nestjs/testing';
 import {
   BadRequestException,
@@ -276,35 +288,28 @@ describe('WalletsService', () => {
     });
   });
 
-  describe('verifyPin', () => {
+  describe('verifyPin / setPin (delegasi)', () => {
     beforeEach(() => {
-      prisma.customer.findUnique.mockResolvedValue({
-        id: 'cust-1',
-        userId: 'user-1',
-        walletPinHash: '$2b$10$hash',
+      prisma.customer.findUnique.mockResolvedValue({ id: 'cust-1', userId: 'user-1' });
+    });
+
+    it('PIN diverifikasi lewat modul terkunci + menerbitkan bukti sekali pakai', async () => {
+      await expect(service.verifyPin('cust-1', 'user-1', '123456')).resolves.toEqual({ valid: true });
+      expect(verifyWalletPinWithLockout).toHaveBeenCalledWith(prisma, 'cust-1', '123456', expect.any(Date), {
+        issueProofFor: null, // tanpa sesi → tidak ada bukti (sesi diberikan controller)
       });
     });
 
-    it('PIN benar → valid:true', async () => {
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-      await expect(
-        service.verifyPin('cust-1', 'user-1', '123456'),
-      ).resolves.toEqual({
-        valid: true,
-      });
+    it('ganti PIN meneruskan PIN lama ke modul (wajib bila PIN sudah ada)', async () => {
+      await service.setPin('cust-1', 'user-1', '654321', '123456');
+      expect(setWalletPin).toHaveBeenCalledWith(prisma, 'cust-1', '654321', '123456');
     });
 
-    it('PIN salah → Unauthorized', async () => {
-      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
-      await expect(
-        service.verifyPin('cust-1', 'user-1', '000000'),
-      ).rejects.toBeInstanceOf(UnauthorizedException);
-    });
-
-    it('customer milik user lain → Unauthorized', async () => {
-      await expect(
-        service.verifyPin('cust-1', 'user-LAIN', '123456'),
-      ).rejects.toBeInstanceOf(UnauthorizedException);
+    it('customer milik user lain → Unauthorized, modul PIN tidak dipanggil', async () => {
+      (verifyWalletPinWithLockout as jest.Mock).mockClear();
+      await expect(service.verifyPin('cust-1', 'user-LAIN', '123456')).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(verifyWalletPinWithLockout).not.toHaveBeenCalled();
     });
   });
+
 });

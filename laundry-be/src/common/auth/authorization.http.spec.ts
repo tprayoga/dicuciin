@@ -1,3 +1,8 @@
+// Batch 4: gerbang PIN diuji nyata di test/integration/wallet-pin.int-spec.ts.
+jest.mock('./wallet-pin', () => ({
+  ...jest.requireActual('./wallet-pin'),
+  requireWalletAuthorization: jest.fn().mockResolvedValue(undefined),
+}));
 /**
  * Security gate Fase 0 (K1, K3–K12): test otorisasi tingkat HTTP.
  *

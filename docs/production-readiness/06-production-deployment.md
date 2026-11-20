@@ -1,4 +1,4 @@
-# 06 — Checklist Deployment (Fase 0 + Fase 1 Batch 1, 1.5, 2, 3)
+# 06 — Checklist Deployment (Fase 0 + Fase 1 Batch 1–3 + Fase 2 Batch 4)
 
 > Belum dideploy. Setiap langkah yang mengubah server/production **menunggu persetujuan eksplisit owner**.
 > Urutan rilis & matriks kompatibilitas: **11-deployment-compatibility.md**.
@@ -14,6 +14,8 @@
   - `cd laundry_kiosk_flutter && flutter analyze && flutter test && flutter build <target> --release --dart-define=API_BASE_URL=https://api.dicuciin.com/api/v1`.
 - [ ] (Izin) Laporan baca-saja di server: `npm run audit:staff-outlets -- --out staff.json` → owner menugaskan outlet untuk semua `NO_OUTLET` yang masih aktif.
 - [ ] Keputusan owner: kebijakan refund; `BOOKING_HOLD_MINUTES` masa transisi (usul 15).
+- [ ] (Batch 4) Keputusan owner: batas & biaya top-up (`TOPUP_MIN_AMOUNT`, `TOPUP_MAX_AMOUNT`, `TOPUP_ADMIN_FEE`), kebijakan voucher saat refund (`REFUND_RESTORE_VOUCHER`), parameter PIN (`WALLET_PIN_MAX_ATTEMPTS`, `WALLET_PIN_LOCK_MINUTES`, `WALLET_PIN_PROOF_SECONDS`).
+- [ ] (Batch 4) Build app dengan `--dart-define=ENABLE_WALLET_TOPUP=true` HANYA setelah backend Batch 4 aktif & sandbox top-up terverifikasi.
 - [ ] Jendela deploy saat outlet sepi (kiosk tidak bisa menjual sampai aplikasi kiosk diperbarui).
 
 - [ ] (Batch 2) Redis tersedia untuk worker (sudah dipakai scheduler loyalty). Env opsional: lihat 14 §Konfigurasi. Untuk instance API tambahan tanpa worker: `OPS_SCHEDULER_ENABLED=false`.
@@ -43,6 +45,9 @@
 - [ ] Log: `Ops scheduler terdaftar`; job `expire-holds` berjalan tiap menit.
 - [ ] (Batch 3) Order dengan voucher → bayar QRIS sandbox: nominal = harga setelah voucher; voucher berstatus USED.
 - [ ] (Batch 3) Dryer 2 siklus: harga & estimasi ×2 di app dan di detail order.
+- [ ] (Izin, sandbox) Top-up QRIS Rp10.000 → bayar di simulator → saldo +10.000 sekali; webhook ulang dari dashboard → saldo tetap.
+- [ ] (Izin, sandbox) Top-up VA BCA → biarkan kedaluwarsa → status EXPIRED, saldo tetap.
+- [ ] PIN: 5× salah di app → pesan terkunci; bayar saldo tanpa PIN lewat API → 403.
 - [ ] Log 24 jam pertama: cari `PERLU REFUND MANUAL`, `slot terambil`, `Aktivasi mesin order kiosk`.
 
 ## Rollback

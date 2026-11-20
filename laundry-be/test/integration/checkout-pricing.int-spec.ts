@@ -30,6 +30,7 @@ import { LoyaltyConfigService } from "../../src/modules/loyalty-config/loyalty-c
 import { WalletLedgerService } from "../../src/modules/wallets/wallet-ledger.service";
 import { IotMachineService } from "../../src/modules/iot/iot-machine.service";
 import { IotMqttService } from "../../src/modules/iot/iot-mqtt.service";
+import { WalletTopupService } from "../../src/modules/payments/wallet-topup.service";
 import { BookingMaintenanceService } from "../../src/modules/operations/booking-maintenance.service";
 import {
   controllableGateway,
@@ -69,6 +70,8 @@ describe("Batch 3 — harga terpadu, voucher, happy hour, siklus dryer (PostgreS
         WalletLedgerService,
         IotMachineService,
         BookingMaintenanceService,
+        // Batch 4: sapuan top-up diuji di wallet-topup.int-spec.
+        { provide: WalletTopupService, useValue: { syncPending: jest.fn() } },
         PricingCalculationService,
         { provide: IotMqttService, useValue: { publishCommand: jest.fn() } },
         { provide: PAYMENT_GATEWAY, useValue: gw },

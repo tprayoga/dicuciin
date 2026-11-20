@@ -16,6 +16,12 @@ import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 import { IotMachineService } from '../iot/iot-machine.service';
 import { PaymentsService } from '../payments/payments.service';
 
+// Batch 4: kebijakan voucher refund diuji nyata di integration (refund-voucher-policy).
+jest.mock('../orders/voucher-refund-policy', () => ({
+  restoreVoucherAfterRefundInTx: jest.fn().mockResolvedValue({ restored: true }),
+}));
+import { restoreVoucherAfterRefundInTx } from '../orders/voucher-refund-policy';
+
 jest.mock('../../common/utils/sequence.util', () => ({
   generateDailySequence: jest.fn().mockResolvedValue('ORD-TEST-001'),
 }));
@@ -270,7 +276,7 @@ describe('TransactionService', () => {
     expect(res.status).toBe(OrderStatus.REFUNDED);
     expect(mocks.walletService.credit).toHaveBeenCalledTimes(1);
     expect(mocks.pointService.reverseForOrder).toHaveBeenCalledWith(tx, 'w1', 'o1');
-    expect(mocks.voucherService.reverseRedemption).toHaveBeenCalledWith(tx, 'o1');
+    expect(restoreVoucherAfterRefundInTx).toHaveBeenCalledWith(tx, 'o1', 'admin-1');
     expect(mocks.membershipTierService.reverseTransaction).toHaveBeenCalled();
   });
 

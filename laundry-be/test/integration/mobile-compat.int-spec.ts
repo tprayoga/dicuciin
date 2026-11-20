@@ -47,6 +47,9 @@ import { B2BPartnerService } from "../../src/modules/partners/b2b-partner.servic
 import { CampaignService } from "../../src/modules/campaigns/campaign.service";
 import { LoyaltyConfigService } from "../../src/modules/loyalty-config/loyalty-config.service";
 import { PricingService } from "../../src/modules/pricing/pricing.service";
+import { WalletsController } from "../../src/modules/wallets/wallets.controller";
+import { WalletsService } from "../../src/modules/wallets/wallets.service";
+import * as bcrypt from "bcrypt";
 import { VoucherService } from "../../src/modules/vouchers/voucher.service";
 import {
   createCustomer,
@@ -103,6 +106,7 @@ describe("Batch 1.5 — app mobile versi lama ↔ backend baru (PostgreSQL nyata
         PaymentsController,
         LegacyWalletPayController,
         UsersController,
+        WalletsController,
         TransactionsController,
       ],
       providers: [
@@ -121,6 +125,7 @@ describe("Batch 1.5 — app mobile versi lama ↔ backend baru (PostgreSQL nyata
         BookingsService,
         PaymentsService,
         UsersService,
+        WalletsService,
         TransactionService,
         IotService,
         IotMachineService,
@@ -167,6 +172,12 @@ describe("Batch 1.5 — app mobile versi lama ↔ backend baru (PostgreSQL nyata
       }),
     );
     await app.init();
+    // Batch 4 (akar flaky): server mendengarkan SEKALI. Tanpa ini supertest
+    // memanggil listen(0) per request lalu server.close() saat request itu selesai
+    // — request paralel lain pada server yang sama kena ECONNRESET/socket hang up.
+    // Bind eksplisit 127.0.0.1: listen wildcard (::) bisa "dibayangi" proses lain
+    // yang bind 127.0.0.1 pada port sama (macOS/SO_REUSEADDR) → request nyasar (404).
+    await app.listen(0, "127.0.0.1");
     prisma = moduleRef.get(PrismaService);
     payments = moduleRef.get(PaymentsService);
     jwt = moduleRef.get(JwtService);
@@ -184,9 +195,16 @@ describe("Batch 1.5 — app mobile versi lama ↔ backend baru (PostgreSQL nyata
   });
 
   const http = () => request(app.getHttpServer());
-  const auth = (userId: string, role: UserRole = UserRole.CUSTOMER) => ({
-    Authorization: `Bearer ${jwt.sign({ sub: userId, email: "x@uji.test", role })}`,
-  });
+  // Satu access token per user (seperti app: token yang sama untuk verifikasi
+  // PIN & pembayaran — bukti PIN terikat sesi/token, Batch 4).
+  const tokens = new Map<string, string>();
+  const auth = (userId: string, role: UserRole = UserRole.CUSTOMER) => {
+    const key = `${userId}:${role}`;
+    if (!tokens.has(key)) {
+      tokens.set(key, jwt.sign({ sub: userId, email: "x@uji.test", role, jti: key }));
+    }
+    return { Authorization: `Bearer ${tokens.get(key)}` };
+  };
   const starts = () =>
     prisma.iotCommand.count({ where: { command: START_MACHINE } });
   const balance = async (customerId: string) =>
@@ -208,11 +226,34 @@ describe("Batch 1.5 — app mobile versi lama ↔ backend baru (PostgreSQL nyata
         sourcePlatform: "MOBILE_APP",
         items: [{ serviceId: service.id, quantity: 1, machineType: "WASHER" }],
       });
-  const oldWalletPay = (c: any, orderId: string, amount = 10000) =>
+  // Batch 4: alur app lama = PIN diverifikasi di server (/pin/verify) lalu bayar
+  // tanpa mengirim PIN → bukti PIN sekali pakai dikonsumsi pembayaran.
+  const PIN = "246810";
+  const ensurePin = async (c: any) => {
+    const cur = await prisma.customer.findUniqueOrThrow({ where: { id: c.customer.id } });
+    if (!cur.walletPinHash) {
+      await prisma.customer.update({
+        where: { id: c.customer.id },
+        data: { walletPinHash: await bcrypt.hash(PIN, 4), pinSetAt: new Date() },
+      });
+    }
+  };
+  const oldVerifyPin = async (c: any) => {
+    await ensurePin(c);
+    return http()
+      .post(`/wallets/customer/${c.customer.id}/pin/verify`)
+      .set(auth(c.user.id))
+      .send({ pin: PIN });
+  };
+  const rawOldWalletPay = (c: any, orderId: string, amount = 10000) =>
     http()
       .post(`/wallets/customer/${c.customer.id}/pay`)
       .set(auth(c.user.id))
       .send({ orderId, amount });
+  const oldWalletPay = async (c: any, orderId: string, amount = 10000) => {
+    await oldVerifyPin(c);
+    return rawOldWalletPay(c, orderId, amount);
+  };
   const oldScan = (c: any, deviceCode: string) =>
     http().post("/bookings/verify").set(auth(c.user.id)).send({ deviceCode });
 
@@ -227,7 +268,7 @@ describe("Batch 1.5 — app mobile versi lama ↔ backend baru (PostgreSQL nyata
       expect(b.orderId).toBe(order.id);
       expect(b.status).toBe(BookingStatus.HOLD);
 
-      const pay = await oldWalletPay(c, order.id, 1).expect(201);
+      const pay = await oldWalletPay(c, order.id, 1).then((r) => { expect(r.status).toBe(201); return r; });
       expect(Number(pay.body.wallet.balance)).toBe(40000); // bentuk respons lama dipertahankan
       expect(await balance(c.customer.id)).toBe(40000); // total order, bukan 1
       expect(
@@ -278,7 +319,7 @@ describe("Batch 1.5 — app mobile versi lama ↔ backend baru (PostgreSQL nyata
       expect(
         await prisma.machineBooking.count({ where: { orderId: order.id } }),
       ).toBe(0);
-      await oldWalletPay(c, order.id).expect(201);
+      await oldWalletPay(c, order.id).then((r) => { expect(r.status).toBe(201); return r; });
       const res = await oldScan(c, washer.deviceCode);
       expect(res.status).toBeGreaterThanOrEqual(400);
       expect(await starts()).toBe(0);
@@ -308,7 +349,7 @@ describe("Batch 1.5 — app mobile versi lama ↔ backend baru (PostgreSQL nyata
       const poor = await createCustomer(prisma, { balance: 5000 });
       const rich = await createCustomer(prisma, { balance: 50000 });
       const o1 = (await oldCreateOrder(poor).expect(201)).body;
-      await oldWalletPay(poor, o1.id).expect(400);
+      await oldWalletPay(poor, o1.id).then((r) => { expect(r.status).toBe(400); return r; });
       expect(await balance(poor.customer.id)).toBe(5000);
       expect(
         (await prisma.order.findUniqueOrThrow({ where: { id: o1.id } })).status,
@@ -323,12 +364,10 @@ describe("Batch 1.5 — app mobile versi lama ↔ backend baru (PostgreSQL nyata
         .set(auth(rich.user.id))
         .send({ orderId: o1.id })
         .expect(403);
-      await oldWalletPay(rich, "00000000-0000-0000-0000-000000000000").expect(
-        404,
-      );
+      await oldWalletPay(rich, "00000000-0000-0000-0000-000000000000").then((r) => expect(r.status).toBe(404));
       const o2 = (await oldCreateOrder(rich).expect(201)).body;
-      await oldWalletPay(rich, o2.id).expect(201);
-      await oldWalletPay(rich, o2.id).expect(409);
+      await oldWalletPay(rich, o2.id).then((r) => { expect(r.status).toBe(201); return r; });
+      await oldWalletPay(rich, o2.id).then((r) => { expect(r.status).toBe(409); return r; });
       expect(await balance(rich.customer.id)).toBe(40000);
     });
 
@@ -341,15 +380,27 @@ describe("Batch 1.5 — app mobile versi lama ↔ backend baru (PostgreSQL nyata
         http()
           .post("/payments/wallet")
           .set(auth(c.user.id))
-          .send({ orderId: o.id }),
+          .send({ orderId: o.id, pin: PIN }),
         http()
           .post("/payments/wallet")
           .set(auth(c.user.id))
-          .send({ orderId: o.id }),
+          .send({ orderId: o.id, pin: PIN }),
       ]);
       expect(res.filter((r) => r.status === 201)).toHaveLength(1);
       expect(await balance(c.customer.id)).toBe(40000);
       expect(await prisma.payment.count({ where: { orderId: o.id } })).toBe(1);
+    });
+
+    it("Batch 4: bayar saldo rute lama TANPA verifikasi PIN → 403, saldo utuh; bukti PIN sekali pakai", async () => {
+      const c = await createCustomer(prisma, { balance: 50000 });
+      const o1 = (await oldCreateOrder(c).expect(201)).body;
+      await rawOldWalletPay(c, o1.id).expect(403);
+      expect(await balance(c.customer.id)).toBe(50000);
+      await oldVerifyPin(c).then((r) => expect(r.status).toBe(201));
+      await rawOldWalletPay(c, o1.id).expect(201);
+      const o2 = (await oldCreateOrder(c).expect(201)).body;
+      await rawOldWalletPay(c, o2.id).expect(403); // bukti sudah terpakai
+      expect(await balance(c.customer.id)).toBe(40000);
     });
 
     it.each([OrderStatus.CANCELLED, OrderStatus.REFUNDED, OrderStatus.COMPLETED])(
@@ -358,7 +409,7 @@ describe("Batch 1.5 — app mobile versi lama ↔ backend baru (PostgreSQL nyata
         const c = await createCustomer(prisma, { balance: 50000 });
         const o = (await oldCreateOrder(c).expect(201)).body;
         await prisma.order.update({ where: { id: o.id }, data: { status } });
-        await oldWalletPay(c, o.id).expect(400);
+        await oldWalletPay(c, o.id).then((r) => { expect(r.status).toBe(400); return r; });
         expect(await balance(c.customer.id)).toBe(50000);
       },
     );
@@ -371,7 +422,7 @@ describe("Batch 1.5 — app mobile versi lama ↔ backend baru (PostgreSQL nyata
         .set(auth(c.user.id))
         .send({ orderId: o.id, method: "QRIS" })
         .expect(201);
-      await oldWalletPay(c, o.id).expect(201);
+      await oldWalletPay(c, o.id).then((r) => { expect(r.status).toBe(201); return r; });
       expect(await balance(c.customer.id)).toBe(40000);
       const qr = await prisma.payment.findUniqueOrThrow({ where: { paymentNumber: pg.body.paymentNumber } });
       expect(qr.status).toBe("CANCELLED");

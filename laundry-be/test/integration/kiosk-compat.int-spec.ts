@@ -175,6 +175,12 @@ describe("Batch 1.5 — kiosk, autentikasi perangkat, aktivasi (PostgreSQL nyata
       }),
     );
     await app.init();
+    // Batch 4 (akar flaky): server mendengarkan SEKALI. Tanpa ini supertest
+    // memanggil listen(0) per request lalu server.close() saat request itu selesai
+    // — request paralel lain pada server yang sama kena ECONNRESET/socket hang up.
+    // Bind eksplisit 127.0.0.1: listen wildcard (::) bisa "dibayangi" proses lain
+    // yang bind 127.0.0.1 pada port sama (macOS/SO_REUSEADDR) → request nyasar (404).
+    await app.listen(0, "127.0.0.1");
     prisma = moduleRef.get(PrismaService);
     payments = moduleRef.get(PaymentsService);
     iotMachine = moduleRef.get(IotMachineService);

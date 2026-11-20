@@ -159,10 +159,19 @@ Setiap perbaikan dibatalkan sementara → test terkait **gagal**, lalu dipulihka
 
 Lihat **16-batch2-test-report.md** (payment-lifecycle 18, booking-scheduler 12, reconciliation 11; total integration 120/120, unit 262/262).
 
+## Batch 3 — Checkout (TESTED, PostgreSQL nyata)
+
+Lihat **17-batch3-checkout.md** (integration 137/137).
+
+## Batch 4 — Top-up Midtrans & keamanan PIN (TESTED, PostgreSQL nyata)
+
+Lihat **20-batch4-test-report.md**: wallet-topup 22, wallet-pin 17, refund-voucher-policy 6 (+ regresi payment-lifecycle & mobile-compat); total integration **184/184 (14 suite)**, unit **264/264**; 20 run berurutan suite penuh; tiga akar test intermiten.
+
 ## NOT_VERIFIED
 
 | Item | Alasan |
 |---|---|
+| Top-up Midtrans sandbox (`TOP-…`), refund eksternal top-up (Batch 4) | Tidak dijalankan; gateway tiruan |
 | Midtrans `expire`/`status` (Batch 2) | Adaptor diuji dengan respons tiruan; perilaku sandbox belum dicoba |
 | Redis/BullMQ nyata untuk scheduler | Logika job diuji langsung di PostgreSQL |
 | E2E Midtrans sandbox dengan kode Batch 1 | Kode belum dideploy ke server; key sandbox Core API hanya ada di server. E2E sandbox terakhir (19 Nov) berjalan pada kode lama. |

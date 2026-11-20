@@ -1,3 +1,14 @@
+// Batch 4: verifikasi PIN asli (kunci baris, penguncian) diuji di integration;
+// di sini PIN '123456' = benar, lainnya salah.
+jest.mock('../../common/auth/wallet-pin', () => {
+  const { BadRequestException } = jest.requireActual('@nestjs/common');
+  return {
+    verifyWalletPinWithLockout: jest.fn(async (_p: unknown, _c: string, pin?: string) => {
+      if (!pin) throw new BadRequestException('PIN wallet wajib diisi untuk membayar dengan saldo');
+      if (pin !== '123456') throw new BadRequestException('PIN salah');
+    }),
+  };
+});
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { KiosksService } from './kiosks.service';
 

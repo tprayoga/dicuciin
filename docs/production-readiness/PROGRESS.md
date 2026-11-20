@@ -1,7 +1,7 @@
 # PROGRESS — Di.Cuciin Production Readiness
 
 Status: NOT_STARTED · IN_PROGRESS · IMPLEMENTED · TESTED · BLOCKED · ACCEPTED
-Terakhir diperbarui: 21 Nov 2026
+Terakhir diperbarui: 20 Nov 2026 (Batch 4)
 
 | Fase | Temuan | Status | Bukti |
 |---|---|---|---|
@@ -12,26 +12,25 @@ Terakhir diperbarui: 21 Nov 2026
 | **1 — Batch 2** | **T4, T5, T9, S2** + rekonsiliasi keuangan & refund | **TESTED** (PostgreSQL nyata; Midtrans sandbox NOT_VERIFIED) · belum deploy | [13](13-payment-lifecycle.md), [14](14-booking-scheduler.md), [15](15-financial-reconciliation.md), [16](16-batch2-test-report.md) |
 | **1 — Batch 3** | **T3, T10, S1, S4** — checkout & pengalaman mobile | **TESTED** (PostgreSQL nyata, pricing asli) · belum deploy | [17](17-batch3-checkout.md) |
 | IoT perangkat fisik | integrasi & uji mesin | **DITUNDA** (keputusan owner) | — |
-| 2 — Top-up Midtrans & PIN | K1 (fitur), S5 | NOT_STARTED | — |
+| **2 — Batch 4: Top-up Midtrans & PIN** | K1 (fitur), S5 + kebijakan voucher saat refund | **ACCEPTED (gate lokal)** · Midtrans sandbox NOT_VERIFIED · belum deploy | [18](18-wallet-topup.md), [19](19-wallet-pin-security.md), [20](20-batch4-test-report.md) |
 | 3 — Auth & akun | T1, T6, T7, T11 | NOT_STARTED | — |
 | 4 — Kualitas alur | T8, S3, S6–S8, R1–R5, R7 | NOT_STARTED | — |
 | 5 — Rilis & operasional | R6 + checklist | IN_PROGRESS ([06](06-production-deployment.md), [11](11-deployment-compatibility.md)) | — |
 
-## Quality gate (21 Nov 2026, setelah Batch 3)
+## Quality gate (20 Nov 2026, setelah Batch 4)
 
 | Gate | Hasil |
 |---|---|
+| Integration PostgreSQL nyata, **20 run berurutan suite penuh** | **20/20 valid & lulus, 184/184 tiap run** (0 tumpang tindih, 0 tidur host, 0 error koneksi, sidik jari kode sama `1e8f6051adbe319e`) |
 | Unit backend | **264/264** (24 suite) |
-| Integration PostgreSQL nyata | **137/137** (11 suite) |
-| Pengulangan suite konkurensi | ±60 run: **1 kegagalan intermiten tidak terulang** (lihat bawah) |
-| `tsc --noEmit`, `npm run build`, `prisma migrate diff` | exit 0 / sukses / kosong |
-| Flutter mobile: analyze / test / build web | bersih / 6 lulus / sukses |
-| Flutter kiosk (regresi): analyze / test / build web | bersih / 2 lulus / sukses |
-| Admin `npm run build` | sukses |
-| Gate Fase 0, Batch 1, 1.5, 2 | tetap lulus (suite yang sama) |
-| Midtrans sandbox, IoT fisik (ditunda), app di HP, UI admin di browser | **NOT_VERIFIED** |
+| `tsc --noEmit` · `npm run build` · `prisma migrate diff` (migrasi ↔ skema) | exit 0 · sukses · *No difference detected* |
+| Flutter mobile: analyze / test / build web | bersih / **8/8** / sukses |
+| Flutter kiosk: analyze / test / build web | bersih / **2/2** / sukses |
+| Admin (Nuxt) `npm run build` | sukses (tanpa test otomatis) |
+| Pemindaian rahasia pada diff | bersih |
+| Midtrans sandbox, Redis/BullMQ nyata, perangkat fisik | **NOT_VERIFIED** |
 
-**Kegagalan intermiten**: pada pengulangan ke-3 dari 3 run suite gabungan (checkout-pricing, payment-lifecycle, booking-scheduler, kiosk-compat, mobile-compat) satu test gagal; output tidak tersimpan sehingga nama test tidak diketahui. 58+ run berikutnya (gabungan & per kelompok) bersih. Belum ditemukan penyebab; semua assertion konkurensi telah ditinjau ulang. Tindak lanjut: jalankan suite dengan log tersimpan di CI dan selidiki bila muncul lagi. **Tidak dinyatakan lulus 100% stabil.**
+**Test intermiten**: tiga akar masalah teridentifikasi, direproduksi, diperbaiki, dan diverifikasi (mesin dipakai bersama antar-iterasi; supertest menutup server bersama; listen wildcard dibayangi proses lain). Detail & run tidak valid: **20-batch4-test-report.md**. Kegagalan Batch 3 yang lognya hilang tidak dapat dipetakan secara pasti ke salah satunya.
 
 Lingkungan uji: Docker `postgres:16-alpine` (`127.0.0.1:55499/dicuciin_test`), terpisah dari DB development, DB HWMS, dan server.
 
@@ -91,6 +90,18 @@ Lingkungan uji: Docker `postgres:16-alpine` (`127.0.0.1:55499/dicuciin_test`), t
 - [ ] Siklus dryer ke perangkat — menunggu integrasi IoT (ditunda)
 - [ ] **ACCEPTED** — butuh deploy + sandbox + uji di HP
 
+## Gate Batch 4 (top-up & PIN)
+
+- [x] Top-up QRIS/VA: nominal server, satu tagihan aktif per customer, kredit hanya dari status PAID terverifikasi (webhook/status provider)
+- [x] Satu top-up lunas = tepat satu kredit ledger (webhook ganda/paralel, polling, scheduler)
+- [x] Top-up terlambat → kredit + rekonsiliasi `TOPUP_LATE_SETTLEMENT` teraudit; refund eksternal hanya bersama debit kompensasi; saldo terpakai → ditolak
+- [x] PIN: penguncian aman paralel, ganti PIN butuh PIN lama, semua debit saldo JWT butuh PIN atau bukti sekali pakai (terikat customer & sesi, 120 dtk, atomik)
+- [x] Kiosk tetap wajib PIN
+- [x] Voucher dikembalikan saat refund hanya bila layanan belum dikonsumsi & voucher berlaku
+- [x] 20 run berurutan suite integration penuh: 20/20 valid & lulus (184/184); unit 264/264; Flutter & admin build lulus
+- [ ] Midtrans sandbox — NOT_VERIFIED
+- [ ] **ACCEPTED (produksi)** — butuh deploy + sandbox + uji di HP
+
 ## Temuan baru
 
 | Temuan | Status |
@@ -116,7 +127,13 @@ Lingkungan uji: Docker `postgres:16-alpine` (`127.0.0.1:55499/dicuciin_test`), t
 | Jumlah item order tanpa batas bawah (0/negatif lolos validasi) | **TESTED** (Batch 3 — validasi server) |
 | Voucher app dikirim sebagai `promoCode` → tidak berlaku di QRIS/VA | **TESTED** (Batch 3) |
 | Batal booking tidak membatalkan tagihan QRIS/VA aktif & tanpa kunci order | **TESTED** (Batch 3 — lewat OrdersService.cancel) |
-| Refund order ber-voucher tidak mengembalikan voucher (alur rekonsiliasi/refund langsung) | Dicatat — keputusan kebijakan |
+| Refund order ber-voucher tidak mengembalikan voucher (alur rekonsiliasi/refund langsung) | **TESTED** (Batch 4 — kebijakan `REFUND_RESTORE_VOUCHER`) |
+| Ganti PIN tanpa PIN lama; verifikasi PIN mobile tanpa penguncian | **TESTED** (Batch 4) |
+| Bayar saldo mobile tanpa PIN di server | **TESTED** (Batch 4 — PIN atau bukti sekali pakai) |
+| Penguncian PIN kiosk bisa dilewati dengan request paralel | **TESTED** (Batch 4 — kunci baris) |
+| Hash PIN ikut terkirim di respons | **TESTED** (Batch 4 — redaksi global) |
+| Webhook PAID setelah top-up direfund → 500 (ledger P2002) | **TESTED** (Batch 4 — no-op) |
+| Dompet partner B2B tanpa PIN | Dicatat |
 
 ## Keputusan owner yang tertunda
 
@@ -124,7 +141,8 @@ Lingkungan uji: Docker `postgres:16-alpine` (`127.0.0.1:55499/dicuciin_test`), t
 2. Rekonsiliasi booking lama di production (review dry-run, lalu `--apply`).
 3. Penugasan outlet untuk semua staf aktif sebelum deploy.
 4. `BOOKING_HOLD_MINUTES` selama masa transisi app lama.
-5. Top-up, package name, jam operasional per outlet.
+5. Top-up: batas nominal, biaya admin, cashback; package name, jam operasional per outlet.
+6. Kebijakan pengembalian voucher saat refund (`REFUND_RESTORE_VOUCHER`, default aktif).
 
 ## Commit (lokal, belum di-push)
 

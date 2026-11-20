@@ -86,6 +86,16 @@ export function controllableGateway() {
       return 'CANCELLED';
     }),
     getChargeStatus: jest.fn(async (pn: string) => charges.get(pn) ?? 'NOT_FOUND'),
+    /**
+     * Batch 4: webhook "terverifikasi" tiruan (signature dianggap sah, seperti
+     * hasil MidtransPaymentGateway.parseWebhook) — bukan uji signature Midtrans.
+     */
+    parseWebhook: jest.fn((payload: Record<string, unknown>) => ({
+      paymentNumber: payload.order_id as string,
+      externalId: payload.transaction_id as string | undefined,
+      status: payload.status as 'PAID' | 'FAILED' | 'EXPIRED' | 'PENDING',
+      grossAmount: payload.gross_amount !== undefined ? Number(payload.gross_amount) : undefined,
+    })),
   };
   return gw;
 }
