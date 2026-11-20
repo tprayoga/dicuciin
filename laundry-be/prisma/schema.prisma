@@ -71,6 +71,7 @@ enum ReconciliationReason {
   PAID_BOOKING_UNAVAILABLE // order dibayar tetapi slot mesin sudah hilang
   PAID_NOT_USED // booking dibayar tidak pernah dipakai (kedaluwarsa)
   CUSTOMER_REQUEST // permintaan refund dari customer
+  TOPUP_LATE_SETTLEMENT // top-up lunas (terverifikasi provider) setelah kedaluwarsa/dibatalkan — saldo dikreditkan, ditinjau admin
 }
 
 enum ReconciliationStatus {
@@ -252,6 +253,8 @@ model Customer {
   userVouchers           UserVoucher[]
   membershipStatus       UserMembershipStatus?
   paymentReconciliations PaymentReconciliation[]
+  walletTopups           WalletTopup[]
+  walletPinProofs        WalletPinProof[]
 
   @@index([memberCode])
   @@map("customers")
@@ -512,6 +515,7 @@ model Wallet {
   transactions WalletTransaction[]
   ledgers      WalletLedger[]
   pointLedgers PointLedger[]
+  topups       WalletTopup[]
 
   @@map("wallets")
 }
@@ -863,8 +867,9 @@ model WalletLedger {
   idempotencyKey String?         @unique
   createdAt      DateTime        @default(now())
 
-  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  order  Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  wallet Wallet       @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  order  Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  topup  WalletTopup?
 
   @@index([walletId])
   @@index([walletType])
@@ -1344,7 +1349,9 @@ model DailySequence {
 model PaymentReconciliation {
   id           String               @id @default(uuid())
   paymentId    String?
-  orderId      String
+  orderId      String?
+  /// Batch 4: rekonsiliasi top-up saldo (tanpa order).
+  topupId      String?
   customerId   String?
   amount       Decimal              @db.Decimal(14, 2)
   refundAmount Decimal              @db.Decimal(14, 2)
@@ -1365,12 +1372,82 @@ model PaymentReconciliation {
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
 
-  payment  Payment?  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  order    Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  payment  Payment?     @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  order    Order?       @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  topup    WalletTopup? @relation(fields: [topupId], references: [id], onDelete: Restrict)
+  customer Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   @@unique([paymentId, reason])
+  @@unique([topupId, reason])
   @@index([status])
   @@index([orderId])
   @@map("payment_reconciliations")
+}
+
+enum TopupStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  CANCELLED
+  REFUNDED // dana dikembalikan di luar sistem + kredit saldo dibalik (debit kompensasi)
+}
+
+/// Batch 4 — top-up saldo mandiri lewat Midtrans (QRIS/VA). Saldo HANYA
+/// dikreditkan setelah pelunasan terverifikasi (webhook bertanda tangan atau
+/// status API provider), tepat sekali (`ledgerId` unik + idempotencyKey ledger).
+model WalletTopup {
+  id               String      @id @default(uuid())
+  /// = order_id Midtrans (unik per percobaan).
+  topupNumber      String      @unique
+  customerId       String
+  walletId         String
+  /// Nominal yang dikreditkan ke saldo.
+  amount           Decimal     @db.Decimal(14, 2)
+  adminFee         Decimal     @default(0) @db.Decimal(14, 2)
+  /// Nominal yang ditagih ke pelanggan (amount + adminFee) — dicek ke webhook.
+  chargeAmount     Decimal     @db.Decimal(14, 2)
+  method           String
+  bank             String?
+  status           TopupStatus @default(PENDING)
+  provider         String?
+  externalId       String?
+  externalResponse Json?
+  expiresAt        DateTime?
+  paidAt           DateTime?
+  cancelledAt      DateTime?
+  /// Refund eksternal (rekonsiliasi) — kredit saldo dibalik pada saat yang sama.
+  refundedAt       DateTime?
+  /// = customerId selama PENDING (unik → <=1 top-up aktif per customer).
+  pendingSlot      String?     @unique
+  /// Kredit ledger tunggal untuk top-up ini.
+  ledgerId         String?     @unique
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  customer        Customer                @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  wallet          Wallet                  @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  ledger          WalletLedger?           @relation(fields: [ledgerId], references: [id], onDelete: Restrict)
+  reconciliations PaymentReconciliation[]
+
+  @@index([customerId, createdAt])
+  @@index([status])
+  @@map("wallet_topups")
+}
+
+/// Batch 4 — bukti PIN sekali pakai untuk app lama (/pin/verify lalu bayar tanpa
+/// PIN). Terikat ke customer DAN sesi (hash SHA-256 access token), berumur
+/// pendek, dikonsumsi atomik sekali. Baris tidak dihapus (jejak audit).
+model WalletPinProof {
+  id          String    @id @default(uuid())
+  customerId  String
+  sessionHash String
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, sessionHash])
+  @@map("wallet_pin_proofs")
 }
