@@ -186,6 +186,34 @@ export class KiosksController {
     );
   }
 
+  @Public()
+  @Post('device/orders/:orderId/machine-start')
+  @ApiOperation({
+    summary: 'Coba nyalakan ulang mesin untuk order kiosk yang sudah dibayar',
+  })
+  async retryDeviceMachineStart(
+    @Param('orderId') orderId: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.kiosksService.retryDeviceMachineStart(
+      this.deviceToken(authorization),
+      orderId,
+    );
+  }
+
+  @Public()
+  @Post('device/orders/:orderId/cancel')
+  @ApiOperation({ summary: 'Batalkan order kiosk yang belum dibayar (lepas mesin)' })
+  async cancelDeviceOrder(
+    @Param('orderId') orderId: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.kiosksService.cancelDeviceOrder(
+      this.deviceToken(authorization),
+      orderId,
+    );
+  }
+
   @Get()
   @Roles(...STAFF_ROLES)
   @ApiOperation({ summary: 'Get all kiosks' })

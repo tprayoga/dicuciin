@@ -107,6 +107,10 @@ export async function ownCustomerId(
 export async function scopeCheckoutIdentity<
   T extends { customerId?: string; partnerId?: string },
 >(prisma: PrismaService, user: AuthUser, dto: T): Promise<T> {
+  // Batch 1.5: `kioskId` hanya boleh di-set oleh rute perangkat kiosk
+  // (/kiosks/device/*). Order kiosk menyalakan mesin begitu dibayar (tanpa
+  // scan QR), jadi pemanggil JWT tidak boleh menandai order-nya sebagai kiosk.
+  dto = stripKioskBinding(dto);
   if (isStaff(user)) return dto;
 
   if (dto.partnerId) {
@@ -162,4 +166,13 @@ export async function resolveOutletScope(
     return [requestedOutletId];
   }
   return assigned;
+}
+
+/** Hapus penanda kiosk dari payload yang datang lewat JWT (lihat scopeCheckoutIdentity). */
+export function stripKioskBinding<T>(dto: T): T {
+  if (dto && typeof dto === 'object' && 'kioskId' in (dto as object)) {
+    const { kioskId: _ignored, ...rest } = dto as Record<string, unknown>;
+    return rest as T;
+  }
+  return dto;
 }

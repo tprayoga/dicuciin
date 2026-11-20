@@ -8,6 +8,7 @@ import {
 import { BookingStatus, OrderStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { IncomingDeviceEvent, IotMqttService } from "./iot-mqtt.service";
+import { bookingConfig } from "../bookings/booking-lifecycle";
 
 /** Lifecycle status command mesin (disimpan di IotCommand.status). */
 export const IotCommandStatus = {
@@ -255,6 +256,62 @@ export class IotMachineService implements OnModuleInit {
   }
 
   /**
+   * Nyalakan mesin untuk order KIOSK yang sudah dibayar (Batch 1.5).
+   * Dipakai hook PAID dan tombol "coba lagi" di kiosk. Syarat (semua wajib):
+   * - order dibuat oleh kiosk (`kioskId` — hanya bisa di-set rute perangkat
+   *   kiosk; rute JWT membuangnya) dan, bila `kioskId` diberikan, kiosk yang sama;
+   * - order PAID **dan** ada baris Payment PAID (bukan sekadar status order);
+   * - booking terikat order, status RESERVED/IN_USE, tanpa jadwal, belum kedaluwarsa.
+   * Idempoten lewat `requestMachineStart` (webhook ganda/retry paralel → 1 START).
+   */
+  async startKioskOrder(orderId: string, kioskId?: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        kioskId: true,
+        status: true,
+        machineBooking: true,
+        payments: { where: { status: "PAID" }, select: { id: true } },
+      },
+    });
+    if (!order) throw new NotFoundException("Order tidak ditemukan");
+    if (!order.kioskId || (kioskId && order.kioskId !== kioskId)) {
+      throw new BadRequestException("Order ini bukan order kiosk ini");
+    }
+    if (order.status !== OrderStatus.PAID || order.payments.length === 0) {
+      throw new BadRequestException("Pembayaran order belum terverifikasi");
+    }
+    const booking = order.machineBooking;
+    if (!booking) {
+      throw new BadRequestException("Order kiosk ini tidak terikat mesin");
+    }
+    if (booking.status === BookingStatus.IN_USE) {
+      return this.requestMachineStart(orderId, booking.deviceId, 1).catch(
+        () => null,
+      );
+    }
+    if (booking.status !== BookingStatus.RESERVED) {
+      throw new BadRequestException(
+        "Booking mesin order ini tidak aktif. Hubungi petugas outlet.",
+      );
+    }
+    if (booking.scheduledAt) {
+      throw new BadRequestException("Order kiosk tidak boleh terjadwal");
+    }
+    if (booking.expiresAt.getTime() <= Date.now()) {
+      throw new BadRequestException(
+        "Waktu pemakaian mesin sudah lewat. Hubungi petugas outlet.",
+      );
+    }
+    return this.requestMachineStart(
+      orderId,
+      booking.deviceId,
+      bookingConfig().maxStartAttempts,
+    );
+  }
+
+  /**
    * Dipanggil hook payment PAID. Aman: TIDAK pernah melempar — bila order tak punya
    * binding mesin, kembalikan null + log (payment/order tetap sukses).
    */
@@ -267,8 +324,20 @@ export class IotMachineService implements OnModuleInit {
     // Mencegah booking terjadwal (mis. besok) menyalakan mesin sekarang.
     const booking = await this.prisma.machineBooking.findUnique({
       where: { orderId },
-      select: { id: true },
+      select: { id: true, order: { select: { kioskId: true } } },
     });
+    if (booking?.order?.kioskId) {
+      // Batch 1.5: order kiosk — pembeli berdiri di depan mesin & kiosk; tidak
+      // ada aplikasi untuk scan QR. Mesin start begitu pembayaran terverifikasi.
+      try {
+        return await this.startKioskOrder(orderId);
+      } catch (err) {
+        this.logger.warn(
+          `Aktivasi mesin order kiosk ${orderId} gagal: ${(err as Error).message}`,
+        );
+        return null;
+      }
+    }
     if (booking) {
       this.logger.log(
         `Order ${orderId} terikat booking ${booking.id}: aktivasi ditunda sampai scan QR`,
