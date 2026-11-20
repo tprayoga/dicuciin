@@ -1,32 +1,56 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
-import { PrismaService } from '../../common/prisma/prisma.service';
-import { UserRole, OrderStatus } from '@prisma/client';
-import { CreateCustomerDto } from './dto/create-customer.dto';
-import { toNum } from '../../common/utils/money.util';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import * as bcrypt from "bcrypt";
+import { PrismaService } from "../../common/prisma/prisma.service";
+import { UserRole, OrderStatus } from "@prisma/client";
+import { CreateCustomerDto } from "./dto/create-customer.dto";
+import { toNum } from "../../common/utils/money.util";
+import { normalizePhone, phoneCandidates } from "../../common/utils/phone.util";
 
 @Injectable()
 export class CustomersService {
   constructor(private prisma: PrismaService) {}
 
   async create(createCustomerDto: CreateCustomerDto) {
-    const { name, email, phone, password, gender, birthDate, initialBalance = 0 } = createCustomerDto;
+    const {
+      name,
+      email,
+      password,
+      gender,
+      birthDate,
+      initialBalance = 0,
+    } = createCustomerDto;
+    // Batch 5 (T6): simpan kanonik 628…; cek duplikat terhadap semua format lama.
+    const rawPhone = createCustomerDto.phone?.trim();
+    const phone = rawPhone ? normalizePhone(rawPhone) : undefined;
+    if (rawPhone && !phone) {
+      throw new BadRequestException("Nomor HP tidak valid");
+    }
 
     if (!email && !phone) {
-      throw new BadRequestException('Email atau nomor telepon wajib diisi');
+      throw new BadRequestException("Email atau nomor telepon wajib diisi");
     }
 
     if (email) {
-      const existingEmail = await this.prisma.user.findUnique({ where: { email } });
+      const existingEmail = await this.prisma.user.findUnique({
+        where: { email },
+      });
       if (existingEmail) {
-        throw new ConflictException('Email sudah terdaftar');
+        throw new ConflictException("Email sudah terdaftar");
       }
     }
 
     if (phone) {
-      const existingPhone = await this.prisma.user.findUnique({ where: { phone } });
+      const existingPhone = await this.prisma.user.findFirst({
+        where: { phone: { in: phoneCandidates(phone) } },
+        select: { id: true },
+      });
       if (existingPhone) {
-        throw new ConflictException('Nomor telepon sudah terdaftar');
+        throw new ConflictException("Nomor telepon sudah terdaftar");
       }
     }
 
@@ -44,6 +68,7 @@ export class CustomersService {
             email,
             phone,
             passwordHash,
+            passwordChangedAt: new Date(),
             role: UserRole.CUSTOMER,
           },
         },
@@ -90,7 +115,7 @@ export class CustomersService {
           },
           wallet: true,
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
       }),
       this.prisma.customer.count(),
     ]);
@@ -125,7 +150,7 @@ export class CustomersService {
     });
 
     if (!customer) {
-      throw new NotFoundException('Customer not found');
+      throw new NotFoundException("Customer not found");
     }
 
     return customer;
@@ -134,7 +159,7 @@ export class CustomersService {
   async getOrders(id: string, page: number = 1, limit: number = 10) {
     const customer = await this.prisma.customer.findUnique({ where: { id } });
     if (!customer) {
-      throw new NotFoundException('Customer not found');
+      throw new NotFoundException("Customer not found");
     }
 
     const skip = (page - 1) * limit;
@@ -148,7 +173,7 @@ export class CustomersService {
           outlet: true,
           items: true,
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
       }),
       this.prisma.order.count({ where: { customerId: id } }),
     ]);
@@ -168,7 +193,7 @@ export class CustomersService {
   async getStats(id: string) {
     const customer = await this.prisma.customer.findUnique({ where: { id } });
     if (!customer) {
-      throw new NotFoundException('Customer not found');
+      throw new NotFoundException("Customer not found");
     }
 
     const paidStatuses: OrderStatus[] = [
@@ -193,10 +218,10 @@ export class CustomersService {
         _sum: { totalAmount: true },
       }),
       this.prisma.orderItem.groupBy({
-        by: ['serviceName'],
+        by: ["serviceName"],
         where: { order: { customerId: id } },
         _sum: { quantity: true },
-        orderBy: { _sum: { quantity: 'desc' } },
+        orderBy: { _sum: { quantity: "desc" } },
         take: 1,
       }),
     ]);
@@ -217,7 +242,7 @@ export class CustomersService {
           include: {
             transactions: {
               take: 10,
-              orderBy: { createdAt: 'desc' },
+              orderBy: { createdAt: "desc" },
             },
           },
         },
@@ -225,7 +250,7 @@ export class CustomersService {
     });
 
     if (!customer) {
-      throw new NotFoundException('Customer not found');
+      throw new NotFoundException("Customer not found");
     }
 
     return customer.wallet;
@@ -233,20 +258,20 @@ export class CustomersService {
 
   private async generateMemberCode(): Promise<string> {
     const today = new Date();
-    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, "");
 
     const lastCustomer = await this.prisma.customer.findFirst({
       where: { memberCode: { startsWith: `MBR-${dateStr}` } },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     let sequence = 1;
     if (lastCustomer) {
-      const parts = lastCustomer.memberCode.split('-');
+      const parts = lastCustomer.memberCode.split("-");
       const lastSequence = Number(parts[2] || 0);
       sequence = Number.isFinite(lastSequence) ? lastSequence + 1 : 1;
     }
 
-    return `MBR-${dateStr}-${sequence.toString().padStart(6, '0')}`;
+    return `MBR-${dateStr}-${sequence.toString().padStart(6, "0")}`;
   }
 }

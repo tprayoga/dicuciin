@@ -6,7 +6,9 @@ import { PrismaService } from '../prisma/prisma.service';
 export interface AuthUser {
   userId: string;
   role: UserRole | string;
-  email?: string;
+  email?: string | null;
+  /** Batch 5: id sesi login (null untuk token lama tanpa sesi). */
+  sessionId?: string | null;
 }
 
 /** Semua role internal (bukan pelanggan). */

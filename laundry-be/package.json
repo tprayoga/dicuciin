@@ -33,7 +33,8 @@
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "reconcile:legacy-bookings": "ts-node scripts/reconcile-legacy-bookings.ts",
-    "audit:staff-outlets": "ts-node scripts/audit-staff-outlets.ts"
+    "audit:staff-outlets": "ts-node scripts/audit-staff-outlets.ts",
+    "normalize:user-phones": "ts-node scripts/normalize-user-phones.ts"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.4",

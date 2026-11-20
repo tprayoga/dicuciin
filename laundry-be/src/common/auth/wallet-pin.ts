@@ -43,7 +43,24 @@ export function walletPinPolicy() {
 export function walletSessionKey(authorization?: string | string[]): string | null {
   const raw = Array.isArray(authorization) ? authorization[0] : authorization;
   const token = raw?.replace(/^Bearer\s+/i, '').trim();
-  return token ? createHash('sha256').update(token).digest('hex') : null;
+  if (!token) return null;
+  // Batch 5: token bersesi → kunci = sesi login (`sid`), sehingga bukti PIN
+  // tetap berlaku setelah access token di-refresh pada sesi yang SAMA, dan
+  // tidak berlaku di sesi lain. Dipanggil SETELAH guard memverifikasi token.
+  const sid = sessionIdOf(token);
+  const material = sid ? `sid:${sid}` : token;
+  return createHash('sha256').update(material).digest('hex');
+}
+
+function sessionIdOf(token: string): string | null {
+  const part = token.split('.')[1];
+  if (!part) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(part, 'base64url').toString('utf8'));
+    return typeof payload?.sid === 'string' && payload.sid ? payload.sid : null;
+  } catch {
+    return null;
+  }
 }
 
 const LOCKED_MESSAGE =

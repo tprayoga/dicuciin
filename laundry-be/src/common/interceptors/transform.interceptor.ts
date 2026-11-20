@@ -24,6 +24,7 @@ const REDACTED_KEYS = new Set([
   'passwordHash',
   'walletPinHash',
   'walletPinFailedAttempts',
+  'failedLoginAttempts',
   'sessionHash',
   'enrollmentCodeHash',
   'deviceTokenHash',

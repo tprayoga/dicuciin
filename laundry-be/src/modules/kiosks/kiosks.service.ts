@@ -22,6 +22,7 @@ import {
   hashKioskSecret,
 } from '../../common/auth/kiosk-device';
 import { verifyWalletPinWithLockout } from '../../common/auth/wallet-pin';
+import { phoneCandidates } from '../../common/utils/phone.util';
 
 @Injectable()
 export class KiosksService {
@@ -405,7 +406,8 @@ export class KiosksService {
         OR: [
           ...(allowId ? [{ id: keyword }] : []),
           { memberCode: keyword },
-          { user: { phone: keyword } },
+          // Batch 5 (T6): nomor dalam format apa pun (08…/+62…/62…).
+          { user: { phone: { in: phoneCandidates(keyword).length ? phoneCandidates(keyword) : [keyword] } } },
           { user: { email: keyword } },
         ],
       },
