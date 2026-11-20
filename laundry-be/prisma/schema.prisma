@@ -110,6 +110,17 @@ enum OtpPurpose {
   REGISTER
   LOGIN
   RESET_PASSWORD
+  ACCOUNT_DELETION
+}
+
+/// Batch 6: status permintaan hapus akun.
+enum AccountDeletionStatus {
+  /// Tercatat tetapi belum bisa diproses (ada saldo/transaksi aktif) — ditinjau admin.
+  PENDING_REVIEW
+  /// Data pribadi sudah dianonimkan, akun dinonaktifkan.
+  COMPLETED
+  /// Dibatalkan pengguna/admin.
+  CANCELLED
 }
 
 enum BannerPlacement {
@@ -215,18 +226,22 @@ model User {
   /// Batch 5: penguncian login per akun.
   failedLoginAttempts Int       @default(0)
   loginLockedUntil    DateTime?
+  /// Batch 6: akun dihapus atas permintaan pengguna (data pribadi dianonimkan).
+  deletedAt           DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  customer      Customer?
-  authSessions  AuthSession[]
-  outletUsers   OutletUser[]
-  auditLogs     AuditLog[]
-  refreshTokens RefreshToken[]
-  reviews       Review[]       @relation("StaffReviews")
-  staffOrders   Order[]        @relation("StaffOrders")
-  kioskSessions KioskSession[] @relation("StaffKioskSessions")
-  b2bPartner    B2BPartner?
+  customer         Customer?
+  authSessions     AuthSession[]
+  notifications    Notification[]
+  deletionRequests AccountDeletionRequest[]
+  outletUsers      OutletUser[]
+  auditLogs        AuditLog[]
+  refreshTokens    RefreshToken[]
+  reviews          Review[]                 @relation("StaffReviews")
+  staffOrders      Order[]                  @relation("StaffOrders")
+  kioskSessions    KioskSession[]           @relation("StaffKioskSessions")
+  b2bPartner       B2BPartner?
 
   @@index([email])
   @@index([phone])
@@ -348,6 +363,7 @@ model Service {
 
   servicePrices   ServicePrice[]
   orderItems      OrderItem[]
+  machines        IotDevice[]
   happyHourRules  HappyHourRule[]
   b2bPricingRules B2BPricingRule[]
 
@@ -671,11 +687,16 @@ model IotDevice {
   status          String     @default("OFFLINE")
   lastHeartbeatAt DateTime?
   metadata        Json?
+  /// Batch 6 (S3): kapasitas mesin (kg) — sumber kebenaran untuk aplikasi.
+  capacityKg      Float?
+  /// Batch 6 (S3): layanan yang dijalankan mesin ini (harga & durasi per outlet).
+  serviceId       String?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
   outlet   Outlet           @relation(fields: [outletId], references: [id], onDelete: Cascade)
   kiosk    Kiosk?           @relation(fields: [kioskId], references: [id], onDelete: SetNull)
+  service  Service?         @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   commands IotCommand[]
   events   IotEvent[]
   bookings MachineBooking[]
@@ -1483,4 +1504,46 @@ model WalletPinProof {
 
   @@index([customerId, sessionHash])
   @@map("wallet_pin_proofs")
+}
+
+/// Batch 6 (R1): notifikasi dalam aplikasi. Ditulis di transaksi yang sama
+/// dengan kejadiannya; `dedupeKey` unik → percobaan ulang tidak menggandakan.
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  data      Json?
+  dedupeKey String?   @unique
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+/// Batch 6: permintaan hapus akun (aplikasi atau web). Disimpan untuk audit.
+model AccountDeletionRequest {
+  id              String                @id @default(uuid())
+  userId          String
+  status          AccountDeletionStatus
+  channel         String // APP | WEB
+  reason          String?
+  /// Penghalang saat diajukan (saldo, order/booking/pembayaran aktif, refund terbuka).
+  blockers        Json?
+  /// Saldo saat diajukan (rupiah) — catatan, bukan sumber kebenaran.
+  balanceSnapshot Decimal?              @db.Decimal(14, 2)
+  requestedAt     DateTime              @default(now())
+  completedAt     DateTime?
+  processedBy     String?
+  note            String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("account_deletion_requests")
 }
