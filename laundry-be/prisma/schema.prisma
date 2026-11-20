@@ -62,6 +62,29 @@ enum PaymentStatus {
   FAILED
   EXPIRED
   REFUNDED
+  CANCELLED // percobaan diganti/dibatalkan (Batch 2) — tagihan gateway di-expire
+}
+
+enum ReconciliationReason {
+  DUPLICATE_PAYMENT // order sudah dibayar lewat pembayaran lain
+  PAID_AFTER_CANCEL // dana masuk setelah order CANCELLED/REFUNDED
+  PAID_BOOKING_UNAVAILABLE // order dibayar tetapi slot mesin sudah hilang
+  PAID_NOT_USED // booking dibayar tidak pernah dipakai (kedaluwarsa)
+  CUSTOMER_REQUEST // permintaan refund dari customer
+}
+
+enum ReconciliationStatus {
+  OPEN // butuh tinjauan admin (dibuat sistem)
+  REQUESTED // diajukan customer
+  APPROVED
+  REJECTED
+  REFUNDED // refund dieksekusi (sekali)
+  CLOSED // ditutup tanpa refund (mis. dijadwalkan ulang)
+}
+
+enum RefundMethod {
+  WALLET_CREDIT // kembalikan ke saldo MAIN customer (idempoten)
+  EXTERNAL // refund di luar sistem (dashboard Midtrans / transfer) — wajib referensi
 }
 
 enum PromoType {
@@ -219,15 +242,16 @@ model Customer {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  addresses        CustomerAddress[]
-  orders           Order[]
-  wallet           Wallet?
-  promoUsages      PromoUsage[]
-  reviews          Review[]
-  bookings         MachineBooking[]
-  userVouchers     UserVoucher[]
-  membershipStatus UserMembershipStatus?
+  user                   User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addresses              CustomerAddress[]
+  orders                 Order[]
+  wallet                 Wallet?
+  promoUsages            PromoUsage[]
+  reviews                Review[]
+  bookings               MachineBooking[]
+  userVouchers           UserVoucher[]
+  membershipStatus       UserMembershipStatus?
+  paymentReconciliations PaymentReconciliation[]
 
   @@index([memberCode])
   @@map("customers")
@@ -367,16 +391,21 @@ model Order {
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
-  customer             Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  customerAddress      CustomerAddress?      @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
-  outlet               Outlet                @relation(fields: [outletId], references: [id])
-  kiosk                Kiosk?                @relation(fields: [kioskId], references: [id], onDelete: SetNull)
-  staff                User?                 @relation("StaffOrders", fields: [staffUserId], references: [id], onDelete: SetNull)
-  promo                Promo?                @relation(fields: [promoId], references: [id], onDelete: SetNull)
-  partner              B2BPartner?           @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  customer             Customer?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerAddress      CustomerAddress?        @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
+  outlet               Outlet                  @relation(fields: [outletId], references: [id])
+  kiosk                Kiosk?                  @relation(fields: [kioskId], references: [id], onDelete: SetNull)
+  staff                User?                   @relation("StaffOrders", fields: [staffUserId], references: [id], onDelete: SetNull)
+  promo                Promo?                  @relation(fields: [promoId], references: [id], onDelete: SetNull)
+  partner              B2BPartner?             @relation(fields: [partnerId], references: [id], onDelete: SetNull)
   items                OrderItem[]
   statusLogs           OrderStatusLog[]
   payments             Payment[]
+  /// Batch 2: SATU-SATUNYA pembayaran yang melunasi order (unik → satu
+  /// pembayaran tidak bisa melunasi dua order; order tidak dilunasi dua kali).
+  paidPaymentId        String?                 @unique
+  paidPayment          Payment?                @relation("OrderPaidPayment", fields: [paidPaymentId], references: [id], onDelete: SetNull)
+  reconciliations      PaymentReconciliation[]
   walletTransactions   WalletTransaction[]
   walletLedgers        WalletLedger[]
   pointLedgers         PointLedger[]
@@ -444,10 +473,19 @@ model Payment {
   externalId       String?
   externalResponse Json?
   notes            String?
+  /// Batch 2: kedaluwarsa otoritatif dari server (bukan timer klien).
+  expiresAt        DateTime?
+  provider         String?
+  cancelledAt      DateTime?
+  /// = orderId selama percobaan PENDING, NULL setelah final. Unik → paling
+  /// banyak SATU percobaan pembayaran aktif per order (dijaga database).
+  pendingSlot      String?       @unique
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order           Order                   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  settledOrder    Order?                  @relation("OrderPaidPayment")
+  reconciliations PaymentReconciliation[]
 
   @@index([orderId])
   @@index([paymentNumber])
@@ -1292,4 +1330,40 @@ model DailySequence {
   updatedAt DateTime @updatedAt
 
   @@map("daily_sequences")
+}
+
+/// Batch 2 — rekonsiliasi keuangan: dana yang perlu ditinjau/di-refund.
+/// Satu baris per (pembayaran, alasan) → pencatatan idempoten.
+model PaymentReconciliation {
+  id           String               @id @default(uuid())
+  paymentId    String?
+  orderId      String
+  customerId   String?
+  amount       Decimal              @db.Decimal(14, 2)
+  refundAmount Decimal              @db.Decimal(14, 2)
+  provider     String?
+  providerRef  String?
+  reason       ReconciliationReason
+  status       ReconciliationStatus @default(OPEN)
+  note         String?
+  requestedBy  String?
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  refundMethod RefundMethod?
+  executedBy   String?
+  executedAt   DateTime?
+  /// Referensi eksekusi (id ledger wallet / referensi transfer) — bukti tunggal.
+  executionRef String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  payment  Payment?  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@unique([paymentId, reason])
+  @@index([status])
+  @@index([orderId])
+  @@map("payment_reconciliations")
 }
