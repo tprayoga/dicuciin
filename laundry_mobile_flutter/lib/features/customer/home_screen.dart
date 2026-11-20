@@ -36,6 +36,7 @@ part 'home/wallet_pin_settings_page.dart';
 part 'home/payment_qris_page.dart';
 part 'home/payment_va_page.dart';
 part 'home/payment_attempt_flow.dart';
+part 'home/order_detail_page.dart';
 part 'home/order_success_page.dart';
 part 'home/scan_qr_page.dart';
 part 'home/notification_page.dart';

@@ -293,6 +293,15 @@ class OrderDetail {
     required this.totalAmount,
     required this.items,
     required this.statusLogs,
+    this.outletId = '',
+    this.outletName = '',
+    this.machineName,
+    this.machineIsDryer = false,
+    this.bookingStatus,
+    this.scheduledAt,
+    this.voucherDiscount = 0,
+    this.happyHourDiscount = 0,
+    this.estimatedMinutes,
   });
 
   final String id;
@@ -305,10 +314,26 @@ class OrderDetail {
   final double totalAmount;
   final List<OrderItemDetail> items;
   final List<OrderStatusLogEntry> statusLogs;
+  final String outletId;
+  final String outletName;
+  final String? machineName;
+  final bool machineIsDryer;
+  final String? bookingStatus;
+  final DateTime? scheduledAt;
+  final double voucherDiscount;
+  final double happyHourDiscount;
+  final int? estimatedMinutes;
+
+  /// Order belum dibayar → bisa dilanjutkan pembayarannya atau dibatalkan.
+  bool get isUnpaid => status == 'DRAFT' || status == 'WAITING_PAYMENT';
 
   factory OrderDetail.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items'] as List<dynamic>? ?? const [];
     final rawLogs = json['statusLogs'] as List<dynamic>? ?? const [];
+    final outlet = json['outlet'] as Map<String, dynamic>?;
+    final booking = json['machineBooking'] as Map<String, dynamic>?;
+    final device = booking?['device'] as Map<String, dynamic>?;
+    final snapshot = json['pricingSnapshot'] as Map<String, dynamic>?;
 
     return OrderDetail(
       id: (json['id'] as String?) ?? '',
@@ -329,6 +354,15 @@ class OrderDetail {
           .whereType<Map<String, dynamic>>()
           .map(OrderStatusLogEntry.fromJson)
           .toList(),
+      outletId: (json['outletId'] as String?) ?? '',
+      outletName: (outlet?['name'] as String?) ?? '',
+      machineName: device?['name'] as String?,
+      machineIsDryer: device?['deviceType'] == 'DRYER_MACHINE',
+      bookingStatus: booking?['status'] as String?,
+      scheduledAt: DateTime.tryParse((booking?['scheduledAt'] as String?) ?? ''),
+      voucherDiscount: _toDouble(snapshot?['voucherDiscount']),
+      happyHourDiscount: _toDouble(snapshot?['happyHourDiscount']),
+      estimatedMinutes: (snapshot?['estimatedMinutes'] as num?)?.toInt(),
     );
   }
 }
@@ -935,6 +969,7 @@ class PricingQuote {
     required this.deliveryFee,
     required this.spendingAmount,
     required this.finalAmount,
+    this.estimatedMinutes,
     required this.pointsToEarn,
     required this.cashbackToCredit,
     this.voucherCode,
@@ -948,6 +983,9 @@ class PricingQuote {
   final double deliveryFee;
   final double spendingAmount;
   final double finalAmount;
+
+  /// Batch 3 (S4): estimasi durasi mesin dari server (dryer: × siklus).
+  final int? estimatedMinutes;
   final int pointsToEarn;
   final double cashbackToCredit;
   final String? voucherCode;
@@ -966,6 +1004,7 @@ class PricingQuote {
       spendingAmount: _toDouble(json['spendingAmount']),
       finalAmount: _toDouble(json['finalAmount']),
       pointsToEarn: (json['pointsToEarn'] as num?)?.toInt() ?? 0,
+      estimatedMinutes: (json['estimatedMinutes'] as num?)?.toInt(),
       cashbackToCredit: _toDouble(json['cashbackToCredit']),
       voucherCode: json['voucherCode'] as String?,
     );

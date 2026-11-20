@@ -218,26 +218,6 @@ class CustomerController extends ChangeNotifier {
       deviceCode: deviceCode,
     );
   }
-
-  /// Reservasi mesin berdasarkan kode perangkat. [scheduledAt] (ISO) opsional.
-  Future<MachineBooking> reserveMachine({
-    required String accessToken,
-    required String deviceCode,
-    String? scheduledAt,
-  }) async {
-    final booking = await _customerService.reserveBooking(
-      accessToken: accessToken,
-      deviceCode: deviceCode,
-      scheduledAt: scheduledAt,
-    );
-    _activeBookings = [
-      booking,
-      ..._activeBookings.where((item) => item.id != booking.id),
-    ];
-    notifyListeners();
-    return booking;
-  }
-
   /// Daftar mesin nyata + keramaian sebuah outlet.
   Future<OutletMachines> getOutletMachines({
     required String accessToken,
@@ -464,52 +444,6 @@ class CustomerController extends ChangeNotifier {
     notifyListeners();
     return results;
   }
-
-  Future<LoyaltyCheckoutResult?> checkoutLoyalty({
-    required AppUser user,
-    required String accessToken,
-    required String outletId,
-    required List<CreateOrderItemInput> items,
-    String? voucherCode,
-    String? deviceId,
-    DateTime? scheduledAt,
-  }) async {
-    final customerId = user.customer?.id;
-    final partnerId = user.b2bPartner?.id;
-    if (customerId == null && partnerId == null) {
-      _errorMessage = 'Akun ini belum terhubung ke profil customer/partner.';
-      notifyListeners();
-      return null;
-    }
-
-    _isSubmittingOrder = true;
-    _errorMessage = null;
-    notifyListeners();
-    try {
-      final result = await _customerService.checkoutLoyalty(
-        accessToken: accessToken,
-        customerId: customerId ?? '',
-        partnerId: partnerId,
-        outletId: outletId,
-        items: items,
-        voucherCode: voucherCode,
-        deviceId: deviceId,
-        scheduledAt: scheduledAt,
-      );
-      await loadDashboard(user: user, accessToken: accessToken);
-      return result;
-    } on ApiException catch (e) {
-      _errorMessage = e.message;
-      return null;
-    } catch (_) {
-      _errorMessage = 'Pembayaran gagal. Coba lagi.';
-      return null;
-    } finally {
-      _isSubmittingOrder = false;
-      notifyListeners();
-    }
-  }
-
   /// Bayar order yang sudah ada dengan saldo. Mengembalikan true bila sukses;
   /// pesan error di [errorMessage].
   Future<bool> payOrderWithWallet({
@@ -638,6 +572,7 @@ class CustomerController extends ChangeNotifier {
     required String outletId,
     required List<CreateOrderItemInput> items,
     String? promoCode,
+    String? voucherCode,
     String? notes,
     String? deviceId,
     DateTime? scheduledAt,
@@ -660,6 +595,7 @@ class CustomerController extends ChangeNotifier {
         outletId: outletId,
         items: items,
         promoCode: promoCode,
+        voucherCode: voucherCode,
         notes: notes,
         deviceId: deviceId,
         scheduledAt: scheduledAt,

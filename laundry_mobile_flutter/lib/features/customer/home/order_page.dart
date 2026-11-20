@@ -27,6 +27,14 @@ class _OrderPageState extends State<_OrderPage> {
 
   /// K3/Batch 2: pelanggan tidak bisa me-refund sendiri. Pilihan: AJUKAN
   /// refund (ditinjau & dieksekusi admin) atau hubungi layanan pelanggan.
+  /// Batch 3 (S1): buka detail order — lanjutkan pembayaran / batalkan.
+  Future<void> _openDetail(OrderSummary order) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => _OrderDetailPage(orderId: order.id)),
+    );
+    if (mounted) await _refresh();
+  }
+
   Future<void> _requestHelp(OrderSummary order) async {
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -224,6 +232,7 @@ class _OrderPageState extends State<_OrderPage> {
                 child: _BackendOrderCard(
                   order: order,
                   onHelp: () => _requestHelp(order),
+                  onOpen: () => _openDetail(order),
                 ),
               ),
             ),
@@ -264,6 +273,7 @@ class _OrderPageState extends State<_OrderPage> {
           return _BackendOrderCard(
             order: order,
             onHelp: () => _requestHelp(order),
+            onOpen: () => _openDetail(order),
           );
         },
       ),
@@ -290,73 +300,82 @@ class _OrderSectionTitle extends StatelessWidget {
 }
 
 class _BackendOrderCard extends StatelessWidget {
-  const _BackendOrderCard({required this.order, required this.onHelp});
+  const _BackendOrderCard({
+    required this.order,
+    required this.onHelp,
+    required this.onOpen,
+  });
 
   final OrderSummary order;
   final VoidCallback onHelp;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  order.orderNumber,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: _textDark,
+    return InkWell(
+      onTap: onOpen,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _line),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    order.orderNumber,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: _textDark,
+                    ),
                   ),
                 ),
+                StatusBadge(
+                  _statusLabel(order.status),
+                  type: _statusType(order.status),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              order.serviceName,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: _textDark,
               ),
-              StatusBadge(
-                _statusLabel(order.status),
-                type: _statusType(order.status),
+            ),
+            const SizedBox(height: 8),
+            _DetailRow(left: 'Outlet', right: order.outletName),
+            _DetailRow(
+              left: 'Tanggal',
+              right: _formatDateId(order.orderDate.toLocal()),
+            ),
+            _DetailRow(
+              left: 'Total',
+              right: _formatRupiah(order.totalAmount.round()),
+              greenRight: true,
+            ),
+            if (order.status == 'PAID') ...[
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onHelp,
+                  icon: const Icon(Icons.support_agent),
+                  label: const Text('Butuh bantuan?'),
+                ),
               ),
             ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            order.serviceName,
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: _textDark,
-            ),
-          ),
-          const SizedBox(height: 8),
-          _DetailRow(left: 'Outlet', right: order.outletName),
-          _DetailRow(
-            left: 'Tanggal',
-            right: _formatDateId(order.orderDate.toLocal()),
-          ),
-          _DetailRow(
-            left: 'Total',
-            right: _formatRupiah(order.totalAmount.round()),
-            greenRight: true,
-          ),
-          if (order.status == 'PAID') ...[
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: onHelp,
-                icon: const Icon(Icons.support_agent),
-                label: const Text('Butuh bantuan?'),
-              ),
-            ),
           ],
-        ],
+        ),
       ),
     );
   }

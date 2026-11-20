@@ -51,7 +51,13 @@ class _LoyaltySummaryCard extends StatelessWidget {
           const SizedBox(height: 12),
           _DetailRow(left: 'Kategori Mesin', right: data.machineType.label),
           _DetailRow(left: 'Kapasitas', right: data.capacity),
-          _DetailRow(left: 'Estimasi', right: data.estimasi),
+          _DetailRow(
+            left: 'Estimasi',
+            // Batch 3 (S4): durasi dari server (dryer: × jumlah siklus).
+            right: q?.estimatedMinutes != null
+                ? '${q!.estimatedMinutes} Menit'
+                : data.estimasi,
+          ),
           _DetailRow(left: 'Tanggal', right: data.date),
           const SizedBox(height: 12),
           const Divider(height: 1),
@@ -101,7 +107,32 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
   // Order nyata yang sudah dibuat di backend (dibuat sekali saat bayar).
   // Direset bila voucher berubah agar diskon ikut terhitung ulang.
   CreatedOrder? _createdOrder;
+  // Order lama yang harus dibatalkan sebelum membuat yang baru (voucher/siklus
+  // berubah) — melepas voucher & mesin yang dipegangnya di server.
+  CreatedOrder? _staleOrder;
   bool _processing = false;
+
+  /// Batch 3 (S4): jumlah siklus dryer (1–3). Mesin cuci selalu 1.
+  int _cycles = 1;
+  static const _maxDryerCycles = 3;
+  bool get _isDryer => widget.data.machineType == _MachineType.dryer;
+
+  /// Pilihan berubah → order yang sudah dibuat tidak lagi sesuai.
+  void _invalidateOrder() {
+    if (_createdOrder != null) {
+      _staleOrder = _createdOrder;
+      _createdOrder = null;
+    }
+  }
+
+  void _setCycles(int value) {
+    if (value < 1 || value > _maxDryerCycles || value == _cycles) return;
+    setState(() {
+      _cycles = value;
+      _invalidateOrder();
+    });
+    _refreshQuote();
+  }
 
   @override
   void initState() {
@@ -123,7 +154,7 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
   List<CreateOrderItemInput> get _items => [
     CreateOrderItemInput(
       serviceId: widget.data.serviceId,
-      quantity: 1,
+      quantity: (_isDryer ? _cycles : 1).toDouble(),
       machineType: widget.data.machineType.label.toUpperCase(),
     ),
   ];
@@ -143,6 +174,7 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
                 children: [
                   _LoyaltySummaryCard(data: widget.data, quote: _quote),
+                  if (_isDryer) ...[const SizedBox(height: 12), _cyclePicker()],
                   if (_quoteLoading) ...[
                     const SizedBox(height: 8),
                     const LinearProgressIndicator(minHeight: 3),
@@ -503,6 +535,45 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
     );
   }
 
+  Widget _cyclePicker() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _line),
+      ),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'Jumlah siklus dryer',
+              style: TextStyle(fontWeight: FontWeight.w600, color: _textDark),
+            ),
+          ),
+          IconButton(
+            key: const ValueKey('cycles-minus'),
+            onPressed: _cycles > 1 && !_processing
+                ? () => _setCycles(_cycles - 1)
+                : null,
+            icon: const Icon(Icons.remove_circle_outline),
+          ),
+          Text(
+            '$_cycles×',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          IconButton(
+            key: const ValueKey('cycles-plus'),
+            onPressed: _cycles < _maxDryerCycles && !_processing
+                ? () => _setCycles(_cycles + 1)
+                : null,
+            icon: const Icon(Icons.add_circle_outline),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _voucherList() {
     if (_voucherLoading) {
       return const Padding(
@@ -751,7 +822,7 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
     setState(() {
       _voucherApplied = false;
       _appliedVoucherCode = '';
-      _createdOrder = null; // promo dilepas → order dibuat ulang tanpa diskon
+      _invalidateOrder(); // voucher dilepas → order dibuat ulang tanpa diskon
       _voucherController.clear();
     });
     _refreshQuote();
@@ -762,7 +833,7 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
       _voucherApplied = true;
       _appliedVoucherCode = code;
       _quote = quote ?? _quote;
-      _createdOrder = null;
+      _invalidateOrder();
       _voucherController.text = code;
       _voucherController.selection = TextSelection.collapsed(
         offset: _voucherController.text.length,
@@ -841,21 +912,35 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
       );
       return null;
     }
+    // Batch 3 (T3): order mesin SELALU terikat mesin tertentu (booking atomik).
+    if (widget.data.deviceId.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Pilih mesin terlebih dahulu.')),
+      );
+      return null;
+    }
 
     final controller = context.read<CustomerController>();
+    // Order lama (voucher/siklus berubah) dibatalkan dulu agar voucher & mesin
+    // yang dipegangnya dilepas — tidak ada order/booking ganda.
+    final stale = _staleOrder;
+    if (stale != null) {
+      await controller.cancelOrder(
+        accessToken: token,
+        orderId: stale.id,
+        cancelReason: 'Diganti pesanan baru (pilihan berubah)',
+      );
+      _staleOrder = null;
+      if (!mounted) return null;
+    }
     final created = await controller.createOrder(
       user: user,
       accessToken: token,
       outletId: widget.data.outletId,
-      items: [
-        CreateOrderItemInput(
-          serviceId: widget.data.serviceId,
-          quantity: 1,
-          machineType: widget.data.machineType.label.toUpperCase(),
-        ),
-      ],
-      promoCode: _voucherApplied ? _appliedVoucherCode : null,
-      deviceId: widget.data.deviceId.isNotEmpty ? widget.data.deviceId : null,
+      items: _items,
+      // Batch 3 (T10): voucher masuk ke harga ORDER → berlaku untuk semua metode.
+      voucherCode: _voucherApplied ? _appliedVoucherCode : null,
+      deviceId: widget.data.deviceId,
       scheduledAt: widget.data.scheduledAt,
     );
     if (created == null) {
@@ -931,66 +1016,17 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
     final messenger = ScaffoldMessenger.of(context);
     final auth = context.read<AuthController>();
     final customerController = context.read<CustomerController>();
-    final deviceId = widget.data.deviceId.isNotEmpty ? widget.data.deviceId : null;
 
-    // Tanpa voucher/happy hour: bayar ORDER YANG SAMA dengan jalur QRIS/VA
-    // (order + booking mesin sudah dibuat atomik oleh server).
-    if (!_voucherApplied && (_quote?.happyHourDiscount ?? 0) <= 0) {
-      final order = await _ensureOrder();
-      if (order == null || !mounted) return;
-      final ok = await customerController.payOrderWithWallet(
-        user: auth.user!,
-        accessToken: auth.accessToken!,
-        orderId: order.id,
-      );
-      if (!ok || !mounted) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(customerController.errorMessage ?? 'Pembayaran gagal.'),
-          ),
-        );
-        return;
-      }
-      await wallet.loadBalance();
-      if (!mounted) return;
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Pembayaran saldo berhasil.')),
-      );
-      navigator.pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => _OrderSuccessPage(
-            data: widget.data,
-            methodLabel: 'Saldo',
-            total: order.totalAmount.round(),
-            orderId: order.id,
-          ),
-        ),
-      );
-      return;
-    }
-
-    // Voucher/happy hour: checkout atomik di server (order + booking + bayar).
-    // Order DRAFT dari percobaan QRIS/VA sebelumnya dibatalkan dulu agar tidak
-    // ada order/booking ganda.
-    final stale = _createdOrder;
-    if (stale != null) {
-      await customerController.cancelOrder(
-        accessToken: auth.accessToken!,
-        orderId: stale.id,
-        cancelReason: 'Diganti pembayaran saldo dengan voucher',
-      );
-      _createdOrder = null;
-    }
-    final result = await customerController.checkoutLoyalty(
+    // Batch 3 (S1/T10): SATU order untuk semua metode — harga (termasuk
+    // voucher & happy hour) sudah final di order; saldo membayar order itu.
+    final order = await _ensureOrder();
+    if (order == null || !mounted) return;
+    final ok = await customerController.payOrderWithWallet(
       user: auth.user!,
       accessToken: auth.accessToken!,
-      outletId: widget.data.outletId,
-      items: _items,
-      voucherCode: _voucherApplied ? _appliedVoucherCode : null,
-      deviceId: deviceId,
-      scheduledAt: widget.data.scheduledAt,
+      orderId: order.id,
     );
-    if (result == null || !mounted) {
+    if (!ok || !mounted) {
       messenger.showSnackBar(
         SnackBar(
           content: Text(customerController.errorMessage ?? 'Pembayaran gagal.'),
@@ -1000,7 +1036,6 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
     }
     await wallet.loadBalance();
     if (!mounted) return;
-
     messenger.showSnackBar(
       const SnackBar(content: Text('Pembayaran saldo berhasil.')),
     );
@@ -1009,9 +1044,8 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
         builder: (_) => _OrderSuccessPage(
           data: widget.data,
           methodLabel: 'Saldo',
-          total: result.breakdown.finalAmount.round(),
-          orderId: result.orderId,
-          result: result,
+          total: order.totalAmount.round(),
+          orderId: order.id,
         ),
       ),
     );
@@ -1030,21 +1064,6 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
   Future<void> _runPayment() async {
     if (_method == _PaymentMethod.saldo) {
       await _payWithWallet();
-      return;
-    }
-
-    if (_voucherApplied || ((_quote?.happyHourDiscount ?? 0) > 0)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Voucher dan happy hour loyalty saat ini diproses lewat Saldo.',
-          ),
-        ),
-      );
-      setState(() {
-        _method = _PaymentMethod.saldo;
-        _vaExpanded = false;
-      });
       return;
     }
 

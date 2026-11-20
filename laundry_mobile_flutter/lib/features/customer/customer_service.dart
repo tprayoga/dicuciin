@@ -121,24 +121,6 @@ class CustomerService {
     );
     return BookingVerifyResult.fromJson(payload as Map<String, dynamic>);
   }
-
-  /// Reservasi mesin berdasarkan kode perangkat. [scheduledAt] (ISO) opsional —
-  /// waktu terjadwal pemakaian.
-  Future<MachineBooking> reserveBooking({
-    required String accessToken,
-    required String deviceCode,
-    String? scheduledAt,
-  }) async {
-    final body = <String, dynamic>{'deviceCode': deviceCode};
-    if (scheduledAt != null) body['scheduledAt'] = scheduledAt;
-    final payload = await _apiClient.post(
-      '/bookings',
-      headers: {'Authorization': 'Bearer $accessToken'},
-      body: jsonEncode(body),
-    );
-    return MachineBooking.fromJson(payload as Map<String, dynamic>);
-  }
-
   /// Buat tagihan QRIS/VA via gateway untuk sebuah order.
   Future<GatewayPayment> createGatewayPayment({
     required String accessToken,
@@ -393,39 +375,6 @@ class CustomerService {
     final voucher = data['userVoucher'];
     return UserVoucher.fromJson(voucher as Map<String, dynamic>);
   }
-
-  Future<LoyaltyCheckoutResult> checkoutLoyalty({
-    required String accessToken,
-    required String customerId,
-    required String outletId,
-    required List<CreateOrderItemInput> items,
-    String? partnerId,
-    String? voucherCode,
-    String? promoCode,
-    String sourcePlatform = 'MOBILE_APP',
-    String? deviceId,
-    DateTime? scheduledAt,
-  }) async {
-    final payload = await _apiClient.post(
-      '/transactions/checkout',
-      headers: {'Authorization': 'Bearer $accessToken'},
-      body: jsonEncode(
-        _checkoutPayload(
-          customerId: customerId,
-          partnerId: partnerId,
-          outletId: outletId,
-          items: items,
-          voucherCode: voucherCode,
-          promoCode: promoCode,
-          sourcePlatform: sourcePlatform,
-          deviceId: deviceId,
-          scheduledAt: scheduledAt,
-        ),
-      ),
-    );
-    return LoyaltyCheckoutResult.fromJson(payload as Map<String, dynamic>);
-  }
-
   Future<List<OutletOption>> getOutlets({required String accessToken}) async {
     final payload = await _apiClient.get(
       '/outlets',
@@ -463,6 +412,7 @@ class CustomerService {
     required String outletId,
     required List<CreateOrderItemInput> items,
     String? promoCode,
+    String? voucherCode,
     String? notes,
     String? deviceId,
     DateTime? scheduledAt,
@@ -489,6 +439,9 @@ class CustomerService {
         'sourcePlatform': 'MOBILE_APP',
         'items': payloadItems,
         if (promoCode != null && promoCode.isNotEmpty) 'promoCode': promoCode,
+        // Batch 3 (T10): voucher dihitung ke harga ORDER → berlaku QRIS/VA/saldo.
+        if (voucherCode != null && voucherCode.isNotEmpty)
+          'voucherCode': voucherCode,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
         if (deviceId != null && deviceId.isNotEmpty) 'deviceId': deviceId,
         if (scheduledAt != null)
