@@ -607,6 +607,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   final voucher = TextEditingController();
   final customerLookup = TextEditingController();
+  final walletPin = TextEditingController();
   String method = 'QRIS';
   bool vaExpanded = false;
   String selectedBank = 'BCA';
@@ -615,6 +616,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void dispose() {
     voucher.dispose();
     customerLookup.dispose();
+    walletPin.dispose();
     super.dispose();
   }
 
@@ -768,6 +770,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       Icons.person_outline_rounded,
                     ),
                   ),
+                  if (method == 'WALLET') ...[
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: walletPin,
+                      obscureText: true,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      decoration: inputDecoration(
+                        'PIN wallet (6 digit)',
+                        Icons.lock_outline_rounded,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 22),
                   const SectionTitle('Voucher/Kode Promo'),
                   const SizedBox(height: 10),
@@ -928,8 +943,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           if (method == 'WALLET') {
             controller.submitWalletCheckout(
               customerLookup: customerLookup.text,
+              pin: walletPin.text,
               voucherCode: voucher.text,
             );
+            walletPin.clear();
             return;
           }
           controller.submitCheckout(
@@ -967,7 +984,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           children: [
             CenterHeader(
               title: 'Pembayaran',
-              onBack: controller.backToCheckout,
+              onBack: () => _confirmLeavePayment(context, controller),
             ),
             Expanded(
               child: payment == null
@@ -1011,7 +1028,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ? null
           : TwoButtonBar(
               secondaryLabel: 'Ganti Metode',
-              onSecondary: controller.backToCheckout,
+              onSecondary: () => _confirmLeavePayment(context, controller),
               primaryLabel: paymentSimulationEnabled
                   ? 'Simulasikan Bayar'
                   : 'Cek Status',
@@ -1247,7 +1264,7 @@ class SuccessScreen extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            'Selamat ${machine?.name ?? 'mesin'} sudah bisa digunakan!',
+                            _machineStatusLabel(controller, machine?.name),
                             style: const TextStyle(
                               fontSize: 16,
                               color: textDark,
@@ -1279,13 +1296,68 @@ class SuccessScreen extends StatelessWidget {
         ),
       ),
       bottomNavigationBar: TwoButtonBar(
-        secondaryLabel: 'Cetak',
-        onSecondary: null,
+        secondaryLabel: _machineNeedsRetry(controller)
+            ? 'Nyalakan Ulang'
+            : 'Cetak',
+        onSecondary: _machineNeedsRetry(controller) && !controller.machineRetrying
+            ? controller.retryMachineStart
+            : null,
         primaryLabel: 'Selesai',
         onPrimary: controller.newOrder,
       ),
     );
   }
+}
+
+/// Kembali dari layar bayar membatalkan order (mesin dilepas). Minta konfirmasi
+/// agar pelanggan yang sedang membayar tidak membatalkan tanpa sengaja.
+Future<void> _confirmLeavePayment(
+  BuildContext context,
+  KioskController controller,
+) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Batalkan pembayaran?'),
+      content: const Text(
+        'Pesanan akan dibatalkan dan mesin dilepas. '
+        'Jika Anda SUDAH membayar, jangan batalkan — tunggu konfirmasi.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Tetap di sini'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Batalkan'),
+        ),
+      ],
+    ),
+  );
+  if (ok == true) controller.backToCheckout();
+}
+
+bool _machineNeedsRetry(KioskController c) =>
+    c.machineCommandStatus == 'FAILED' || c.machineStatusTimedOut;
+
+/// Teks status mesin di layar sukses — berdasarkan status perintah START dari
+/// server (bukan asumsi): mesin baru dinyatakan menyala setelah lapor RUNNING.
+String _machineStatusLabel(KioskController c, String? machineName) {
+  final name = machineName ?? 'Mesin';
+  if (c.error != null && _machineNeedsRetry(c)) return c.error!;
+  switch (c.machineCommandStatus) {
+    case 'RUNNING':
+      return '$name sudah menyala. Selamat mencuci!';
+    case 'COMPLETED':
+      return '$name telah selesai.';
+    case 'FAILED':
+      return '$name gagal dinyalakan. Tekan "Nyalakan Ulang" atau hubungi petugas.';
+  }
+  if (c.machineStatusTimedOut) {
+    return '$name belum merespons. Tekan "Nyalakan Ulang" atau hubungi petugas.';
+  }
+  return 'Menyalakan $name…';
 }
 
 // ── Komponen bersama ─────────────────────────────────────────────────
