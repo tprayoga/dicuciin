@@ -102,6 +102,11 @@ describe('K5 — UsersService anti eskalasi', () => {
       },
       outletUser: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
       outlet: { findUnique: jest.fn().mockResolvedValue({ id: 'o-1' }) },
+      // Batch 5: update + pencabutan sesi dalam satu transaksi.
+      authSession: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      auditLog: { create: jest.fn() },
+      $transaction: jest.fn((fn: any) => fn(prisma)),
     };
     return { svc: new UsersService(prisma), prisma };
   }

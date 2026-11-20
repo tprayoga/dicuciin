@@ -167,10 +167,16 @@ Lihat **17-batch3-checkout.md** (integration 137/137).
 
 Lihat **20-batch4-test-report.md**: wallet-topup 22, wallet-pin 17, refund-voucher-policy 6 (+ regresi payment-lifecycle & mobile-compat); total integration **184/184 (14 suite)**, unit **264/264**; 20 run berurutan suite penuh; tiga akar test intermiten.
 
+## Batch 5 — Autentikasi, refresh token & akun (TESTED, PostgreSQL nyata)
+
+Lihat **21-auth-account.md**: auth-session 35, phone-normalization 2, wallet-pin +1 (bukti PIN terikat sesi), unit phone.util 19, Flutter session_refresh 7. Total integration **222/222 (16 suite)**, unit **283/283**.
+
 ## NOT_VERIFIED
 
 | Item | Alasan |
 |---|---|
+| Pengiriman OTP WhatsApp nyata (Fonnte) | `WA_API_KEY` hanya di server; diuji dengan pengirim tiruan |
+| Kamera iOS (T11) di iPhone | Hanya validasi plist |
 | Top-up Midtrans sandbox (`TOP-…`), refund eksternal top-up (Batch 4) | Tidak dijalankan; gateway tiruan |
 | Midtrans `expire`/`status` (Batch 2) | Adaptor diuji dengan respons tiruan; perilaku sandbox belum dicoba |
 | Redis/BullMQ nyata untuk scheduler | Logika job diuji langsung di PostgreSQL |

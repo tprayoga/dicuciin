@@ -391,6 +391,28 @@ describe("Batch 4 — keamanan PIN wallet (PostgreSQL nyata)", () => {
       expect(await balance(c)).toBe(40000);
     });
 
+    it("Batch 5 — token bersesi (sid): bukti tetap berlaku setelah access token di-refresh pada sesi yang SAMA, tidak di sesi lain, dan tidak bila sesi dicabut", async () => {
+      const c = await withPin();
+      const o1 = await newOrder(c);
+      const o2 = await newOrder(c);
+      const s1 = await prisma.authSession.create({ data: { userId: c.user.id } });
+      const s2 = await prisma.authSession.create({ data: { userId: c.user.id } });
+      const tok = (sid: string, jti: string) => ({
+        Authorization: `Bearer ${jwt.sign({ sub: c.user.id, role: UserRole.CUSTOMER, sid, jti })}`,
+      });
+
+      await http().post("/wallets/me/pin/verify").set(tok(s1.id, "akses-1")).send({ pin: PIN }).expect(201);
+      await pay(c, o1.id, tok(s2.id, "akses-lain")).expect(403);
+      // access token BARU (hasil refresh) pada sesi yang sama → bukti dipakai.
+      await pay(c, o1.id, tok(s1.id, "akses-2")).expect(201);
+      expect(await balance(c)).toBe(40000);
+
+      await http().post("/wallets/me/pin/verify").set(tok(s1.id, "akses-2")).send({ pin: PIN }).expect(201);
+      await prisma.authSession.update({ where: { id: s1.id }, data: { revokedAt: new Date() } });
+      await pay(c, o2.id, tok(s1.id, "akses-3")).expect(401);
+      expect(await balance(c)).toBe(40000);
+    });
+
     it("terikat CUSTOMER: bukti customer A tidak mengotorisasi saldo B walau lewat rute B sendiri", async () => {
       const a = await withPin();
       const b = await withPin();

@@ -173,7 +173,12 @@ describe('KiosksService enrollment', () => {
         OR: [
           { id: '08123456789' },
           { memberCode: '08123456789' },
-          { user: { phone: '08123456789' } },
+          // Batch 5 (T6): semua format nomor yang setara.
+          {
+            user: {
+              phone: { in: ['628123456789', '08123456789', '+628123456789', '8123456789'] },
+            },
+          },
           { user: { email: '08123456789' } },
         ],
       },

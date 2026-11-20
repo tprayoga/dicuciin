@@ -1,7 +1,7 @@
 # PROGRESS — Di.Cuciin Production Readiness
 
 Status: NOT_STARTED · IN_PROGRESS · IMPLEMENTED · TESTED · BLOCKED · ACCEPTED
-Terakhir diperbarui: 20 Nov 2026 (Batch 4)
+Terakhir diperbarui: 20 Nov 2026 (Batch 5)
 
 | Fase | Temuan | Status | Bukti |
 |---|---|---|---|
@@ -13,22 +13,24 @@ Terakhir diperbarui: 20 Nov 2026 (Batch 4)
 | **1 — Batch 3** | **T3, T10, S1, S4** — checkout & pengalaman mobile | **TESTED** (PostgreSQL nyata, pricing asli) · belum deploy | [17](17-batch3-checkout.md) |
 | IoT perangkat fisik | integrasi & uji mesin | **DITUNDA** (keputusan owner) | — |
 | **2 — Batch 4: Top-up Midtrans & PIN** | K1 (fitur), S5 + kebijakan voucher saat refund | **ACCEPTED (gate lokal)** · Midtrans sandbox NOT_VERIFIED · belum deploy | [18](18-wallet-topup.md), [19](19-wallet-pin-security.md), [20](20-batch4-test-report.md) |
-| 3 — Auth & akun | T1, T6, T7, T11 | NOT_STARTED | — |
+| **3 — Batch 5: Auth, refresh token & akun** | T1, T6, T7, T11 + R3 (profil) + temuan baru A1–A12 | **ACCEPTED (gate lokal)** · WhatsApp nyata NOT_VERIFIED · belum deploy | [21](21-auth-account.md) |
 | 4 — Kualitas alur | T8, S3, S6–S8, R1–R5, R7 | NOT_STARTED | — |
 | 5 — Rilis & operasional | R6 + checklist | IN_PROGRESS ([06](06-production-deployment.md), [11](11-deployment-compatibility.md)) | — |
 
-## Quality gate (20 Nov 2026, setelah Batch 4)
+## Quality gate (20 Nov 2026, setelah Batch 5)
 
 | Gate | Hasil |
 |---|---|
-| Integration PostgreSQL nyata, **20 run berurutan suite penuh** | **20/20 valid & lulus, 184/184 tiap run** (0 tumpang tindih, 0 tidur host, 0 error koneksi, sidik jari kode sama `1e8f6051adbe319e`) |
-| Unit backend | **264/264** (24 suite) |
-| `tsc --noEmit` · `npm run build` · `prisma migrate diff` (migrasi ↔ skema) | exit 0 · sukses · *No difference detected* |
-| Flutter mobile: analyze / test / build web | bersih / **8/8** / sukses |
-| Flutter kiosk: analyze / test / build web | bersih / **2/2** / sukses |
-| Admin (Nuxt) `npm run build` | sukses (tanpa test otomatis) |
-| Pemindaian rahasia pada diff | bersih |
-| Midtrans sandbox, Redis/BullMQ nyata, perangkat fisik | **NOT_VERIFIED** |
+| Integration PostgreSQL nyata, **5 run berurutan suite penuh** | **5/5 valid & lulus, 222/222 tiap run** (16 suite; 0 tumpang tindih, 0 tidur host, 0 error koneksi, sidik jari kode sama `849578be1a730ace`) |
+| Unit backend | **283/283** (25 suite) |
+| `tsc --noEmit` · `npm run build` · `prisma migrate diff` | exit 0 · sukses · *No difference detected* |
+| Uji mutasi Batch 5 (12 backend + 2 mobile) | semua tertangkap |
+| Flutter mobile: analyze / test / build web | bersih / **15/15** / sukses |
+| Flutter kiosk (regresi): analyze / test / build web | bersih / **2/2** / sukses |
+| Admin (Nuxt) `npm run build` · `nuxi typecheck` | sukses · 36 error lama, **0 baru** (sama dengan sebelum perubahan) |
+| WhatsApp nyata, Midtrans sandbox, iPhone/HP, Redis/BullMQ nyata, IoT fisik | **NOT_VERIFIED** |
+
+Gate Batch 4 (sebelum Batch 5 dimulai): 20 run berurutan suite integration penuh 20/20 valid & lulus (184/184), unit 264/264, Flutter & admin build lulus — lihat **20-batch4-test-report.md**.
 
 **Test intermiten**: tiga akar masalah teridentifikasi, direproduksi, diperbaiki, dan diverifikasi (mesin dipakai bersama antar-iterasi; supertest menutup server bersama; listen wildcard dibayangi proses lain). Detail & run tidak valid: **20-batch4-test-report.md**. Kegagalan Batch 3 yang lognya hilang tidak dapat dipetakan secara pasti ke salah satunya.
 
@@ -102,6 +104,20 @@ Lingkungan uji: Docker `postgres:16-alpine` (`127.0.0.1:55499/dicuciin_test`), t
 - [ ] Midtrans sandbox — NOT_VERIFIED
 - [ ] **ACCEPTED (produksi)** — butuh deploy + sandbox + uji di HP
 
+## Gate Batch 5 (auth & akun)
+
+- [x] Registrasi publik hanya CUSTOMER (role staf/admin → 403)
+- [x] Sesi login: logout, logout semua, ganti/reset password, nonaktifkan akun, ganti role → access token ditolak seketika
+- [x] Rotasi refresh token atomik; pemakaian ulang setelah masa tenggang mencabut sesi (+ audit)
+- [x] Penguncian login per akun aman paralel; ganti password wajib password lama
+- [x] OTP: verifikasi atomik; production tanpa kunci WA → 503; gagal kirim → 503 jelas; token reset sekali pakai
+- [x] Nomor HP kanonik 628… di semua jalur; data lama tetap bisa login; skrip normalisasi dry-run
+- [x] App mobile: refresh otomatis sekali saat 401; ganti kata sandi; edit profil; keluar dari semua perangkat; izin kamera iOS
+- [x] Admin: refresh tunggal, ulang sekali
+- [x] 5 run berurutan suite integration penuh: 5/5 valid & lulus (222/222); unit 283/283; Flutter 15/15 + 2/2; build lulus
+- [ ] WhatsApp nyata, iPhone (kamera), app di HP — NOT_VERIFIED
+- [ ] **ACCEPTED (produksi)** — butuh deploy + uji perangkat
+
 ## Temuan baru
 
 | Temuan | Status |
@@ -134,6 +150,14 @@ Lingkungan uji: Docker `postgres:16-alpine` (`127.0.0.1:55499/dicuciin_test`), t
 | Hash PIN ikut terkirim di respons | **TESTED** (Batch 4 — redaksi global) |
 | Webhook PAID setelah top-up direfund → 500 (ledger P2002) | **TESTED** (Batch 4 — no-op) |
 | Dompet partner B2B tanpa PIN | Dicatat |
+| **Kritis**: registrasi publik bisa membuat SUPER_ADMIN tanpa OTP (A1) | **TESTED** (Batch 5) — kemungkinan ada di server berjalan; lihat 21 |
+| Logout/nonaktif/ganti password tidak mematikan access token (A2) | **TESTED** (Batch 5 — sesi) |
+| Refresh paralel → token ganda; login/refresh paralel → 500 (A3, A4) | **TESTED** (Batch 5) |
+| Pemakaian ulang refresh token curian tidak terdeteksi (A5) | **TESTED** (Batch 5) |
+| Login tanpa batas percobaan per akun (A6) | **TESTED** (Batch 5) |
+| Verifikasi OTP tidak atomik; token reset bisa dipakai ulang (A9, A10) | **TESTED** (Batch 5) |
+| OTP "terkirim" padahal tidak dikirim (production tanpa kunci / provider gagal) (T7) | **TESTED** (Batch 5) |
+| Penghapusan akun mandiri (kebijakan Google Play) belum ada | Dicatat — keputusan owner |
 
 ## Keputusan owner yang tertunda
 
@@ -143,6 +167,7 @@ Lingkungan uji: Docker `postgres:16-alpine` (`127.0.0.1:55499/dicuciin_test`), t
 4. `BOOKING_HOLD_MINUTES` selama masa transisi app lama.
 5. Top-up: batas nominal, biaya admin, cashback; package name, jam operasional per outlet.
 6. Kebijakan pengembalian voucher saat refund (`REFUND_RESTORE_VOUCHER`, default aktif).
+7. Parameter sesi & login (`AUTH_*`, `JWT_ACCESS_EXPIRES_IN`), pemasangan `WA_API_KEY`, pemeriksaan akun admin tak dikenal (A1), penerapan normalisasi nomor HP, kebijakan penghapusan akun.
 
 ## Commit (lokal, belum di-push)
 

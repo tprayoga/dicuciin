@@ -1,4 +1,4 @@
-# 06 — Checklist Deployment (Fase 0 + Fase 1 Batch 1–3 + Fase 2 Batch 4)
+# 06 — Checklist Deployment (Fase 0 + Fase 1 Batch 1–3 + Batch 4 + Batch 5)
 
 > Belum dideploy. Setiap langkah yang mengubah server/production **menunggu persetujuan eksplisit owner**.
 > Urutan rilis & matriks kompatibilitas: **11-deployment-compatibility.md**.
@@ -7,8 +7,8 @@
 
 - [ ] Review commit di branch `feat/production-readiness` (`git log --oneline main..feat/production-readiness`).
 - [ ] Jalankan di mesin developer:
-  - `cd laundry-be && npx jest` — harus **264/264**.
-  - `TEST_DATABASE_URL=postgresql://test:test@127.0.0.1:55499/dicuciin_test npm run test:integration` — harus **137/137**.
+  - `cd laundry-be && npx jest` — harus **283/283**.
+  - `TEST_DATABASE_URL=postgresql://test:test@127.0.0.1:55499/dicuciin_test npm run test:integration` — harus **222/222**.
   - `npm run build`.
   - `cd laundry_mobile_flutter && flutter analyze && flutter build apk --release --dart-define=API_BASE_URL=https://api.dicuciin.com/api/v1`.
   - `cd laundry_kiosk_flutter && flutter analyze && flutter test && flutter build <target> --release --dart-define=API_BASE_URL=https://api.dicuciin.com/api/v1`.
@@ -16,6 +16,10 @@
 - [ ] Keputusan owner: kebijakan refund; `BOOKING_HOLD_MINUTES` masa transisi (usul 15).
 - [ ] (Batch 4) Keputusan owner: batas & biaya top-up (`TOPUP_MIN_AMOUNT`, `TOPUP_MAX_AMOUNT`, `TOPUP_ADMIN_FEE`), kebijakan voucher saat refund (`REFUND_RESTORE_VOUCHER`), parameter PIN (`WALLET_PIN_MAX_ATTEMPTS`, `WALLET_PIN_LOCK_MINUTES`, `WALLET_PIN_PROOF_SECONDS`).
 - [ ] (Batch 4) Build app dengan `--dart-define=ENABLE_WALLET_TOPUP=true` HANYA setelah backend Batch 4 aktif & sandbox top-up terverifikasi.
+- [ ] (Batch 5 — **prioritas keamanan**) Registrasi publik bisa membuat akun admin di versi yang berjalan (A1, lihat 21). Setelah deploy, owner memeriksa akun non-CUSTOMER yang tidak dikenal (query di 21) — butuh izin akses data production.
+- [ ] (Batch 5) `WA_API_KEY` (Fonnte) terpasang di `.env` server dan nomor pengirim terhubung — tanpa ini OTP di production menjawab 503 (bukan "terkirim" palsu).
+- [ ] (Batch 5) Keputusan owner: `AUTH_LOGIN_MAX_ATTEMPTS` (10), `AUTH_LOGIN_LOCK_MINUTES` (15), `AUTH_REFRESH_REUSE_GRACE_SECONDS` (30), `AUTH_SESSION_MAX_DAYS` (0 = tanpa batas), dan `JWT_ACCESS_EXPIRES_IN` server (disarankan ≤ 15m).
+- [ ] (Batch 5) Admin web dideploy **bersamaan** dengan backend (refresh tunggal; versi admin lama yang me-refresh paralel bisa mengeluarkan admin saat masa tenggang terlewati).
 - [ ] Jendela deploy saat outlet sepi (kiosk tidak bisa menjual sampai aplikasi kiosk diperbarui).
 
 - [ ] (Batch 2) Redis tersedia untuk worker (sudah dipakai scheduler loyalty). Env opsional: lihat 14 §Konfigurasi. Untuk instance API tambahan tanpa worker: `OPS_SCHEDULER_ENABLED=false`.
@@ -27,7 +31,8 @@
 2. Health: `curl https://api.dicuciin.com/api/v1/health`.
 3. Kiosk: pasang build baru di setiap kiosk **segera** setelah backend.
 4. (Izin) Rekonsiliasi: `npx ts-node scripts/reconcile-legacy-bookings.ts --out legacy.json` → owner meninjau → `--apply --actor "<nama>"` bila disetujui.
-5. Rilis APK mobile baru (app lama tetap berfungsi untuk alur utama; top-up/refund/"Booking & Pakai" ditolak).
+5. (Izin, Batch 5) Normalisasi nomor HP: `npm run normalize:user-phones -- --out phones.json` (baca-saja) → owner meninjau CONFLICT/INVALID → `--apply --actor "<nama>"` bila disetujui. Login/OTP sudah bekerja tanpa langkah ini.
+6. Rilis APK mobile baru (app lama tetap berfungsi untuk alur utama; top-up/refund/"Booking & Pakai" ditolak).
 
 ## Smoke test setelah deploy (baca-saja kecuali disebut)
 
