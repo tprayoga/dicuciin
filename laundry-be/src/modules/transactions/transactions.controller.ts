@@ -26,8 +26,10 @@ export class TransactionsController {
     return this.transactionService.checkout(dto);
   }
 
+  // SECURITY HOTFIX (K9): kredit saldo tanpa pembayaran → hanya admin (top-up manual).
   @Post('topup')
-  @ApiOperation({ summary: 'Top up MAIN_BALANCE + trigger cashback top up' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER)
+  @ApiOperation({ summary: 'Top up MAIN_BALANCE manual (admin) + trigger cashback top up' })
   async topUp(@Body() dto: TopUpDto) {
     return this.transactionService.topUp(dto);
   }

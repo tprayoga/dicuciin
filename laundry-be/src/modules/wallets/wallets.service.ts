@@ -205,7 +205,7 @@ export class WalletsService {
   }
 
   async pay(customerId: string, payWithWalletDto: PayWithWalletDto) {
-    const { orderId, amount, idempotencyKey } = payWithWalletDto;
+    const { orderId, idempotencyKey } = payWithWalletDto;
 
     const wallet = await this.getOrCreateWallet(customerId);
 
@@ -224,6 +224,18 @@ export class WalletsService {
 
     if (order.status === OrderStatus.PAID) {
       throw new ConflictException('Order sudah dibayar');
+    }
+
+    // SECURITY HOTFIX (K4): nominal SELALU total order dari server. Sebelumnya
+    // `amount` dari klien dipakai apa adanya (Min 0) → order bisa lunas dengan
+    // Rp0. Field `amount` tetap diterima demi kompatibilitas app, tetapi diabaikan.
+    // Hanya order yang menunggu pembayaran.
+    if (order.status !== OrderStatus.DRAFT && order.status !== OrderStatus.WAITING_PAYMENT) {
+      throw new ConflictException('Order tidak dalam status menunggu pembayaran');
+    }
+    const amount = Number(order.totalAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new ConflictException('Total order tidak valid');
     }
 
     try {

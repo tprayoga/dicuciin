@@ -107,6 +107,8 @@ describe('WalletsService', () => {
         orderNumber: 'ORD-1',
         customerId: opts.orderCustomerId ?? 'cust-1',
         status: opts.orderStatus ?? OrderStatus.WAITING_PAYMENT,
+        // SECURITY HOTFIX (K4): nominal debit = total order dari server.
+        totalAmount: dec('68400'),
       });
       ledger.debit.mockResolvedValue(
         fullLedger({
@@ -162,6 +164,27 @@ describe('WalletsService', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(ledger.debit).not.toHaveBeenCalled();
     });
+
+    it('SECURITY HOTFIX (K4): nominal dari klien diabaikan — debit = total order (Rp0/Rp1 tidak bisa melunasi)', async () => {
+      for (const amount of [0, 1, 999999]) {
+        setup({});
+        ledger.debit.mockClear();
+        await service.pay('cust-1', { orderId: 'ord-1', amount });
+        expect(ledger.debit).toHaveBeenCalledWith(
+          WalletType.MAIN_BALANCE,
+          expect.objectContaining({ amount: 68400 }),
+        );
+      }
+    });
+
+    it.each([OrderStatus.CANCELLED, OrderStatus.REFUNDED, OrderStatus.COMPLETED])(
+      'SECURITY HOTFIX (K4): order %s tidak bisa dibayar saldo',
+      async (orderStatus) => {
+        setup({ orderStatus });
+        await expect(service.pay('cust-1', dto)).rejects.toBeInstanceOf(ConflictException);
+        expect(ledger.debit).not.toHaveBeenCalled();
+      },
+    );
 
     it('order milik customer lain → Unauthorized', async () => {
       setup({ orderCustomerId: 'cust-LAIN' });

@@ -70,12 +70,16 @@ export class IotController {
   }
 
   @Post('devices/:id/heartbeat')
+  // SECURITY HOTFIX (K10): perintah/heartbeat mesin tidak boleh dari pelanggan.
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER, UserRole.ADMIN_OUTLET, UserRole.TECHNICIAN)
   @ApiOperation({ summary: 'Update device heartbeat' })
   async updateHeartbeat(@Param('id') id: string) {
     return this.iotService.updateHeartbeat(id);
   }
 
   @Post('devices/:id/commands')
+  // SECURITY HOTFIX (K10): perintah/heartbeat mesin tidak boleh dari pelanggan.
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER, UserRole.ADMIN_OUTLET, UserRole.TECHNICIAN)
   @ApiOperation({ summary: 'Send command to device' })
   async sendCommand(@Param('id') id: string, @Body() sendCommandDto: SendCommandDto) {
     return this.iotService.sendCommand(id, sendCommandDto.command, sendCommandDto.payload);
