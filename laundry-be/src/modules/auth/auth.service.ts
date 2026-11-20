@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -39,20 +40,24 @@ export class AuthService {
       occupation,
     } = registerDto;
 
-    if (!email && !phone) {
-      throw new BadRequestException('Email or phone is required');
+    // SECURITY HOTFIX: registrasi publik HANYA untuk pelanggan. Sebelumnya
+    // `role` dari klien dipakai apa adanya dan verifikasi OTP hanya berjalan
+    // untuk CUSTOMER → siapa pun bisa membuat SUPER_ADMIN/OWNER/staf tanpa
+    // OTP. Akun staf/admin dibuat lewat POST /users oleh SUPER_ADMIN/OWNER.
+    // `role` tetap diterima di DTO agar klien yang mengirim `role: CUSTOMER`
+    // tidak gagal validasi; nilai lain (termasuk null) → 403.
+    if (role !== UserRole.CUSTOMER) {
+      throw new ForbiddenException('Registrasi publik hanya untuk pelanggan');
     }
 
-    // Register CUSTOMER (self-service) wajib lewat verifikasi OTP nomor HP.
-    if (role === UserRole.CUSTOMER) {
-      if (!phone) {
-        throw new BadRequestException('Phone is required for customer registration');
-      }
-      if (!verificationToken) {
-        throw new BadRequestException('Verification token is required');
-      }
-      await this.otpService.assertVerifiedPhone(verificationToken, phone, OtpPurpose.REGISTER);
+    // Verifikasi OTP nomor HP selalu wajib.
+    if (!phone) {
+      throw new BadRequestException('Phone is required for customer registration');
     }
+    if (!verificationToken) {
+      throw new BadRequestException('Verification token is required');
+    }
+    await this.otpService.assertVerifiedPhone(verificationToken, phone, OtpPurpose.REGISTER);
 
     if (email) {
       const existingEmail = await this.prisma.user.findUnique({ where: { email } });
@@ -73,12 +78,12 @@ export class AuthService {
         email,
         phone,
         passwordHash,
-        role,
-        phoneVerifiedAt: role === UserRole.CUSTOMER ? new Date() : null,
+        role: UserRole.CUSTOMER,
+        phoneVerifiedAt: new Date(),
       },
     });
 
-    if (role === UserRole.CUSTOMER) {
+    {
       const memberCode = await generateDailySequence(
         this.prisma,
         'MBR',

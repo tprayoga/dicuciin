@@ -1,13 +1,80 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UserRole } from '@prisma/client';
 
+/** Role yang boleh mengelola akun user lain. */
+export const USER_ADMIN_ROLES: UserRole[] = [UserRole.SUPER_ADMIN, UserRole.OWNER];
+
+/** Bentuk `req.user` dari JwtStrategy. */
+export interface UserActor {
+  userId: string;
+  role: UserRole | string;
+}
+
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * SECURITY HOTFIX — cegah eskalasi hak akses. SUPER_ADMIN bebas; OWNER tidak
+   * boleh membuat, mengubah, atau memberi role SUPER_ADMIN; role lain tidak
+   * boleh mengelola user.
+   */
+  assertCanManage(actor: UserActor, targetCurrentRole: UserRole | null, newRole?: UserRole) {
+    if (actor.role === UserRole.SUPER_ADMIN) return;
+    if (actor.role !== UserRole.OWNER) {
+      throw new ForbiddenException('Tidak memiliki izin mengelola user');
+    }
+    if (targetCurrentRole === UserRole.SUPER_ADMIN || newRole === UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Owner tidak boleh mengelola akun Super Admin');
+    }
+  }
+
+  async roleOf(id: string): Promise<UserRole> {
+    const user = await this.prisma.user.findUnique({ where: { id }, select: { role: true } });
+    if (!user) throw new NotFoundException('User not found');
+    return user.role;
+  }
+
+  /**
+   * SECURITY HOTFIX — ubah profil SENDIRI (kompatibel app mobile yang
+   * memanggil PATCH /users/:id dengan {name, email, phone}). Hanya nama &
+   * email; nomor HP adalah identitas login OTP → harus sama dengan yang tersimpan.
+   */
+  async updateOwnProfile(
+    userId: string,
+    dto: { name?: string; email?: string | null; phone?: string | null },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (dto.phone !== undefined && dto.phone !== null && dto.phone !== user.phone) {
+      throw new BadRequestException('Nomor HP tidak bisa diubah dari aplikasi');
+    }
+    if (dto.name !== undefined && dto.name.trim().length < 2) {
+      throw new BadRequestException('Nama minimal 2 karakter');
+    }
+    if (dto.email && dto.email !== user.email) {
+      const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+      if (existing) throw new ConflictException('Email already exists');
+    }
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name } : {}),
+        ...(dto.email ? { email: dto.email } : {}),
+      },
+      select: { id: true, name: true, email: true, phone: true, role: true, isActive: true },
+    });
+  }
 
   async create(createUserDto: CreateUserDto) {
     const { name, email, phone, password, role = UserRole.CASHIER, outletId, shiftName } = createUserDto;
