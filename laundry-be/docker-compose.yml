@@ -22,8 +22,30 @@ services:
     image: redis:7-alpine
     container_name: laundry-redis
     restart: unless-stopped
+    # Insiden 2026-11-21: Redis tanpa auth terbuka ke internet disalahgunakan
+    # (SLAVEOF/CONFIG). Sekarang: password dari REDIS_PASSWORD (.env; kosong =
+    # tanpa auth untuk dev), perintah berbahaya dimatikan PERMANEN (bertahan
+    # walau container dibuat ulang), dan port hanya di loopback host.
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    command:
+      - sh
+      - -c
+      - >-
+        exec redis-server
+        $${REDIS_PASSWORD:+--requirepass "$$REDIS_PASSWORD"}
+        --rename-command CONFIG ""
+        --rename-command DEBUG ""
+        --rename-command MODULE ""
+        --rename-command SLAVEOF ""
+        --rename-command REPLICAOF ""
+        --rename-command SYNC ""
+        --rename-command PSYNC ""
+        --rename-command MIGRATE ""
+        --rename-command FLUSHALL ""
+        --rename-command FLUSHDB ""
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     networks:

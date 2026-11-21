@@ -15,6 +15,8 @@ import { QueuesService } from './queues.service';
         connection: {
           host: configService.get<string>('REDIS_HOST', 'localhost'),
           port: configService.get<number>('REDIS_PORT', 6379),
+          // Kosong → tanpa auth (dev). Production wajib diisi (insiden 2026-11-21).
+          password: configService.get<string>('REDIS_PASSWORD') || undefined,
         },
       }),
       inject: [ConfigService],

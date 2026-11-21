@@ -33,6 +33,7 @@ async function main() {
   const redis = new Redis({
     host,
     port,
+    password: process.env.REDIS_PASSWORD || undefined,
     lazyConnect: true,
     maxRetriesPerRequest: 1,
     connectTimeout: 3000,
