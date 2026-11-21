@@ -97,6 +97,9 @@ describe('WalletsService', () => {
       credit: jest
         .fn()
         .mockResolvedValue(fullLedger({ referenceType: 'REFUND' })),
+      refundToOrigin: jest
+        .fn()
+        .mockResolvedValue(fullLedger({ referenceType: 'REFUND' })),
     };
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -195,7 +198,7 @@ describe('WalletsService', () => {
         ],
       });
       tx.payment.updateMany.mockResolvedValue({ count: 1 });
-      ledger.credit.mockResolvedValue(
+      ledger.refundToOrigin.mockResolvedValue(
         fullLedger({
           referenceType: 'REFUND',
           orderId: 'ord-1',
@@ -219,8 +222,8 @@ describe('WalletsService', () => {
           notes: 'Salah memilih layanan',
         },
       });
-      expect(ledger.credit).toHaveBeenCalledWith(
-        WalletType.MAIN_BALANCE,
+      // Refund sesuai asal dana (bonus → BONUS, sisanya → MAIN) lewat ledger.
+      expect(ledger.refundToOrigin).toHaveBeenCalledWith(
         expect.objectContaining({
           walletId: 'w-1',
           orderId: 'ord-1',

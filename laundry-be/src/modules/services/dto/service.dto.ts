@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsNumber, IsInt } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsNumber, IsInt, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateServiceDto {
@@ -29,6 +29,7 @@ export class UpdateServiceDto {
 
   @ApiProperty({ required: false })
   @IsNumber()
+  @Min(0, { message: 'Harga tidak boleh negatif' })
   @IsOptional()
   basePrice?: number;
 
@@ -69,6 +70,7 @@ export class CreateServiceDto {
 
   @ApiProperty({ required: false })
   @IsNumber()
+  @Min(0, { message: 'Harga tidak boleh negatif' })
   @IsOptional()
   basePrice?: number;
 
@@ -98,6 +100,7 @@ export class CreateServicePriceDto {
 
   @ApiProperty()
   @IsNumber()
+  @Min(0, { message: 'Harga tidak boleh negatif' })
   price: number;
 
   @ApiProperty()

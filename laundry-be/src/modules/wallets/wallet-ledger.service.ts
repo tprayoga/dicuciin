@@ -206,6 +206,49 @@ export class WalletLedgerService {
   }
 
   /**
+   * Refund order ke dompet SESUAI ASAL dananya: bagian yang dulu dibayar dari
+   * BONUS_BALANCE (cashback, tidak bisa ditarik) kembali ke BONUS, sisanya ke
+   * MAIN_BALANCE. Dulu seluruh refund masuk MAIN sehingga cashback berubah jadi
+   * saldo utama (temuan uji 2026-11-21).
+   *
+   * [idempotencyKey] dipakai pada porsi pertama yang dikredit (MAIN bila ada),
+   * porsi BONUS memakai `<key>:bonus` — refund ganda tetap ditolak unik.
+   * Mengembalikan ledger porsi pertama (untuk respons/riwayat).
+   */
+  async refundToOrigin(input: MoneyMutationInput & { orderId: string }) {
+    return this.run(input.tx, async (db) => {
+      const amount = money(input.amount);
+      const rows = await db.walletLedger.groupBy({
+        by: ['walletType', 'direction', 'referenceType'],
+        where: { walletId: input.walletId, orderId: input.orderId },
+        _sum: { amount: true },
+      });
+      const sum = (t: WalletType, d: LedgerDirection, ref: string) =>
+        D(rows.find((r) => r.walletType === t && r.direction === d && r.referenceType === ref)?._sum.amount ?? 0);
+      const bonusPaid = sum(WalletType.BONUS_BALANCE, LedgerDirection.DEBIT, 'PAYMENT');
+      const bonusRefunded = sum(WalletType.BONUS_BALANCE, LedgerDirection.CREDIT, 'REFUND');
+      const bonusOpen = Prisma.Decimal.max(bonusPaid.minus(bonusRefunded), 0);
+      const bonusPart = Prisma.Decimal.min(bonusOpen, amount);
+      const mainPart = amount.minus(bonusPart);
+
+      const base = { ...input, tx: db, referenceType: input.referenceType ?? 'REFUND' };
+      let first: Awaited<ReturnType<WalletLedgerService['mutateMoney']>> | null = null;
+      if (mainPart.gt(0)) {
+        first = await this.mutateMoney(db, WalletType.MAIN_BALANCE, LedgerDirection.CREDIT, { ...base, amount: mainPart });
+      }
+      if (bonusPart.gt(0)) {
+        const bonus = await this.mutateMoney(db, WalletType.BONUS_BALANCE, LedgerDirection.CREDIT, {
+          ...base,
+          amount: bonusPart,
+          idempotencyKey: first && input.idempotencyKey ? `${input.idempotencyKey}:bonus` : input.idempotencyKey,
+        });
+        first = first ?? bonus;
+      }
+      return first!;
+    });
+  }
+
+  /**
    * Bayar order dari wallet: pakai BONUS_BALANCE dulu (bila eligible), sisanya
    * MAIN_BALANCE. Menulis satu ledger per debit. Saldo tidak boleh minus —
    * bila MAIN tak cukup untuk sisa, transaksi dilempar error. HARUS dipanggil

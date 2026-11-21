@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { useApi } from '~/composables/useApi'
+
+// Opsi "Tidak ada" pada USelect tidak boleh bernilai '' (Reka UI melempar error).
+const NONE = '__none__'
+const fromNone = (v: string | null | undefined) => (v && v !== NONE ? v : undefined)
 import { usePromotionLoyaltyApi } from '~/composables/usePromotionLoyaltyApi'
 
 type TabKey =
@@ -105,11 +109,12 @@ const voucherForm = reactive({
   startDate: '',
   endDate: '',
   minTransaction: 0,
+  pointCost: 0,
   maxDiscount: 0,
   applicableOutlets: '',
   applicableServices: '',
-  tierRestriction: '',
-  b2bTierRestriction: '',
+  tierRestriction: NONE,
+  b2bTierRestriction: NONE,
   isActive: true,
 })
 
@@ -157,7 +162,7 @@ const b2bTierForm = reactive({
 const b2bSpecialPriceForm = reactive({
   name: '',
   partnerId: '',
-  tier: '',
+  tier: NONE,
   outletId: '',
   serviceId: '',
   machineType: '',
@@ -204,7 +209,7 @@ const ruleForm = reactive({
   maxDiscount: 0,
   applicableServices: '',
   applicableOutlets: '',
-  tierRestriction: '',
+  tierRestriction: NONE,
   maxUsagePerUser: 1,
   isActive: true,
 })
@@ -329,11 +334,12 @@ function openVoucher(item?: any) {
     startDate: toWibInputDate(item.startDate),
     endDate: toWibInputDate(item.endDate),
     minTransaction: item.minTransaction ?? 0,
+    pointCost: item.pointCost ?? 0,
     maxDiscount: item.maxDiscount ?? 0,
     applicableOutlets: item.applicableOutlets || '',
     applicableServices: item.applicableServices || '',
-    tierRestriction: item.tierRestriction || '',
-    b2bTierRestriction: item.b2bTierRestriction || '',
+    tierRestriction: item.tierRestriction || NONE,
+    b2bTierRestriction: item.b2bTierRestriction || NONE,
     isActive: item.isActive,
   } : {
     code: '',
@@ -347,11 +353,12 @@ function openVoucher(item?: any) {
     startDate: '',
     endDate: '',
     minTransaction: 0,
+    pointCost: 0,
     maxDiscount: 0,
     applicableOutlets: '',
     applicableServices: '',
-    tierRestriction: '',
-    b2bTierRestriction: '',
+    tierRestriction: NONE,
+    b2bTierRestriction: NONE,
     isActive: true,
   })
   showVoucherModal.value = true
@@ -366,11 +373,13 @@ function voucherPayload() {
     startDate: voucherForm.startDate ? wibStartOfDay(voucherForm.startDate) : undefined,
     endDate: voucherForm.endDate ? wibEndOfDay(voucherForm.endDate) : undefined,
     minTransaction: voucherForm.minTransaction ? Number(voucherForm.minTransaction) : undefined,
+    // Biaya poin > 0 → voucher muncul di katalog Tukar Poin aplikasi.
+    pointCost: voucherForm.pointCost ? Number(voucherForm.pointCost) : undefined,
     maxDiscount: voucherForm.maxDiscount ? Number(voucherForm.maxDiscount) : undefined,
     applicableOutlets: voucherForm.applicableOutlets || undefined,
     applicableServices: voucherForm.applicableServices || undefined,
-    tierRestriction: voucherForm.tierRestriction || undefined,
-    b2bTierRestriction: voucherForm.b2bTierRestriction || undefined,
+    tierRestriction: fromNone(voucherForm.tierRestriction),
+    b2bTierRestriction: fromNone(voucherForm.b2bTierRestriction),
   }
 }
 
@@ -462,7 +471,7 @@ function openB2BSpecialPrice(item?: any) {
   Object.assign(b2bSpecialPriceForm, item ? {
     name: item.name,
     partnerId: item.partnerId || '',
-    tier: item.tier || '',
+    tier: item.tier || NONE,
     outletId: item.outletId || '',
     serviceId: item.serviceId || '',
     machineType: item.machineType || '',
@@ -475,7 +484,7 @@ function openB2BSpecialPrice(item?: any) {
   } : {
     name: '',
     partnerId: '',
-    tier: '',
+    tier: NONE,
     outletId: '',
     serviceId: '',
     machineType: '',
@@ -493,7 +502,7 @@ function b2bSpecialPricePayload() {
   return {
     ...b2bSpecialPriceForm,
     partnerId: b2bSpecialPriceForm.partnerId || undefined,
-    tier: b2bSpecialPriceForm.tier || undefined,
+    tier: fromNone(b2bSpecialPriceForm.tier),
     outletId: b2bSpecialPriceForm.outletId || undefined,
     serviceId: b2bSpecialPriceForm.serviceId || undefined,
     machineType: b2bSpecialPriceForm.machineType || undefined,
@@ -509,7 +518,7 @@ async function saveB2BSpecialPrice() {
     toast.add({ title: 'Form special price belum valid', description: 'Nama dan nilai wajib diisi.', color: 'error' })
     return
   }
-  if (!b2bSpecialPriceForm.partnerId && !b2bSpecialPriceForm.tier) {
+  if (!b2bSpecialPriceForm.partnerId && !fromNone(b2bSpecialPriceForm.tier)) {
     toast.add({ title: 'Target rule belum valid', description: 'Isi Partner ID atau Tier B2B.', color: 'error' })
     return
   }
@@ -655,7 +664,7 @@ function openRule(item?: any) {
     maxDiscount: item.maxDiscount ?? 0,
     applicableServices: item.applicableServices || '',
     applicableOutlets: item.applicableOutlets || '',
-    tierRestriction: item.tierRestriction || '',
+    tierRestriction: item.tierRestriction || NONE,
     maxUsagePerUser: item.maxUsagePerUser ?? 1,
     isActive: item.isActive,
   } : {
@@ -665,7 +674,7 @@ function openRule(item?: any) {
     maxDiscount: 0,
     applicableServices: '',
     applicableOutlets: '',
-    tierRestriction: '',
+    tierRestriction: NONE,
     maxUsagePerUser: 1,
     isActive: true,
   })
@@ -683,7 +692,7 @@ async function saveRule() {
     maxDiscount: ruleForm.maxDiscount ? Number(ruleForm.maxDiscount) : undefined,
     applicableServices: ruleForm.applicableServices || undefined,
     applicableOutlets: ruleForm.applicableOutlets || undefined,
-    tierRestriction: ruleForm.tierRestriction || undefined,
+    tierRestriction: fromNone(ruleForm.tierRestriction),
   }
   try {
     if (editingRule.value) {
@@ -1014,10 +1023,11 @@ onMounted(loadData)
             <UFormField label="Quota"><UInput v-model.number="voucherForm.quota" type="number" min="1" class="w-full" /></UFormField>
             <UFormField label="Expiry Days"><UInput v-model.number="voucherForm.validityDays" type="number" min="1" class="w-full" /></UFormField>
             <UFormField label="Min Transaction"><UInput v-model.number="voucherForm.minTransaction" type="number" min="0" class="w-full" /></UFormField>
+            <UFormField label="Biaya Poin (Tukar Poin)" help="Isi agar voucher bisa ditukar dengan poin di aplikasi. Kosongkan bila tidak."><UInput v-model.number="voucherForm.pointCost" type="number" min="1" class="w-full" /></UFormField>
             <UFormField label="Start Date"><UInput v-model="voucherForm.startDate" type="date" class="w-full" /></UFormField>
             <UFormField label="End Date"><UInput v-model="voucherForm.endDate" type="date" class="w-full" /></UFormField>
-            <UFormField label="Tier Restriction"><USelect v-model="voucherForm.tierRestriction" :items="[{ label: 'Tidak ada', value: '' }, ...retailTierItems]" class="w-full" /></UFormField>
-            <UFormField label="B2B Tier Restriction"><USelect v-model="voucherForm.b2bTierRestriction" :items="[{ label: 'Tidak ada', value: '' }, ...b2bTierItems]" class="w-full" /></UFormField>
+            <UFormField label="Tier Restriction"><USelect v-model="voucherForm.tierRestriction" :items="[{ label: 'Tidak ada', value: NONE }, ...retailTierItems]" class="w-full" /></UFormField>
+            <UFormField label="B2B Tier Restriction"><USelect v-model="voucherForm.b2bTierRestriction" :items="[{ label: 'Tidak ada', value: NONE }, ...b2bTierItems]" class="w-full" /></UFormField>
           </div>
           <UFormField label="Outlet Restriction CSV"><UInput v-model="voucherForm.applicableOutlets" class="w-full" /></UFormField>
           <UFormField label="Machine/Service Restriction CSV"><UInput v-model="voucherForm.applicableServices" class="w-full" /></UFormField>
@@ -1084,7 +1094,7 @@ onMounted(loadData)
           <div class="grid md:grid-cols-2 gap-4">
             <UFormField label="Nama"><UInput v-model="b2bSpecialPriceForm.name" class="w-full" required /></UFormField>
             <UFormField label="Partner ID"><UInput v-model="b2bSpecialPriceForm.partnerId" placeholder="Kosong jika target tier" class="w-full" /></UFormField>
-            <UFormField label="Tier"><USelect v-model="b2bSpecialPriceForm.tier" :items="[{ label: 'Tidak ada', value: '' }, ...b2bTierItems]" class="w-full" /></UFormField>
+            <UFormField label="Tier"><USelect v-model="b2bSpecialPriceForm.tier" :items="[{ label: 'Tidak ada', value: NONE }, ...b2bTierItems]" class="w-full" /></UFormField>
             <UFormField label="Outlet ID"><UInput v-model="b2bSpecialPriceForm.outletId" placeholder="Kosong = semua outlet" class="w-full" /></UFormField>
             <UFormField label="Service ID"><UInput v-model="b2bSpecialPriceForm.serviceId" placeholder="Kosong = semua layanan" class="w-full" /></UFormField>
             <UFormField label="Machine Type"><UInput v-model="b2bSpecialPriceForm.machineType" placeholder="WASHER / DRYER" class="w-full" /></UFormField>
@@ -1143,7 +1153,7 @@ onMounted(loadData)
           <UFormField label="Nama"><UInput v-model="ruleForm.name" class="w-full" required /></UFormField>
           <div class="grid md:grid-cols-2 gap-4">
             <UFormField label="Segment"><USelect v-model="ruleForm.segment" :items="segmentItems" class="w-full" /></UFormField>
-            <UFormField label="Tier Restriction"><USelect v-model="ruleForm.tierRestriction" :items="[{ label: 'Tidak ada', value: '' }, ...retailTierItems]" class="w-full" /></UFormField>
+            <UFormField label="Tier Restriction"><USelect v-model="ruleForm.tierRestriction" :items="[{ label: 'Tidak ada', value: NONE }, ...retailTierItems]" class="w-full" /></UFormField>
             <UFormField label="Min Transaction"><UInput v-model.number="ruleForm.minTransaction" type="number" class="w-full" /></UFormField>
             <UFormField label="Max Discount"><UInput v-model.number="ruleForm.maxDiscount" type="number" class="w-full" /></UFormField>
             <UFormField label="Max Usage"><UInput v-model.number="ruleForm.maxUsagePerUser" type="number" class="w-full" /></UFormField>

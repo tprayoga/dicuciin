@@ -33,12 +33,12 @@ function userVoucher(overrides: Record<string, unknown> = {}) {
 
 describe('VoucherService.validate', () => {
   let service: VoucherService;
-  let prisma: { userVoucher: { findUnique: jest.Mock } };
+  let prisma: { userVoucher: { findUnique: jest.Mock }; voucherRedemption: { findFirst: jest.Mock } };
 
   const items = [{ serviceId: 'svc-1', subtotal: 50000 }];
 
   beforeEach(async () => {
-    prisma = { userVoucher: { findUnique: jest.fn() } };
+    prisma = { userVoucher: { findUnique: jest.fn() }, voucherRedemption: { findFirst: jest.fn().mockResolvedValue(null) } };
     const moduleRef = await Test.createTestingModule({
       providers: [VoucherService, { provide: PrismaService, useValue: prisma }],
     }).compile();
@@ -66,7 +66,17 @@ describe('VoucherService.validate', () => {
     );
     await expect(
       service.validate({ code: 'WELCOME-AAAA', segment: UserSegment.RETAIL, items }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toThrow('Voucher sudah dipakai');
+  });
+
+  it('voucher ditahan pesanan belum dibayar → pesan jelas (bukan "status USED")', async () => {
+    prisma.userVoucher.findUnique.mockResolvedValue(
+      userVoucher({ status: VoucherStatus.USED }),
+    );
+    prisma.voucherRedemption.findFirst.mockResolvedValue({ order: { orderNumber: 'ORD-20261121-000009' } });
+    await expect(
+      service.validate({ code: 'WELCOME-AAAA', segment: UserSegment.RETAIL, items }),
+    ).rejects.toThrow(/sedang dipakai di pesanan ORD-20261121-000009 yang belum dibayar/);
   });
 
   it('B2B user cannot use retail-only voucher', async () => {

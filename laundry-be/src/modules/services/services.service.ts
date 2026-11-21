@@ -1,14 +1,18 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateServiceDto, CreateServicePriceDto, UpdateServiceDto } from './dto/service.dto';
+import { ensurePricesForService, syncBasePriceChange } from './service-price-sync';
 
 @Injectable()
 export class ServicesService {
   constructor(private prisma: PrismaService) {}
 
   async createService(createServiceDto: CreateServiceDto) {
-    return this.prisma.service.create({
-      data: createServiceDto,
+    // Layanan baru langsung bisa dipesan di semua outlet (harga = basePrice).
+    return this.prisma.$transaction(async (tx) => {
+      const service = await tx.service.create({ data: createServiceDto });
+      await ensurePricesForService(tx, service);
+      return service;
     });
   }
 
@@ -39,9 +43,12 @@ export class ServicesService {
     const service = await this.prisma.service.findUnique({ where: { id } });
     if (!service) throw new NotFoundException('Service not found');
 
-    return this.prisma.service.update({
-      where: { id },
-      data: updateServiceDto,
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.service.update({ where: { id }, data: updateServiceDto });
+      if (updateServiceDto.basePrice !== undefined) {
+        await syncBasePriceChange(tx, id, service.basePrice, updated.basePrice);
+      }
+      return updated;
     });
   }
 

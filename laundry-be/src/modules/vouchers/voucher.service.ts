@@ -13,6 +13,7 @@ import {
   VoucherType,
   MembershipTier,
   B2BPartnerTier,
+  OrderStatus,
 } from '@prisma/client';
 import { toNum } from '../../common/utils/money.util';
 import {
@@ -204,6 +205,31 @@ export class VoucherService {
   }
 
   /**
+   * Pesan yang bisa dipahami pelanggan untuk voucher yang tidak aktif. Voucher
+   * ditandai USED sejak dipasang ke order (sebelum dibayar) — dulu pelanggan
+   * melihat "status USED" padahal pesanannya belum dibayar (temuan uji 2026-11-21).
+   */
+  private async unavailableMessage(userVoucherId: string, status: VoucherStatus) {
+    if (status === VoucherStatus.USED) {
+      const held = await this.prisma.voucherRedemption.findFirst({
+        where: {
+          userVoucherId,
+          // Reservasi saat order dibuat (RESERVED) → APPLIED setelah dibayar.
+          status: 'RESERVED',
+          order: { status: { in: [OrderStatus.DRAFT, OrderStatus.WAITING_PAYMENT] } },
+        },
+        select: { order: { select: { orderNumber: true } } },
+      });
+      if (held) {
+        return `Voucher sedang dipakai di pesanan ${held.order.orderNumber} yang belum dibayar. Bayar atau batalkan pesanan itu untuk memakainya.`;
+      }
+      return 'Voucher sudah dipakai';
+    }
+    if (status === VoucherStatus.EXPIRED) return 'Voucher sudah kedaluwarsa';
+    return 'Voucher sudah dibatalkan';
+  }
+
+  /**
    * Validasi + hitung diskon voucher. Melempar error bila tidak valid. Tidak
    * mengubah status (status diubah saat `redeem` ketika order dibayar).
    */
@@ -225,9 +251,7 @@ export class VoucherService {
 
     // Harus aktif & belum dipakai/dibatalkan.
     if (userVoucher.status !== VoucherStatus.ACTIVE) {
-      throw new BadRequestException(
-        `Voucher tidak bisa dipakai (status ${userVoucher.status})`,
-      );
+      throw new BadRequestException(await this.unavailableMessage(userVoucher.id, userVoucher.status));
     }
 
     // Belum kedaluwarsa.

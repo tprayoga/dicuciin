@@ -8,6 +8,7 @@ import {
   Body,
   Query,
   UseGuards,
+  ParseEnumPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { BannersService } from './banners.service';
@@ -34,14 +35,14 @@ export class BannersController {
   @Get()
   @ApiOperation({ summary: 'List all banners (admin)' })
   @ApiQuery({ name: 'placement', required: false, enum: BannerPlacement })
-  async findAll(@Query('placement') placement?: BannerPlacement) {
+  async findAll(@Query('placement', new ParseEnumPipe(BannerPlacement, { optional: true })) placement?: BannerPlacement) {
     return this.bannersService.findAll(placement);
   }
 
   @Get('active')
   @ApiOperation({ summary: 'List active banners untuk ditampilkan di app' })
   @ApiQuery({ name: 'placement', required: false, enum: BannerPlacement })
-  async findActive(@Query('placement') placement?: BannerPlacement) {
+  async findActive(@Query('placement', new ParseEnumPipe(BannerPlacement, { optional: true })) placement?: BannerPlacement) {
     return this.bannersService.findActive(placement);
   }
 

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateOutletDto, UpdateOutletDto } from './dto/outlet.dto';
+import { ensurePricesForOutlet } from '../services/service-price-sync';
 
 @Injectable()
 export class OutletsService {
@@ -15,8 +16,11 @@ export class OutletsService {
       throw new ConflictException('Outlet code already exists');
     }
 
-    return this.prisma.outlet.create({
-      data: createOutletDto,
+    // Outlet baru langsung punya harga untuk semua layanan aktif (= basePrice).
+    return this.prisma.$transaction(async (tx) => {
+      const outlet = await tx.outlet.create({ data: createOutletDto });
+      await ensurePricesForOutlet(tx, outlet.id);
+      return outlet;
     });
   }
 

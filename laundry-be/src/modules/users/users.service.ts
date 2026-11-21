@@ -151,9 +151,13 @@ export class UsersService {
 
   async findAll(page: number = 1, limit: number = 10) {
     const skip = (page - 1) * limit;
+    // Kelola Staff: hanya akun staf aktif-terdaftar — pelanggan dikelola di
+    // Kelola Member, akun yang dihapus (dianonimkan) tidak ditampilkan.
+    const where: Prisma.UserWhereInput = { role: { not: UserRole.CUSTOMER }, deletedAt: null };
 
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
+        where,
         skip,
         take: limit,
         select: {
@@ -181,7 +185,7 @@ export class UsersService {
         },
         orderBy: { createdAt: "desc" },
       }),
-      this.prisma.user.count(),
+      this.prisma.user.count({ where }),
     ]);
 
     return {

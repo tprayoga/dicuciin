@@ -1,4 +1,9 @@
-import { IsString, IsOptional, IsBoolean, IsNumber } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsNumber, Matches } from 'class-validator';
+
+/** "HH:mm" 00:00–23:59, atau "24:00" (tutup tengah malam). Nilai lain dulu
+ * diterima dan membuat outlet dianggap buka 24 jam (temuan uji 2026-11-21). */
+const TIME_HHMM = /^(([01]\d|2[0-3]):[0-5]\d|24:00)$/;
+const TIME_MSG = 'Format jam harus HH:mm (00:00–23:59)';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateOutletDto {
@@ -20,11 +25,13 @@ export class CreateOutletDto {
 
   @ApiProperty({ required: false, example: '07:00' })
   @IsString()
+  @Matches(TIME_HHMM, { message: TIME_MSG })
   @IsOptional()
   openTime?: string;
 
   @ApiProperty({ required: false, example: '22:00' })
   @IsString()
+  @Matches(TIME_HHMM, { message: TIME_MSG })
   @IsOptional()
   closeTime?: string;
 
@@ -67,11 +74,13 @@ export class UpdateOutletDto {
 
   @ApiProperty({ required: false })
   @IsString()
+  @Matches(TIME_HHMM, { message: TIME_MSG })
   @IsOptional()
   openTime?: string;
 
   @ApiProperty({ required: false })
   @IsString()
+  @Matches(TIME_HHMM, { message: TIME_MSG })
   @IsOptional()
   closeTime?: string;
 

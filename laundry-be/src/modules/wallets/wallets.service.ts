@@ -20,7 +20,6 @@ import {
   RefundWalletDto,
 } from './dto/wallet.dto';
 import {
-  WalletType,
   PaymentMethod,
   PaymentStatus,
   OrderStatus,
@@ -362,9 +361,9 @@ export class WalletsService {
           throw new ConflictException('Order sudah direfund');
         }
 
-        // Kembalikan saldo lewat satu pintu WalletLedgerService (increment atomik
-        // ke MAIN_BALANCE) → menulis wallet_ledgers (SSoT).
-        const ledger = await this.walletLedger.credit(WalletType.MAIN_BALANCE, {
+        // Kembalikan saldo lewat satu pintu WalletLedgerService sesuai asal dana
+        // (bagian bonus → BONUS, sisanya → MAIN) → menulis wallet_ledgers (SSoT).
+        const ledger = await this.walletLedger.refundToOrigin({
           tx,
           walletId: wallet.id,
           amount,

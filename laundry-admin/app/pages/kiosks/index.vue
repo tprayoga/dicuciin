@@ -2,9 +2,13 @@
 import { h, resolveComponent } from 'vue'
 import { useApi } from '~/composables/useApi'
 import type { PaginatedResponse, Kiosk, Outlet } from '~/types'
+import { useAuthStore } from '~/stores/auth'
 
 const api = useApi()
 const toast = useToast()
+const authStore = useAuthStore()
+// Hapus kiosk hanya diizinkan server untuk SUPER_ADMIN.
+const canDelete = computed(() => authStore.user?.role === 'SUPER_ADMIN')
 
 const kiosks = ref<Kiosk[]>([])
 const outlets = ref<Outlet[]>([])
@@ -49,7 +53,9 @@ const columns = [
       const UButton = resolveComponent('UButton')
       return h('div', { class: 'flex gap-1 justify-end' }, [
         h(UButton, { icon: 'i-heroicons-pencil', variant: 'ghost', size: 'xs', onClick: () => openEdit(row.original) }),
-        h(UButton, { icon: 'i-heroicons-trash', variant: 'ghost', color: 'error', size: 'xs', onClick: () => confirmDelete(row.original) }),
+        canDelete.value
+          ? h(UButton, { icon: 'i-heroicons-trash', variant: 'ghost', color: 'error', size: 'xs', onClick: () => confirmDelete(row.original) })
+          : null,
       ])
     },
   },
