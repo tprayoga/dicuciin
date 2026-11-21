@@ -1,4 +1,9 @@
 import { Module } from '@nestjs/common';
+import { LegacyWalletPayController } from './legacy-wallet-pay.controller';
+import { ReconciliationController } from './reconciliation.controller';
+import { ReconciliationService } from './reconciliation.service';
+import { WalletTopupService } from './wallet-topup.service';
+import { WalletTopupController } from './wallet-topup.controller';
 import { ConfigService } from '@nestjs/config';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
@@ -23,9 +28,11 @@ import { IotModule } from '../iot/iot.module';
     CampaignsModule,
     IotModule,
   ],
-  controllers: [PaymentsController],
+  controllers: [PaymentsController, LegacyWalletPayController, ReconciliationController, WalletTopupController],
   providers: [
     PaymentsService,
+    ReconciliationService,
+    WalletTopupService,
     {
       provide: PAYMENT_GATEWAY,
       inject: [ConfigService],
@@ -38,6 +45,6 @@ import { IotModule } from '../iot/iot.module';
       },
     },
   ],
-  exports: [PaymentsService],
+  exports: [PaymentsService, WalletTopupService],
 })
 export class PaymentsModule {}

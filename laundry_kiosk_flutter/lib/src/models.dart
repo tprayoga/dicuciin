@@ -181,18 +181,28 @@ class KioskPayment {
     this.vaNumber,
     this.bank,
     this.expiresAt,
+    this.secondsRemaining = 0,
+    this.canRetry = false,
   });
 
   final String paymentNumber;
   final String method; // QRIS / TRANSFER
   final double amount;
-  final String status; // PENDING / PAID / FAILED / EXPIRED
+  final String status; // PENDING / PAID / FAILED / EXPIRED / CANCELLED
   final String? qrString;
   final String? vaNumber;
   final String? bank;
   final String? expiresAt;
 
+  /// Sisa detik menurut SERVER (Batch 2) — hitung mundur tidak memakai jam perangkat.
+  final int secondsRemaining;
+  final bool canRetry;
+
   bool get isPaid => status == 'PAID';
+  bool get isPending => status == 'PENDING';
+
+  /// Tagihan sudah tidak berlaku menurut server (bukan menurut timer lokal).
+  bool get isEnded => !isPaid && !isPending;
 
   factory KioskPayment.fromJson(Map<String, dynamic> json) => KioskPayment(
     paymentNumber: (json['paymentNumber'] as String?) ?? '-',
@@ -203,6 +213,8 @@ class KioskPayment {
     vaNumber: json['vaNumber'] as String?,
     bank: json['bank'] as String?,
     expiresAt: json['expiresAt'] as String?,
+    secondsRemaining: (json['secondsRemaining'] as num?)?.toInt() ?? 0,
+    canRetry: json['canRetry'] as bool? ?? false,
   );
 }
 

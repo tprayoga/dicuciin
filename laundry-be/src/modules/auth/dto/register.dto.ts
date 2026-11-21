@@ -30,6 +30,7 @@ export class RegisterDto {
   @MinLength(8)
   password: string;
 
+  /** Hanya CUSTOMER yang diterima (Batch 5); role lain → 403. Dipertahankan untuk klien lama yang mengirim `role: CUSTOMER`. */
   @ApiProperty({ enum: UserRole, default: UserRole.CUSTOMER, required: false })
   @IsEnum(UserRole)
   @IsOptional()

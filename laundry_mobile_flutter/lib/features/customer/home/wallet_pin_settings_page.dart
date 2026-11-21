@@ -16,6 +16,7 @@ class _WalletPinSettingsPageState extends State<_WalletPinSettingsPage> {
   late _PinStep _step;
   String _input = '';
   String? _newPin;
+  String? _oldPin;
   String? _error;
 
   @override
@@ -66,20 +67,26 @@ class _WalletPinSettingsPageState extends State<_WalletPinSettingsPage> {
       case _PinStep.verifyOld:
         final pin = _input;
         bool ok;
+        String message = 'PIN lama salah.';
         try {
           ok = await wallet.verifyPin(pin);
+        } on ApiException catch (e) {
+          ok = false;
+          message = e.message;
         } catch (_) {
           ok = false;
         }
         if (!mounted) return;
         if (ok) {
           setState(() {
+            _oldPin =
+                pin; // Batch 4: server mewajibkan PIN lama saat mengganti PIN
             _step = _PinStep.enterNew;
             _input = '';
           });
         } else {
           setState(() {
-            _error = 'PIN lama salah.';
+            _error = message;
             _input = '';
           });
         }
@@ -94,7 +101,17 @@ class _WalletPinSettingsPageState extends State<_WalletPinSettingsPage> {
           final messenger = ScaffoldMessenger.of(context);
           final navigator = Navigator.of(context);
           try {
-            await wallet.setPin(_input);
+            await wallet.setPin(_input, currentPin: _oldPin);
+          } on ApiException catch (e) {
+            if (!mounted) return;
+            setState(() {
+              _error = e.message;
+              _step = wallet.hasPin ? _PinStep.verifyOld : _PinStep.enterNew;
+              _oldPin = null;
+              _newPin = null;
+              _input = '';
+            });
+            return;
           } catch (_) {
             if (!mounted) return;
             setState(() {

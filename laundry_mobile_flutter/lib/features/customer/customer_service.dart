@@ -8,11 +8,6 @@ class CustomerService {
 
   final ApiClient _apiClient;
 
-  int _moneyToInt(Object? value) {
-    if (value is num) return value.round();
-    return double.tryParse(value?.toString() ?? '')?.round() ?? 0;
-  }
-
   /// Ambil list dari payload, tahan dua bentuk respons paginated:
   /// (a) sudah berupa List (interceptor menaikkan `data` ke atas), atau
   /// (b) Map `{data: [...], meta}`.
@@ -126,24 +121,6 @@ class CustomerService {
     );
     return BookingVerifyResult.fromJson(payload as Map<String, dynamic>);
   }
-
-  /// Reservasi mesin berdasarkan kode perangkat. [scheduledAt] (ISO) opsional —
-  /// waktu terjadwal pemakaian.
-  Future<MachineBooking> reserveBooking({
-    required String accessToken,
-    required String deviceCode,
-    String? scheduledAt,
-  }) async {
-    final body = <String, dynamic>{'deviceCode': deviceCode};
-    if (scheduledAt != null) body['scheduledAt'] = scheduledAt;
-    final payload = await _apiClient.post(
-      '/bookings',
-      headers: {'Authorization': 'Bearer $accessToken'},
-      body: jsonEncode(body),
-    );
-    return MachineBooking.fromJson(payload as Map<String, dynamic>);
-  }
-
   /// Buat tagihan QRIS/VA via gateway untuk sebuah order.
   Future<GatewayPayment> createGatewayPayment({
     required String accessToken,
@@ -161,6 +138,68 @@ class CustomerService {
       }),
     );
     return GatewayPayment.fromJson(payload as Map<String, dynamic>);
+  }
+
+  // ── Batch 4: top-up saldo Midtrans (bentuk respons = GatewayPayment) ────
+  Future<GatewayPayment> createWalletTopup({
+    required String accessToken,
+    required int amount,
+    required String method, // 'QRIS' | 'VA'
+    String? bank,
+  }) async {
+    final payload = await _apiClient.post(
+      '/wallets/me/topup',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({
+        'amount': amount,
+        'method': method,
+        if (bank != null && bank.isNotEmpty) 'bank': bank,
+      }),
+    );
+    return GatewayPayment.fromJson(payload as Map<String, dynamic>);
+  }
+
+  Future<GatewayPayment> getWalletTopupStatus({
+    required String accessToken,
+    required String topupNumber,
+  }) async {
+    final payload = await _apiClient.get(
+      '/wallets/me/topups/$topupNumber',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return GatewayPayment.fromJson(payload as Map<String, dynamic>);
+  }
+
+  Future<GatewayPayment> cancelWalletTopup({
+    required String accessToken,
+    required String topupNumber,
+  }) async {
+    final payload = await _apiClient.post(
+      '/wallets/me/topups/$topupNumber/cancel',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return GatewayPayment.fromJson(payload as Map<String, dynamic>);
+  }
+
+  Future<void> simulateWalletTopup({
+    required String accessToken,
+    required String topupNumber,
+  }) async {
+    await _apiClient.post(
+      '/wallets/me/topups/$topupNumber/simulate',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+  }
+
+  Future<List<GatewayPayment>> listWalletTopups({required String accessToken}) async {
+    final payload = await _apiClient.get(
+      '/wallets/me/topups',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return (payload as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(GatewayPayment.fromJson)
+        .toList();
   }
 
   /// Cek status pembayaran (untuk polling).
@@ -196,6 +235,41 @@ class CustomerService {
       headers: {'Authorization': 'Bearer $accessToken'},
     );
     return OutletMachines.fromJson(payload as Map<String, dynamic>);
+  }
+
+  /// Batch 6 (R1): notifikasi dalam aplikasi.
+  Future<NotificationInbox> getNotifications({required String accessToken}) async {
+    final payload = await _apiClient.get(
+      '/notifications/me',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return NotificationInbox.fromJson(payload as Map<String, dynamic>);
+  }
+
+  Future<void> markNotificationRead({
+    required String accessToken,
+    required String id,
+  }) async {
+    await _apiClient.post(
+      '/notifications/me/$id/read',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+  }
+
+  Future<void> markAllNotificationsRead({required String accessToken}) async {
+    await _apiClient.post(
+      '/notifications/me/read-all',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+  }
+
+  /// Batch 6 (R3): katalog voucher yang bisa ditukar poin.
+  Future<RewardCatalog> getRewards({required String accessToken}) async {
+    final payload = await _apiClient.get(
+      '/mobile/me/rewards',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return RewardCatalog.fromJson(payload as Map<String, dynamic>);
   }
 
   /// Ringkasan keramaian semua outlet → map keyed by outletId.
@@ -319,6 +393,8 @@ class CustomerService {
     String? voucherCode,
     String? promoCode,
     String? sourcePlatform,
+    String? deviceId,
+    DateTime? scheduledAt,
   }) {
     return {
       if (partnerId != null && partnerId.isNotEmpty)
@@ -342,6 +418,9 @@ class CustomerService {
       if (voucherCode != null && voucherCode.isNotEmpty)
         'voucherCode': voucherCode,
       if (promoCode != null && promoCode.isNotEmpty) 'promoCode': promoCode,
+      // Booking mesin: order + booking dibuat atomik di server.
+      if (deviceId != null && deviceId.isNotEmpty) 'deviceId': deviceId,
+      if (scheduledAt != null) 'scheduledAt': scheduledAt.toUtc().toIso8601String(),
     };
   }
 
@@ -393,35 +472,6 @@ class CustomerService {
     final voucher = data['userVoucher'];
     return UserVoucher.fromJson(voucher as Map<String, dynamic>);
   }
-
-  Future<LoyaltyCheckoutResult> checkoutLoyalty({
-    required String accessToken,
-    required String customerId,
-    required String outletId,
-    required List<CreateOrderItemInput> items,
-    String? partnerId,
-    String? voucherCode,
-    String? promoCode,
-    String sourcePlatform = 'MOBILE_APP',
-  }) async {
-    final payload = await _apiClient.post(
-      '/transactions/checkout',
-      headers: {'Authorization': 'Bearer $accessToken'},
-      body: jsonEncode(
-        _checkoutPayload(
-          customerId: customerId,
-          partnerId: partnerId,
-          outletId: outletId,
-          items: items,
-          voucherCode: voucherCode,
-          promoCode: promoCode,
-          sourcePlatform: sourcePlatform,
-        ),
-      ),
-    );
-    return LoyaltyCheckoutResult.fromJson(payload as Map<String, dynamic>);
-  }
-
   Future<List<OutletOption>> getOutlets({required String accessToken}) async {
     final payload = await _apiClient.get(
       '/outlets',
@@ -459,7 +509,10 @@ class CustomerService {
     required String outletId,
     required List<CreateOrderItemInput> items,
     String? promoCode,
+    String? voucherCode,
     String? notes,
+    String? deviceId,
+    DateTime? scheduledAt,
   }) async {
     final payloadItems = items
         .map(
@@ -483,11 +536,43 @@ class CustomerService {
         'sourcePlatform': 'MOBILE_APP',
         'items': payloadItems,
         if (promoCode != null && promoCode.isNotEmpty) 'promoCode': promoCode,
+        // Batch 3 (T10): voucher dihitung ke harga ORDER → berlaku QRIS/VA/saldo.
+        if (voucherCode != null && voucherCode.isNotEmpty)
+          'voucherCode': voucherCode,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
+        if (deviceId != null && deviceId.isNotEmpty) 'deviceId': deviceId,
+        if (scheduledAt != null)
+          'scheduledAt': scheduledAt.toUtc().toIso8601String(),
       }),
     );
 
     return CreatedOrder.fromJson(payload as Map<String, dynamic>);
+  }
+
+  /// Bayar order yang SUDAH ADA memakai saldo (order yang sama dengan
+  /// QRIS/VA). Nominal ditentukan server dari total order.
+  Future<void> payOrderWithWallet({
+    required String accessToken,
+    required String orderId,
+  }) async {
+    await _apiClient.post(
+      '/payments/wallet',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({'orderId': orderId}),
+    );
+  }
+
+  /// Batch 2: ajukan refund (hanya pengajuan — disetujui & dieksekusi admin).
+  Future<void> requestRefund({
+    required String accessToken,
+    required String orderId,
+    required String reason,
+  }) async {
+    await _apiClient.post(
+      '/payments/refund-requests',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({'orderId': orderId, 'reason': reason}),
+    );
   }
 
   Future<OrderDetail> getOrderDetail({
@@ -499,20 +584,6 @@ class CustomerService {
       headers: {'Authorization': 'Bearer $accessToken'},
     );
     return OrderDetail.fromJson(payload as Map<String, dynamic>);
-  }
-
-  Future<PaymentProofUploadResult> uploadPaymentProof({
-    required String accessToken,
-    required String orderId,
-    required String imagePath,
-  }) async {
-    final payload = await _apiClient.postMultipart(
-      '/uploads/payment/$orderId/proof',
-      headers: {'Authorization': 'Bearer $accessToken'},
-      fileField: 'file',
-      filePath: imagePath,
-    );
-    return PaymentProofUploadResult.fromJson(payload as Map<String, dynamic>);
   }
 
   Future<OrderDetail> cancelOrder({
@@ -528,19 +599,4 @@ class CustomerService {
     return OrderDetail.fromJson(payload as Map<String, dynamic>);
   }
 
-  Future<int> refundOrderToWallet({
-    required String accessToken,
-    required String customerId,
-    required String orderId,
-    required String reason,
-  }) async {
-    final payload = await _apiClient.post(
-      '/wallets/customer/$customerId/refund',
-      headers: {'Authorization': 'Bearer $accessToken'},
-      body: jsonEncode({'orderId': orderId, 'description': reason}),
-    );
-    final wallet =
-        (payload as Map<String, dynamic>)['wallet'] as Map<String, dynamic>?;
-    return _moneyToInt(wallet?['balance']);
-  }
 }

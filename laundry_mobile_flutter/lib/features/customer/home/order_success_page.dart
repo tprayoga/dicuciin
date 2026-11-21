@@ -1,21 +1,29 @@
 part of '../home_screen.dart';
 
+/// Tampilkan halaman sukses dan BUANG seluruh alur bayar di bawahnya
+/// (pilih mesin → checkout → QRIS/VA, atau detail order) — sehingga tombol
+/// kembali tidak lagi membuka checkout untuk order yang sudah lunas.
+void _showOrderSuccess(NavigatorState navigator, _OrderSuccessPage page) {
+  navigator.pushAndRemoveUntil(
+    MaterialPageRoute(builder: (_) => page),
+    (route) => route.isFirst,
+  );
+}
+
 class _OrderSuccessPage extends StatelessWidget {
   const _OrderSuccessPage({
     required this.data,
     required this.methodLabel,
     required this.total,
     this.orderId,
-    this.result,
   });
 
   final _CheckoutData data;
   final String methodLabel;
   final int total;
 
-  /// ID order nyata (bila ada) → untuk form ulasan akhir pembayaran.
+  /// ID order nyata (bila ada).
   final String? orderId;
-  final LoyaltyCheckoutResult? result;
 
   @override
   Widget build(BuildContext context) {
@@ -41,10 +49,10 @@ class _OrderSuccessPage extends StatelessWidget {
                   _successSummaryCard(),
                   const SizedBox(height: 16),
                   _usageScheduleCard(),
-                  if (orderId != null) ...[
-                    const SizedBox(height: 16),
-                    _ReviewCard(orderId: orderId!),
-                  ],
+                  const SizedBox(height: 16),
+                  // Batch 6 (S8): langkah berikutnya; ulasan diminta setelah
+                  // cucian selesai (notifikasi + detail order), bukan di sini.
+                  const _NextStepsCard(),
                 ],
               ),
             ),
@@ -110,23 +118,6 @@ class _OrderSuccessPage extends StatelessWidget {
           _DetailRow(left: 'Tanggal', right: data.date),
           _DetailRow(left: 'Lokasi', right: data.locationName),
           _DetailRow(left: 'Metode', right: methodLabel),
-          if (result != null) ...[
-            _DetailRow(
-              left: 'Bonus Balance Digunakan',
-              right:
-                  '- ${_formatRupiah(result!.breakdown.bonusBalanceUsed.round())}',
-            ),
-            _DetailRow(
-              left: 'Main Balance Digunakan',
-              right:
-                  '- ${_formatRupiah(result!.breakdown.mainBalanceUsed.round())}',
-            ),
-            _DetailRow(
-              left: 'Point Didapat',
-              right: '${result!.breakdown.pointEarned} poin',
-              greenRight: true,
-            ),
-          ],
           const SizedBox(height: 10),
           const Divider(height: 1),
           const SizedBox(height: 10),
@@ -188,16 +179,18 @@ class _OrderSuccessPage extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppColors.borderLight),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(Icons.schedule, size: 18, color: _primary),
-                SizedBox(width: 8),
-                Text(
-                  '11:00 s/d 11:30',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: _textDark,
-                    fontWeight: FontWeight.w700,
+                const Icon(Icons.schedule, size: 18, color: _primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    data.scheduleLabel,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: _textDark,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],
@@ -249,7 +242,18 @@ class _OrderSuccessPage extends StatelessWidget {
               Expanded(
                 child: AppOutlineButton(
                   label: 'Lihat Order',
-                  onTap: () => Navigator.of(context).pop(),
+                  onTap: () {
+                    final id = orderId;
+                    if (id == null || id.isEmpty) {
+                      Navigator.of(context).popUntil((route) => route.isFirst);
+                      return;
+                    }
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => _OrderDetailPage(orderId: id),
+                      ),
+                    );
+                  },
                 ),
               ),
               const SizedBox(width: 12),
@@ -268,8 +272,68 @@ class _OrderSuccessPage extends StatelessWidget {
   }
 }
 
-/// Form ulasan/feedback di akhir pembayaran. Rating bintang + komentar opsional
-/// → POST /reviews. Setelah terkirim menampilkan state "terima kasih".
+/// Batch 6 (S8): petunjuk setelah pembayaran berhasil.
+class _NextStepsCard extends StatelessWidget {
+  const _NextStepsCard();
+
+  static const _steps = [
+    (Icons.directions_walk, 'Datang ke outlet sesuai jadwal di atas.'),
+    (Icons.qr_code_scanner, 'Buka menu Scan, lalu scan QR di mesin yang kamu pesan.'),
+    (Icons.local_laundry_service, 'Masukkan cucian — mesin menyala otomatis setelah scan berhasil.'),
+    (Icons.star_rate_rounded, 'Setelah selesai, kami kirim notifikasi untuk memberi ulasan.'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Langkah berikutnya',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _textDark),
+          ),
+          const SizedBox(height: 10),
+          for (var i = 0; i < _steps.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 13,
+                    backgroundColor: AppColors.tintBlue,
+                    child: Text(
+                      '${i + 1}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _primary),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Icon(_steps[i].$1, size: 18, color: _textMuted),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _steps[i].$2,
+                      style: const TextStyle(fontSize: 13, color: _textDark, height: 1.35),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Form ulasan: rating bintang + komentar opsional → POST /reviews.
+/// Batch 6 (S8): ditampilkan di detail order yang sudah SELESAI.
 class _ReviewCard extends StatefulWidget {
   const _ReviewCard({required this.orderId});
 

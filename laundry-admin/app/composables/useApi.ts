@@ -13,7 +13,7 @@ export function useApi() {
   const authStore = useAuthStore()
   const router = useRouter()
 
-  async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  async function request<T>(path: string, options: RequestInit = {}, retried = false): Promise<T> {
     const token = authStore.accessToken
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -27,8 +27,13 @@ export function useApi() {
     })
 
     if (res.status === 401) {
-      const refreshed = await tryRefresh()
-      if (refreshed) return request<T>(path, options)
+      // Batch 5: refresh sekali (bersama) lalu ulangi SEKALI. Bila request lain
+      // sudah mendapat token baru, langsung ulangi tanpa refresh lagi.
+      if (!retried) {
+        const refreshed =
+          (!!authStore.accessToken && authStore.accessToken !== token) || (await tryRefresh())
+        if (refreshed) return request<T>(path, options, true)
+      }
       authStore.clearAuth()
       router.push('/login')
       throw new Error('Sesi habis, silakan login kembali')
@@ -59,29 +64,9 @@ export function useApi() {
     return body as T
   }
 
-  async function tryRefresh(): Promise<boolean> {
-    const rt = authStore.refreshToken
-    if (!rt) return false
-    try {
-      const res = await fetch(`${config.public.apiBase}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: rt }),
-      })
-      if (!res.ok) return false
-      const body = await res.json()
-      // Handle wrapped response
-      const data = body?.data ?? body
-      authStore.accessToken = data.accessToken
-      authStore.refreshToken = data.refreshToken
-      if (import.meta.client) {
-        // Hanya simpan refresh token — access token di memory
-        localStorage.setItem('refreshToken', data.refreshToken)
-      }
-      return true
-    } catch {
-      return false
-    }
+  /** Batch 5: satu jalur refresh (store) — dipakai bersama semua request paralel. */
+  function tryRefresh(): Promise<boolean> {
+    return authStore.refreshSession(config.public.apiBase)
   }
 
   const get = <T>(path: string) => request<T>(path, { method: 'GET' })
@@ -105,8 +90,14 @@ export function useApi() {
           : {},
         body: fd,
       })
+    const sentToken = authStore.accessToken
     let res = await doFetch()
-    if (res.status === 401 && (await tryRefresh())) res = await doFetch()
+    if (
+      res.status === 401 &&
+      ((!!authStore.accessToken && authStore.accessToken !== sentToken) || (await tryRefresh()))
+    ) {
+      res = await doFetch()
+    }
     const body = await res.json().catch(() => null)
     if (!res.ok) throw new Error(body?.message || 'Upload gagal')
     if (body && typeof body === 'object' && 'data' in body) return body.data as T

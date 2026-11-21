@@ -29,6 +29,15 @@ import { TransactionsController } from '../../src/modules/transactions/transacti
 import { TransactionService } from '../../src/modules/transactions/transaction.service';
 import { IotController } from '../../src/modules/iot/iot.controller';
 import { IotService } from '../../src/modules/iot/iot.service';
+import { LegacyWalletPayController } from '../../src/modules/payments/legacy-wallet-pay.controller';
+import { PaymentsService } from '../../src/modules/payments/payments.service';
+import { PAYMENT_GATEWAY } from '../../src/modules/payments/gateway/payment-gateway.interface';
+import { PointService } from '../../src/modules/points/point.service';
+import { MembershipTierService } from '../../src/modules/memberships/membership-tier.service';
+import { B2BPartnerService } from '../../src/modules/partners/b2b-partner.service';
+import { CampaignService } from '../../src/modules/campaigns/campaign.service';
+import { LoyaltyConfigService } from '../../src/modules/loyalty-config/loyalty-config.service';
+import { IotMachineService } from '../../src/modules/iot/iot-machine.service';
 
 export const ACCESS_SECRET = 'security-test-access';
 export const REFRESH_SECRET = 'security-test-refresh';
@@ -51,7 +60,16 @@ export async function createHarness(): Promise<Harness> {
   };
   const moduleRef = await Test.createTestingModule({
     imports: [PassportModule, JwtModule.register({})],
-    controllers: [AuthController, UsersController, WalletsController, TransactionsController, IotController],
+    // Batch 1.5: POST /wallets/customer/:id/pay pindah ke LegacyWalletPayController
+    // (PaymentsService ASLI: kepemilikan, nominal server, kunci order, PIN).
+    controllers: [
+      AuthController,
+      UsersController,
+      WalletsController,
+      LegacyWalletPayController,
+      TransactionsController,
+      IotController,
+    ],
     providers: [
       PrismaService,
       JwtStrategy,
@@ -74,6 +92,9 @@ export async function createHarness(): Promise<Harness> {
       {
         provide: WhatsappService,
         useValue: {
+          // Batch 5: OtpService menanyakan konfigurasi provider dulu.
+          isConfigured: () => true,
+          devFallbackAllowed: () => false,
           sendText: async (phone: string, message: string) => {
             sentOtp.push({ phone, message });
           },
@@ -82,6 +103,21 @@ export async function createHarness(): Promise<Harness> {
       { provide: PromosService, useValue: { commitUsage: jest.fn(async () => undefined) } },
       { provide: TransactionService, useValue: transactions },
       { provide: IotService, useValue: iot },
+      PaymentsService,
+      { provide: PAYMENT_GATEWAY, useValue: { name: 'mock', createCharge: jest.fn() } },
+      { provide: PointService, useValue: { earn: jest.fn() } },
+      {
+        provide: MembershipTierService,
+        useValue: {
+          ensureStatus: jest.fn(async () => ({ currentTier: null })),
+          getBenefits: jest.fn(async () => ({ pointMultiplier: 1, cashbackRate: 0 })),
+          recordSuccessfulTransaction: jest.fn(),
+        },
+      },
+      { provide: B2BPartnerService, useValue: { recordSuccessfulTransaction: jest.fn() } },
+      { provide: CampaignService, useValue: { qualifyReferralOnFirstTransaction: jest.fn() } },
+      { provide: LoyaltyConfigService, useValue: { pointEarnRate: 1000 } },
+      { provide: IotMachineService, useValue: { activateMachineForOrder: jest.fn() } },
       { provide: APP_GUARD, useClass: JwtAuthGuard },
       { provide: APP_GUARD, useClass: RolesGuard },
     ],

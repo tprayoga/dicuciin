@@ -1,8 +1,8 @@
 part of '../home_screen.dart';
 
-/// Scan QR mesin: identifikasi pemakai = pemesan. Kode QR mesin (deviceCode)
-/// dikirim ke backend; hanya pemesan dengan reservasi aktif yang bisa membuka
-/// mesin. Bila mesin masih bebas, ditawarkan booking langsung.
+/// Scan QR mesin. Kode QR (deviceCode) dikirim ke backend, yang memvalidasi
+/// pemesan, booking, mesin, jadwal, dan order LUNAS sebelum menyalakan mesin.
+/// Mesin yang belum dipesan & dibayar tidak bisa dipakai dari layar ini.
 class _ScanQrPage extends StatefulWidget {
   const _ScanQrPage();
 
@@ -49,63 +49,10 @@ class _ScanQrPageState extends State<_ScanQrPage> {
       await _showResult(success: true, message: result.message);
     } on ApiException catch (e) {
       if (!mounted) return;
-      // "Belum booking" + mesin bebas → tawarkan booking langsung.
-      if (e.message.toLowerCase().contains('belum membooking')) {
-        await _offerReserve(deviceCode, token, controller);
-      } else {
-        await _showResult(success: false, message: e.message);
-      }
-    } catch (_) {
-      if (!mounted) return;
-      await _showResult(success: false, message: 'Gagal memproses QR mesin.');
-    }
-  }
-
-  Future<void> _offerReserve(
-    String deviceCode,
-    String token,
-    CustomerController controller,
-  ) async {
-    final book = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Mesin Tersedia'),
-        content: const Text(
-          'Kamu belum membooking mesin ini. Booking & pakai sekarang?',
-          style: TextStyle(color: _textMuted, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Nanti', style: TextStyle(color: _textMuted)),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: _primary),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Booking & Pakai'),
-          ),
-        ],
-      ),
-    );
-    if (book != true) {
-      if (mounted) Navigator.of(context).pop();
-      return;
-    }
-    try {
-      await controller.reserveMachine(accessToken: token, deviceCode: deviceCode);
-      final result = await controller.verifyMachine(
-        accessToken: token,
-        deviceCode: deviceCode,
-      );
-      if (!mounted) return;
-      await _showResult(success: true, message: result.message);
-    } on ApiException catch (e) {
-      if (!mounted) return;
       await _showResult(success: false, message: e.message);
     } catch (_) {
       if (!mounted) return;
-      await _showResult(success: false, message: 'Gagal membooking mesin.');
+      await _showResult(success: false, message: 'Gagal memproses QR mesin.');
     }
   }
 

@@ -2,30 +2,47 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-  ConflictException,
   ForbiddenException,
-} from '@nestjs/common';
-import * as crypto from 'crypto';
-import { PrismaService } from '../../common/prisma/prisma.service';
-import { IotService } from '../iot/iot.service';
-import { BookingStatus, DeviceType } from '@prisma/client';
-
-const MACHINE_TYPES: DeviceType[] = [
-  DeviceType.WASHING_MACHINE,
-  DeviceType.DRYER_MACHINE,
-];
-
-const RESERVE_TTL_MS = 15 * 60 * 1000; // 15 menit untuk mengaktifkan reservasi
+  Logger,
+} from "@nestjs/common";
+import * as crypto from "crypto";
+import { OrdersService } from "../orders/orders.service";
+import { PrismaService } from "../../common/prisma/prisma.service";
+import { IotService } from "../iot/iot.service";
+import { IotMachineService } from "../iot/iot-machine.service";
+import { BookingStatus, OrderStatus, PaymentStatus } from "@prisma/client";
+import {
+  ACTIVE_BOOKING_STATUSES,
+  MACHINE_TYPES,
+  bookingConfig,
+  createBookingInTx,
+  isBookingActive,
+  lockDevice,
+  parseScheduledAt,
+  resolveBookableDevice,
+  slotStart,
+} from "./booking-lifecycle";
+import {
+  assertWithinOperatingHours,
+  isWithinOperatingHours,
+  tzOffsetMinutes,
+} from "../../common/utils/operating-hours";
 
 const bookingInclude = {
-  device: { select: { id: true, name: true, deviceCode: true, deviceType: true } },
+  device: {
+    select: { id: true, name: true, deviceCode: true, deviceType: true },
+  },
 };
 
 @Injectable()
 export class BookingsService {
+  private readonly logger = new Logger(BookingsService.name);
+
   constructor(
     private prisma: PrismaService,
     private iot: IotService,
+    private iotMachine: IotMachineService,
+    private orders: OrdersService,
   ) {}
 
   private async resolveCustomerId(userId: string): Promise<string> {
@@ -34,16 +51,23 @@ export class BookingsService {
       select: { id: true },
     });
     if (!customer) {
-      throw new ForbiddenException('Hanya customer yang dapat membooking mesin');
+      throw new ForbiddenException(
+        "Hanya customer yang dapat membooking mesin",
+      );
     }
     return customer.id;
   }
 
   private genCode(): string {
-    return 'BK-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+    return "BK-" + crypto.randomBytes(4).toString("hex").toUpperCase();
   }
 
-  /** Reservasi mesin: kunci untuk customer ini bila masih tersedia. */
+  /**
+   * API lama `POST /bookings`: menahan mesin (HOLD singkat) TANPA bisa dipakai.
+   * Booking baru bisa dipakai setelah terikat order yang PAID — order dibuat
+   * lewat `POST /orders` (deviceId + scheduledAt) yang otomatis memakai HOLD ini.
+   * Bila `orderId` dikirim, order harus milik customer & belum dibayar.
+   */
   async reserve(
     userId: string,
     ref: { deviceId?: string; deviceCode?: string },
@@ -51,150 +75,201 @@ export class BookingsService {
     scheduledAtIso?: string,
   ) {
     const customerId = await this.resolveCustomerId(userId);
-
-    if (!ref.deviceId && !ref.deviceCode) {
-      throw new BadRequestException('deviceId atau deviceCode wajib diisi');
-    }
-    const device = ref.deviceId
-      ? await this.prisma.iotDevice.findUnique({ where: { id: ref.deviceId } })
-      : await this.prisma.iotDevice.findUnique({ where: { deviceCode: ref.deviceCode } });
-    if (!device) throw new NotFoundException('Mesin tidak ditemukan');
-    const deviceId = device.id;
-    if (!MACHINE_TYPES.includes(device.deviceType)) {
-      throw new BadRequestException('Perangkat ini bukan mesin cuci/pengering');
-    }
-
     const now = new Date();
+    const scheduledAt = parseScheduledAt(scheduledAtIso, now);
 
-    // Waktu terjadwal opsional: tak boleh di masa lalu; reservasi ditahan sampai
-    // 30 menit setelah jadwal (atau 15 menit default bila tanpa jadwal).
-    let scheduledAt: Date | null = null;
-    let expiresAt = new Date(now.getTime() + RESERVE_TTL_MS);
-    if (scheduledAtIso) {
-      scheduledAt = new Date(scheduledAtIso);
-      if (Number.isNaN(scheduledAt.getTime())) {
-        throw new BadRequestException('Waktu terjadwal tidak valid');
+    if (orderId) {
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+      });
+      if (!order || order.customerId !== customerId) {
+        throw new ForbiddenException("Order tidak ditemukan untuk akun ini");
       }
-      if (scheduledAt.getTime() < now.getTime() - 60_000) {
-        throw new BadRequestException('Waktu terjadwal sudah lewat');
+      if (
+        order.status !== OrderStatus.DRAFT &&
+        order.status !== OrderStatus.WAITING_PAYMENT
+      ) {
+        throw new BadRequestException(
+          "Order ini tidak bisa dipakai untuk booking baru",
+        );
       }
-      expiresAt = new Date(scheduledAt.getTime() + 30 * 60 * 1000);
     }
 
-    const active = await this.prisma.machineBooking.findFirst({
-      where: {
-        deviceId,
-        OR: [
-          { status: BookingStatus.IN_USE },
-          { status: BookingStatus.RESERVED, expiresAt: { gt: now } },
-        ],
-      },
-    });
-    if (active) throw new ConflictException('Mesin sedang dibooking atau dipakai');
-
-    const booking = await this.prisma.machineBooking.create({
-      data: {
-        deviceId,
+    const booking = await this.prisma.$transaction(async (tx) => {
+      const device = await resolveBookableDevice(tx, ref);
+      // Batch 6 (T8): jadwal di dalam jam operasional outlet.
+      if (scheduledAt) {
+        const outlet = await tx.outlet.findUnique({
+          where: { id: device.outletId },
+          select: { openTime: true, closeTime: true },
+        });
+        if (outlet) assertWithinOperatingHours(outlet, scheduledAt);
+      }
+      return createBookingInTx(tx, {
         customerId,
+        deviceId: device.id,
         orderId: orderId ?? null,
-        bookingCode: this.genCode(),
         scheduledAt,
-        expiresAt,
-      },
+        status: BookingStatus.HOLD,
+        bookingCode: this.genCode(),
+        now,
+      });
+    });
+    return this.prisma.machineBooking.findUnique({
+      where: { id: booking.id },
       include: bookingInclude,
     });
-    // Status RESERVED diturunkan dari booking aktif (lihat effectiveStatus), BUKAN
-    // dari flag device — agar reservasi yang kedaluwarsa otomatis melepas mesin.
-    // Menyetel iotDevice.status='RESERVED' di sini membuat mesin "nyangkut"
-    // terpakai selamanya bila reservasi expired tanpa complete/cancel.
-    return booking;
   }
 
   /**
-   * Verifikasi pemakai = pemesan. Customer scan QR mesin (deviceCode); hanya
-   * pemesan dengan reservasi aktif yang bisa mengaktifkan & membuka mesin.
+   * Scan QR mesin → validasi server → minta mesin START.
+   * Syarat (semua di backend): customer login, mesin dikenali, booking milik
+   * customer untuk MESIN INI, booking RESERVED & masih dalam jendela waktu,
+   * terikat order milik customer yang PAID dengan pembayaran PAID tercatat.
+   * Status booking menjadi IN_USE hanya saat mesin melapor RUNNING (event IoT).
+   * Scan ulang/paralel aman: START idempoten per order.
    */
   async verifyByDeviceCode(userId: string, deviceCode: string) {
     const customerId = await this.resolveCustomerId(userId);
+    const device = await this.prisma.iotDevice.findUnique({
+      where: { deviceCode },
+    });
+    if (!device) throw new NotFoundException("Mesin tidak dikenali");
+    if (!MACHINE_TYPES.includes(device.deviceType)) {
+      throw new BadRequestException("Perangkat ini bukan mesin cuci/pengering");
+    }
 
-    const device = await this.prisma.iotDevice.findUnique({ where: { deviceCode } });
-    if (!device) throw new NotFoundException('Mesin tidak dikenali');
-
+    const cfg = bookingConfig();
     const now = new Date();
 
-    // Reservasi milik customer ini yang masih berlaku → aktifkan + buka mesin.
-    const mine = await this.prisma.machineBooking.findFirst({
-      where: {
-        deviceId: device.id,
-        customerId,
-        status: BookingStatus.RESERVED,
-        expiresAt: { gt: now },
-      },
-      orderBy: { reservedAt: 'desc' },
+    const target = await this.prisma.$transaction(async (tx) => {
+      await lockDevice(tx, device.id);
+      const mine = await tx.machineBooking.findMany({
+        where: {
+          deviceId: device.id,
+          customerId,
+          status: { in: ACTIVE_BOOKING_STATUSES },
+        },
+        orderBy: { reservedAt: "desc" },
+        include: {
+          order: { select: { id: true, status: true, customerId: true } },
+        },
+      });
+      const activeMine = mine.filter((b) => isBookingActive(b, now));
+
+      const inUse = activeMine.find((b) => b.status === BookingStatus.IN_USE);
+      if (inUse) return { kind: "already" as const, booking: inUse };
+
+      const reserved = activeMine.filter(
+        (b) => b.status === BookingStatus.RESERVED,
+      );
+      if (reserved.length === 0) {
+        if (activeMine.some((b) => b.status === BookingStatus.HOLD)) {
+          throw new BadRequestException(
+            "Selesaikan pembayaran dulu sebelum memakai mesin.",
+          );
+        }
+        const others = await tx.machineBooking.findMany({
+          where: {
+            deviceId: device.id,
+            customerId: { not: customerId },
+            status: { in: ACTIVE_BOOKING_STATUSES },
+          },
+        });
+        if (
+          others.some(
+            (b) =>
+              isBookingActive(b, now) &&
+              (b.status === BookingStatus.IN_USE ||
+                Math.abs(slotStart(b).getTime() - now.getTime()) <
+                  cfg.slotMinutes * 60_000),
+          )
+        ) {
+          throw new ForbiddenException(
+            "Mesin ini sedang dibooking pelanggan lain",
+          );
+        }
+        throw new BadRequestException(
+          "Kamu belum memesan mesin ini. Pesan & bayar dulu ya.",
+        );
+      }
+
+      // Pilih reservasi yang jadwalnya sudah masuk jendela scan.
+      const earlyMs = cfg.scanEarlyMinutes * 60_000;
+      const due = reserved.find(
+        (b) => slotStart(b).getTime() - earlyMs <= now.getTime(),
+      );
+      if (!due) {
+        const next = reserved
+          .map((b) => slotStart(b))
+          .sort((a, b) => a.getTime() - b.getTime())[0];
+        throw new BadRequestException(
+          `Belum waktunya. Mesin bisa dipakai mulai ${next.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })} WIB.`,
+        );
+      }
+      if (!due.orderId || !due.order) {
+        throw new ForbiddenException(
+          "Reservasi ini tidak terikat order yang sah. Pesan & bayar dulu.",
+        );
+      }
+      if (due.order.customerId !== customerId) {
+        throw new ForbiddenException("Order reservasi ini bukan milikmu");
+      }
+      if (due.order.status !== OrderStatus.PAID) {
+        throw new ForbiddenException(
+          "Order belum lunas. Selesaikan pembayaran dulu.",
+        );
+      }
+      const paid = await tx.payment.findFirst({
+        where: { orderId: due.orderId, status: PaymentStatus.PAID },
+        select: { id: true },
+      });
+      if (!paid) {
+        throw new ForbiddenException("Pembayaran order belum terverifikasi");
+      }
+      return { kind: "start" as const, booking: due };
     });
-    if (mine) {
-      const booking = await this.prisma.machineBooking.update({
-        where: { id: mine.id },
-        data: { status: BookingStatus.IN_USE, startedAt: now },
+
+    if (target.kind === "already") {
+      return {
+        verified: true,
+        status: BookingStatus.IN_USE,
+        booking: target.booking,
+        message: "Mesin sudah aktif untukmu.",
+      };
+    }
+
+    const command = await this.iotMachine.requestMachineStart(
+      target.booking.orderId!,
+      device.id,
+      cfg.maxStartAttempts,
+    );
+    return {
+      verified: true,
+      status: target.booking.status,
+      booking: await this.prisma.machineBooking.findUnique({
+        where: { id: target.booking.id },
         include: bookingInclude,
-      });
-      await this.prisma.iotDevice.update({
-        where: { id: device.id },
-        data: { status: 'IN_USE' },
-      });
-      await this.iot.sendCommand(device.id, 'UNLOCK', { bookingId: mine.id });
-      return {
-        verified: true,
-        status: BookingStatus.IN_USE,
-        booking,
-        message: 'Mesin terbuka. Selamat menggunakan!',
-      };
-    }
-
-    // Scan ulang oleh pemakai yang sama yang sudah aktif.
-    const alreadyMine = await this.prisma.machineBooking.findFirst({
-      where: { deviceId: device.id, customerId, status: BookingStatus.IN_USE },
-      include: bookingInclude,
-    });
-    if (alreadyMine) {
-      return {
-        verified: true,
-        status: BookingStatus.IN_USE,
-        booking: alreadyMine,
-        message: 'Mesin sudah aktif untukmu.',
-      };
-    }
-
-    // Dibooking/dipakai customer lain → tolak (cegah pemakaian oleh non-pemesan).
-    const other = await this.prisma.machineBooking.findFirst({
-      where: {
-        deviceId: device.id,
-        customerId: { not: customerId },
-        OR: [
-          { status: BookingStatus.IN_USE },
-          { status: BookingStatus.RESERVED, expiresAt: { gt: now } },
-        ],
-      },
-    });
-    if (other) {
-      throw new ForbiddenException('Mesin ini sedang dibooking pelanggan lain');
-    }
-
-    throw new BadRequestException('Kamu belum membooking mesin ini. Booking dulu ya.');
+      }),
+      activation: { commandId: command.id, status: command.status },
+      message: "Pembayaran terverifikasi. Mesin sedang dinyalakan…",
+    };
   }
 
   async complete(userId: string, id: string) {
     const customerId = await this.resolveCustomerId(userId);
-    const booking = await this.prisma.machineBooking.findUnique({ where: { id } });
-    if (!booking) throw new NotFoundException('Booking tidak ditemukan');
+    const booking = await this.prisma.machineBooking.findUnique({
+      where: { id },
+    });
+    if (!booking) throw new NotFoundException("Booking tidak ditemukan");
     if (booking.customerId !== customerId) {
-      throw new ForbiddenException('Bukan booking milikmu');
+      throw new ForbiddenException("Bukan booking milikmu");
     }
     if (
       booking.status !== BookingStatus.IN_USE &&
       booking.status !== BookingStatus.RESERVED
     ) {
-      throw new BadRequestException('Booking tidak aktif');
+      throw new BadRequestException("Booking tidak aktif");
     }
     const updated = await this.prisma.machineBooking.update({
       where: { id },
@@ -203,32 +278,62 @@ export class BookingsService {
     });
     await this.prisma.iotDevice.update({
       where: { id: booking.deviceId },
-      data: { status: 'AVAILABLE' },
+      data: { status: "AVAILABLE" },
     });
-    await this.iot.sendCommand(booking.deviceId, 'LOCK', { bookingId: id });
+    await this.iot.sendCommand(booking.deviceId, "LOCK", { bookingId: id });
     return updated;
   }
 
   async cancel(userId: string, id: string) {
     const customerId = await this.resolveCustomerId(userId);
-    const booking = await this.prisma.machineBooking.findUnique({ where: { id } });
-    if (!booking) throw new NotFoundException('Booking tidak ditemukan');
+    const booking = await this.prisma.machineBooking.findUnique({
+      where: { id },
+    });
+    if (!booking) throw new NotFoundException("Booking tidak ditemukan");
     if (booking.customerId !== customerId) {
-      throw new ForbiddenException('Bukan booking milikmu');
+      throw new ForbiddenException("Bukan booking milikmu");
     }
-    if (booking.status !== BookingStatus.RESERVED) {
-      throw new BadRequestException('Hanya reservasi yang belum aktif bisa dibatalkan');
+    if (
+      booking.status !== BookingStatus.RESERVED &&
+      booking.status !== BookingStatus.HOLD
+    ) {
+      throw new BadRequestException(
+        "Hanya reservasi yang belum aktif bisa dibatalkan",
+      );
     }
-    const updated = await this.prisma.machineBooking.update({
+    const order = booking.orderId
+      ? await this.prisma.order.findUnique({ where: { id: booking.orderId } })
+      : null;
+    if (
+      order &&
+      order.status !== OrderStatus.DRAFT &&
+      order.status !== OrderStatus.WAITING_PAYMENT
+    ) {
+      throw new BadRequestException(
+        "Booking ini sudah dibayar dan tidak bisa dibatalkan sendiri. Hubungi admin.",
+      );
+    }
+    if (order) {
+      // Batch 3: order belum dibayar dibatalkan lewat jalur pembatalan tunggal
+      // (kunci order, cek ulang belum dibayar, lepas booking + voucher/kuota,
+      // batalkan tagihan QRIS/VA aktif di gateway).
+      await this.orders.cancel(
+        order.id,
+        { cancelReason: "Booking dibatalkan pelanggan" },
+        userId,
+        undefined,
+        { requireUnpaid: true },
+      );
+      return this.prisma.machineBooking.findUniqueOrThrow({
+        where: { id },
+        include: bookingInclude,
+      });
+    }
+    return this.prisma.machineBooking.update({
       where: { id },
       data: { status: BookingStatus.CANCELLED },
       include: bookingInclude,
     });
-    await this.prisma.iotDevice.update({
-      where: { id: booking.deviceId },
-      data: { status: 'AVAILABLE' },
-    });
-    return updated;
   }
 
   /**
@@ -237,12 +342,31 @@ export class BookingsService {
    * perangkat: IN_USE > RESERVED > OFFLINE > AVAILABLE.
    */
   async listOutletMachines(outletId: string) {
-    const outlet = await this.prisma.outlet.findUnique({ where: { id: outletId } });
-    if (!outlet) throw new NotFoundException('Outlet tidak ditemukan');
+    const outlet = await this.prisma.outlet.findUnique({
+      where: { id: outletId },
+    });
+    if (!outlet) throw new NotFoundException("Outlet tidak ditemukan");
 
     const devices = await this.prisma.iotDevice.findMany({
       where: { outletId, deviceType: { in: MACHINE_TYPES } },
-      orderBy: { deviceCode: 'asc' },
+      orderBy: { deviceCode: "asc" },
+      include: {
+        service: {
+          select: {
+            id: true,
+            name: true,
+            machineType: true,
+            capacityKg: true,
+            estimateMinutes: true,
+            isActive: true,
+            servicePrices: {
+              where: { outletId, isActive: true },
+              select: { price: true, unit: true, pricingType: true },
+              take: 1,
+            },
+          },
+        },
+      },
     });
 
     const statusByDevice = await this.activeBookingStatusByDevice(
@@ -251,17 +375,44 @@ export class BookingsService {
 
     const machines = devices.map((d) => {
       const status = this.effectiveStatus(d.status, statusByDevice.get(d.id));
+      // Batch 6 (S3): kapasitas & layanan dari data mesin. Layanan hanya
+      // dikirim bila aktif DAN punya harga aktif di outlet ini.
+      const price = d.service?.isActive ? d.service.servicePrices[0] : undefined;
       return {
         deviceId: d.id,
         deviceCode: d.deviceCode,
         name: d.name,
         type: d.deviceType,
         status,
-        bookable: status === 'AVAILABLE',
+        bookable: status === "AVAILABLE",
+        capacityKg: d.capacityKg ?? d.service?.capacityKg ?? null,
+        service:
+          d.service && price
+            ? {
+                serviceId: d.service.id,
+                name: d.service.name,
+                machineType: d.service.machineType,
+                estimateMinutes: d.service.estimateMinutes,
+                price: Number(price.price),
+                unit: price.unit,
+                pricingType: price.pricingType,
+              }
+            : null,
       };
     });
 
-    return { outletId, occupancy: this.occupancyOf(machines), machines };
+    return {
+      outletId,
+      // Batch 6 (T8): jam operasional untuk slot booking di aplikasi.
+      operatingHours: {
+        openTime: outlet.openTime,
+        closeTime: outlet.closeTime,
+        utcOffsetMinutes: tzOffsetMinutes(),
+        openNow: isWithinOperatingHours(outlet, new Date()),
+      },
+      occupancy: this.occupancyOf(machines),
+      machines,
+    };
   }
 
   /** Ringkasan keramaian semua outlet aktif (untuk halaman daftar lokasi). */
@@ -301,14 +452,21 @@ export class BookingsService {
         deviceId: { in: deviceIds },
         OR: [
           { status: BookingStatus.IN_USE },
-          { status: BookingStatus.RESERVED, expiresAt: { gt: now } },
+          {
+            status: { in: [BookingStatus.RESERVED, BookingStatus.HOLD] },
+            expiresAt: { gt: now },
+          },
         ],
       },
       select: { deviceId: true, status: true },
     });
     for (const b of active) {
       if (map.get(b.deviceId) === BookingStatus.IN_USE) continue;
-      map.set(b.deviceId, b.status);
+      // HOLD (menunggu bayar) ditampilkan sebagai RESERVED ke pelanggan lain.
+      map.set(
+        b.deviceId,
+        b.status === BookingStatus.HOLD ? BookingStatus.RESERVED : b.status,
+      );
     }
     return map;
   }
@@ -320,44 +478,44 @@ export class BookingsService {
   private effectiveStatus(deviceStatus: string, bs?: BookingStatus): string {
     // Booking aktif (query sudah mengecualikan yang expired) = sumber kebenaran
     // untuk RESERVED/IN_USE-via-reservasi.
-    if (bs === BookingStatus.IN_USE) return 'IN_USE';
-    if (bs === BookingStatus.RESERVED) return 'RESERVED';
+    if (bs === BookingStatus.IN_USE) return "IN_USE";
+    if (bs === BookingStatus.RESERVED) return "RESERVED";
     // Status fisik perangkat: OFFLINE (mati) atau IN_USE (mesin benar2 berjalan).
     // 'RESERVED' sengaja TIDAK dibaca dari device agar flag lama tak nyangkut.
-    if (deviceStatus === 'OFFLINE') return 'OFFLINE';
-    if (deviceStatus === 'IN_USE') return 'IN_USE';
-    return 'AVAILABLE';
+    if (deviceStatus === "OFFLINE") return "OFFLINE";
+    if (deviceStatus === "IN_USE") return "IN_USE";
+    return "AVAILABLE";
   }
 
   /** Hitung ringkasan keramaian dari daftar status mesin. */
   private occupancyOf(machines: { status: string }[]) {
     const total = machines.length;
-    const offline = machines.filter((m) => m.status === 'OFFLINE').length;
+    const offline = machines.filter((m) => m.status === "OFFLINE").length;
     const busy = machines.filter(
-      (m) => m.status === 'IN_USE' || m.status === 'RESERVED',
+      (m) => m.status === "IN_USE" || m.status === "RESERVED",
     ).length;
-    const available = machines.filter((m) => m.status === 'AVAILABLE').length;
+    const available = machines.filter((m) => m.status === "AVAILABLE").length;
     const operational = total - offline;
 
     let level: string;
     let remark: string;
     if (operational === 0) {
-      level = 'none';
-      remark = 'Mesin tidak tersedia';
+      level = "none";
+      remark = "Mesin tidak tersedia";
     } else if (busy === 0) {
-      level = 'low';
-      remark = 'Sepi';
+      level = "low";
+      remark = "Sepi";
     } else {
       const ratio = busy / operational;
       if (ratio < 0.5) {
-        level = 'medium';
-        remark = 'Normal';
+        level = "medium";
+        remark = "Normal";
       } else if (ratio < 1) {
-        level = 'high';
-        remark = 'Ramai';
+        level = "high";
+        remark = "Ramai";
       } else {
-        level = 'full';
-        remark = 'Penuh';
+        level = "full";
+        remark = "Penuh";
       }
     }
     return { total, available, busy, offline, level, remark };
@@ -372,10 +530,13 @@ export class BookingsService {
         customerId,
         OR: [
           { status: BookingStatus.IN_USE },
-          { status: BookingStatus.RESERVED, expiresAt: { gt: now } },
+          {
+            status: { in: [BookingStatus.RESERVED, BookingStatus.HOLD] },
+            expiresAt: { gt: now },
+          },
         ],
       },
-      orderBy: { reservedAt: 'desc' },
+      orderBy: { reservedAt: "desc" },
       include: bookingInclude,
     });
   }

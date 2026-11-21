@@ -25,6 +25,7 @@ import {
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { STAFF_ROLES } from '../../common/auth/access-policy';
 import { UserRole } from '@prisma/client';
 import { Public } from '../../common/decorators/public.decorator';
 import { CreateOrderDto } from '../orders/dto/order.dto';
@@ -185,7 +186,36 @@ export class KiosksController {
     );
   }
 
+  @Public()
+  @Post('device/orders/:orderId/machine-start')
+  @ApiOperation({
+    summary: 'Coba nyalakan ulang mesin untuk order kiosk yang sudah dibayar',
+  })
+  async retryDeviceMachineStart(
+    @Param('orderId') orderId: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.kiosksService.retryDeviceMachineStart(
+      this.deviceToken(authorization),
+      orderId,
+    );
+  }
+
+  @Public()
+  @Post('device/orders/:orderId/cancel')
+  @ApiOperation({ summary: 'Batalkan order kiosk yang belum dibayar (lepas mesin)' })
+  async cancelDeviceOrder(
+    @Param('orderId') orderId: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.kiosksService.cancelDeviceOrder(
+      this.deviceToken(authorization),
+      orderId,
+    );
+  }
+
   @Get()
+  @Roles(...STAFF_ROLES)
   @ApiOperation({ summary: 'Get all kiosks' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -199,6 +229,7 @@ export class KiosksController {
   }
 
   @Get('assigned')
+  @Roles(...STAFF_ROLES)
   @ApiOperation({ summary: 'Get active kiosks assigned to the staff outlet' })
   async findAssigned(@Req() req: any) {
     return this.kiosksService.findAssigned(req.user.userId);
@@ -219,6 +250,7 @@ export class KiosksController {
   }
 
   @Get(':id')
+  @Roles(...STAFF_ROLES)
   @ApiOperation({ summary: 'Get kiosk by ID' })
   async findOne(@Param('id') id: string) {
     return this.kiosksService.findOne(id);
@@ -239,6 +271,7 @@ export class KiosksController {
   }
 
   @Post(':id/session/start')
+  @Roles(...STAFF_ROLES)
   @ApiOperation({ summary: 'Start kiosk session' })
   async startSession(
     @Param('id') id: string,
@@ -253,6 +286,7 @@ export class KiosksController {
   }
 
   @Post('session/:sessionId/end')
+  @Roles(...STAFF_ROLES)
   @ApiOperation({ summary: 'End kiosk session' })
   async endSession(@Param('sessionId') sessionId: string) {
     return this.kiosksService.endSession(sessionId);

@@ -4,7 +4,20 @@ import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 
 describe('PaymentsService loyalty settlement', () => {
   function setup() {
+    const orderRow = {
+      id: 'order-1',
+      customerId: 'cust-1',
+      partnerId: null,
+      paidPaymentId: null,
+      status: OrderStatus.DRAFT,
+      totalAmount: new Prisma.Decimal(50000),
+      deliveryFee: new Prisma.Decimal(0),
+    };
     const tx: any = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      // Batch 6 (R1): notifikasi ORDER_PAID ditulis di transaksi pelunasan.
+      customer: { findUnique: jest.fn().mockResolvedValue({ userId: 'user-1' }) },
+      notification: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
       payment: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({
           id: 'pay-1',
@@ -12,19 +25,18 @@ describe('PaymentsService loyalty settlement', () => {
           status: PaymentStatus.PENDING,
         }),
         update: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       order: {
-        findUnique: jest.fn().mockResolvedValue({
-          id: 'order-1',
-          customerId: 'cust-1',
-          partnerId: null,
-          status: OrderStatus.DRAFT,
-          totalAmount: new Prisma.Decimal(50000),
-          deliveryFee: new Prisma.Decimal(0),
-        }),
+        findUnique: jest.fn().mockResolvedValue(orderRow),
+        // Batch 2: settlement membaca ulang order di bawah kunci.
+        findUniqueOrThrow: jest.fn().mockResolvedValue(orderRow),
         update: jest.fn().mockResolvedValue({}),
       },
       orderStatusLog: { create: jest.fn().mockResolvedValue({}) },
+      // Order tanpa booking mesin (alur gateway biasa).
+      machineBooking: { findUnique: jest.fn().mockResolvedValue(null) },
       wallet: {
         findFirst: jest.fn().mockResolvedValue({ id: 'wallet-1' }),
         create: jest.fn(),
@@ -85,7 +97,7 @@ describe('PaymentsService loyalty settlement', () => {
 
     expect(tx.payment.update).toHaveBeenCalledWith({
       where: { id: 'pay-1' },
-      data: { status: PaymentStatus.PAID, paidAt: expect.any(Date) },
+      data: { status: PaymentStatus.PAID, paidAt: expect.any(Date), pendingSlot: null },
     });
     expect(mocks.promosService.commitUsage).toHaveBeenCalledWith(tx, 'order-1');
     expect(mocks.pointService.earn).toHaveBeenCalledWith(

@@ -12,11 +12,15 @@ import '../../core/network/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/app_buttons.dart';
 import '../../shared/widgets/app_toast.dart';
+import '../../shared/qr_saver.dart';
+import '../../shared/widgets/bank_brand.dart';
 import '../../shared/widgets/mascot_message_card.dart';
 import '../../shared/widgets/pin_pad.dart';
 import '../../shared/widgets/status_badge.dart';
 import '../../shared/widgets/user_avatar.dart';
 import '../auth/auth_controller.dart';
+import '../auth/change_password_screen.dart';
+import '../auth/edit_profile_screen.dart';
 import 'customer_controller.dart';
 import 'models/customer_models.dart';
 import 'wallet_controller.dart';
@@ -35,11 +39,15 @@ part 'home/wallet_pin_sheet.dart';
 part 'home/wallet_pin_settings_page.dart';
 part 'home/payment_qris_page.dart';
 part 'home/payment_va_page.dart';
+part 'home/payment_attempt_flow.dart';
+part 'home/order_detail_page.dart';
 part 'home/order_success_page.dart';
 part 'home/scan_qr_page.dart';
 part 'home/notification_page.dart';
 part 'home/topup_page.dart';
 part 'home/member_dashboard_page.dart';
+part 'home/rewards_page.dart';
+part 'home/delete_account_page.dart';
 
 const _blue = AppColors.primaryDark;
 const _primary = AppColors.primary;
@@ -58,6 +66,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   _MainTab _tab = _MainTab.home;
   bool _popupScheduled = false;
+
+  /// Batch 6 (S7): tipe mesin yang dipilih dari tombol Washing/Dryer di
+  /// beranda → tab awal di detail outlet. null = bawaan (mesin cuci).
+  _MachineType? _preferredType;
 
   /// Data dashboard dimuat oleh CustomerController (ProxyProvider) saat auth
   /// siap. Di sini hanya menampilkan pop-up promosi begitu datanya tiba.
@@ -92,7 +104,14 @@ class _HomeScreenState extends State<HomeScreen> {
             _HomePage(
               onOpenAccount: _openAccount,
               onOpenScan: _openScan,
-              onOpenLocation: () => setState(() => _tab = _MainTab.location),
+              onOpenLocation: () => setState(() {
+                _preferredType = null;
+                _tab = _MainTab.location;
+              }),
+              onOpenLocationFor: (type) => setState(() {
+                _preferredType = type;
+                _tab = _MainTab.location;
+              }),
               onOpenPromo: () => setState(() => _tab = _MainTab.promo),
             ),
             const _PromoPage(),
@@ -121,7 +140,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openLocationDetail(OutletOption outlet) {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => _LocationDetailPage(outlet: outlet)),
+      MaterialPageRoute(
+        builder: (_) => _LocationDetailPage(
+          outlet: outlet,
+          initialType: _preferredType ?? _MachineType.washer,
+        ),
+      ),
     );
   }
 
@@ -271,4 +295,52 @@ class _BannerPopupDialog extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Batch 6 (R2): lembar Hubungi Kami (beranda & menu Akun). Setiap baris bisa
+/// diketuk: WhatsApp, email, atau telepon.
+void _showSupportSheet(BuildContext context) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (_) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Hubungi Kami',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: _textDark),
+            ),
+            const SizedBox(height: 16),
+            _ContactRow(
+              icon: Icons.chat,
+              label: 'WhatsApp',
+              value: '+${AppConfig.supportWhatsApp}',
+              uri: Uri.parse('https://wa.me/${AppConfig.supportWhatsApp}'),
+            ),
+            const SizedBox(height: 12),
+            _ContactRow(
+              icon: Icons.email_outlined,
+              label: 'Email',
+              value: AppConfig.supportEmail,
+              uri: Uri(scheme: 'mailto', path: AppConfig.supportEmail),
+            ),
+            const SizedBox(height: 12),
+            _ContactRow(
+              icon: Icons.headset_mic_outlined,
+              label: 'Call Center',
+              value: AppConfig.supportPhoneDisplay,
+              uri: Uri(scheme: 'tel', path: AppConfig.supportPhoneDisplay.replaceAll('-', '')),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }

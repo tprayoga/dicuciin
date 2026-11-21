@@ -6,11 +6,17 @@ import {
   UnauthorizedException,
   ForbiddenException,
 } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
+import {
+  setWalletPin,
+  verifyWalletPinWithLockout,
+  walletPinStatus,
+} from '../../common/auth/wallet-pin';
+import { releaseBookingForOrderInTx } from '../bookings/booking-lifecycle';
+import { restoreVoucherAfterRefundInTx } from '../orders/voucher-refund-policy';
+import { ORDER_REFUND_REASONS } from '../payments/reconciliation-record';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   TopupWalletDto,
-  PayWithWalletDto,
   RefundWalletDto,
 } from './dto/wallet.dto';
 import {
@@ -24,6 +30,7 @@ import {
 import { PromosService } from '../promos/promos.service';
 import { WalletLedgerService } from './wallet-ledger.service';
 import { mapLedgerToTransaction } from './wallet-history.mapper';
+import { toNum } from '../../common/utils/money.util';
 
 /**
  * Service fitur wallet yang menghadap HTTP/mobile: PIN, top-up, pembayaran, dan
@@ -96,29 +103,38 @@ export class WalletsService {
     return customer;
   }
 
-  /** Set / ganti PIN wallet (6 digit, disimpan sebagai hash bcrypt). */
-  async setPin(customerId: string, userId: string, pin: string) {
+  /**
+   * Set PIN pertama kali, atau ganti PIN (Batch 4: WAJIB PIN lama, terkena
+   * penguncian). Disimpan sebagai hash bcrypt.
+   */
+  async setPin(customerId: string, userId: string, pin: string, currentPin?: string) {
     await this.getOwnedCustomer(customerId, userId);
-
-    const pinHash = await bcrypt.hash(pin, 10);
-    await this.prisma.customer.update({
-      where: { id: customerId },
-      data: { walletPinHash: pinHash, pinSetAt: new Date() },
-    });
-
+    await setWalletPin(this.prisma, customerId, pin, currentPin);
     return { message: 'PIN wallet berhasil disimpan' };
   }
 
-  /** Verifikasi PIN wallet. */
-  async verifyPin(customerId: string, userId: string, pin: string) {
-    const customer = await this.getOwnedCustomer(customerId, userId);
-    if (!customer.walletPinHash)
-      throw new BadRequestException('PIN wallet belum diatur');
-
-    const valid = await bcrypt.compare(pin, customer.walletPinHash);
-    if (!valid) throw new UnauthorizedException('PIN salah');
-
+  /**
+   * Verifikasi PIN (Batch 4: penguncian 5×/15 menit, aman paralel). Sukses
+   * menerbitkan bukti PIN sekali pakai untuk pembayaran saldo berikutnya
+   * (app lama memverifikasi PIN dulu, lalu membayar tanpa mengirim PIN).
+   */
+  async verifyPin(customerId: string, userId: string, pin: string, sessionKey: string | null = null) {
+    await this.getOwnedCustomer(customerId, userId);
+    await verifyWalletPinWithLockout(this.prisma, customerId, pin, new Date(), {
+      issueProofFor: sessionKey,
+    });
     return { valid: true };
+  }
+
+  async pinStatus(customerId: string, userId: string) {
+    await this.getOwnedCustomer(customerId, userId);
+    return walletPinStatus(this.prisma, customerId);
+  }
+
+  async customerIdOf(userId: string) {
+    const c = await this.prisma.customer.findUnique({ where: { userId }, select: { id: true } });
+    if (!c) throw new NotFoundException('Akun ini belum memiliki profil customer');
+    return c.id;
   }
 
   async getWallet(customerId: string) {
@@ -204,107 +220,7 @@ export class WalletsService {
     }
   }
 
-  async pay(customerId: string, payWithWalletDto: PayWithWalletDto) {
-    const { orderId, idempotencyKey } = payWithWalletDto;
 
-    const wallet = await this.getOrCreateWallet(customerId);
-
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-    });
-
-    if (!order) {
-      throw new NotFoundException('Order not found');
-    }
-
-    // Hanya boleh membayar order milik customer ini (jika order ber-owner).
-    if (order.customerId && order.customerId !== customerId) {
-      throw new UnauthorizedException('Order bukan milik customer ini');
-    }
-
-    if (order.status === OrderStatus.PAID) {
-      throw new ConflictException('Order sudah dibayar');
-    }
-
-    // SECURITY HOTFIX (K4): nominal SELALU total order dari server. Sebelumnya
-    // `amount` dari klien dipakai apa adanya (Min 0) → order bisa lunas dengan
-    // Rp0. Field `amount` tetap diterima demi kompatibilitas app, tetapi diabaikan.
-    // Hanya order yang menunggu pembayaran.
-    if (order.status !== OrderStatus.DRAFT && order.status !== OrderStatus.WAITING_PAYMENT) {
-      throw new ConflictException('Order tidak dalam status menunggu pembayaran');
-    }
-    const amount = Number(order.totalAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      throw new ConflictException('Total order tidak valid');
-    }
-
-    try {
-      return await this.prisma.$transaction(async (tx) => {
-        // Potong saldo lewat satu pintu WalletLedgerService (MAIN_BALANCE saja —
-        // perilaku sama seperti sebelumnya). Guard saldo cukup + potong atomik
-        // (cegah overspend/lost-update) ditangani di dalam service ledger; saldo
-        // kurang → BadRequestException.
-        const ledger = await this.walletLedger.debit(WalletType.MAIN_BALANCE, {
-          tx,
-          walletId: wallet.id,
-          amount,
-          orderId,
-          referenceType: 'PAYMENT',
-          description: `Payment for order ${order.orderNumber}`,
-          idempotencyKey,
-        });
-
-        const transaction = mapLedgerToTransaction(ledger);
-
-        // Catat pembayaran (paymentNumber unik diturunkan dari orderNumber →
-        // pembayaran kedua atas order yang sama akan ditolak constraint unik).
-        const payment = await tx.payment.create({
-          data: {
-            orderId,
-            paymentNumber: `PAY-${order.orderNumber}`,
-            paymentMethod: PaymentMethod.WALLET,
-            amount,
-            status: PaymentStatus.PAID,
-            paidAt: new Date(),
-            notes: 'Pembayaran via saldo wallet',
-          },
-        });
-
-        const updatedOrder = await tx.order.update({
-          where: { id: orderId },
-          data: { status: OrderStatus.PAID },
-        });
-
-        await tx.orderStatusLog.create({
-          data: {
-            orderId,
-            status: OrderStatus.PAID,
-            notes: 'Dibayar via saldo wallet',
-            createdBy: customerId,
-          },
-        });
-
-        // Pemakaian promo dicatat saat order benar-benar dibayar.
-        await this.promosService.commitUsage(tx, orderId);
-
-        return {
-          wallet: { ...wallet, balance: ledger.balanceAfter },
-          transaction,
-          payment,
-          order: updatedOrder,
-        };
-      });
-    } catch (err) {
-      // Bentrok unik (idempotencyKey atau paymentNumber) → pembayaran ganda.
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002'
-      ) {
-        throw new ConflictException('Order sudah dibayar');
-      }
-      throw err;
-    }
-  }
 
   async refund(
     customerId: string,
@@ -387,9 +303,9 @@ export class WalletsService {
         customer: { select: { userId: true } },
         payments: {
           where: { status: PaymentStatus.PAID },
-          orderBy: { paidAt: 'desc' },
-          take: 1,
+          orderBy: { paidAt: 'asc' },
         },
+        machineBooking: { select: { status: true } },
       },
     });
 
@@ -417,7 +333,13 @@ export class WalletsService {
       );
     }
 
-    const payment = order.payments[0];
+    // Batch 2: refund pembayaran yang MELUNASI order (bukan sembarang yang
+    // terakhir) — pembayaran ganda ditangani lewat rekonsiliasi.
+    const payment =
+      order.payments.find((p) => p.id === order.paidPaymentId) ?? order.payments[0];
+    if (order.machineBooking?.status === 'IN_USE') {
+      throw new ConflictException('Mesin sedang dipakai — order tidak bisa direfund sekarang');
+    }
     if (!payment) {
       throw new BadRequestException('Pembayaran lunas tidak ditemukan');
     }
@@ -454,6 +376,8 @@ export class WalletsService {
 
         const transaction = mapLedgerToTransaction(ledger);
 
+        // Batch 4: voucher kembali hanya bila layanan belum dikonsumsi (kebijakan).
+        await restoreVoucherAfterRefundInTx(tx, order.id, actorUserId);
         const updatedOrder = await tx.order.update({
           where: { id: order.id },
           data: {
@@ -467,6 +391,23 @@ export class WalletsService {
             status: OrderStatus.REFUNDED,
             notes: description,
             createdBy: actorUserId,
+          },
+        });
+        // Mesin yang belum dipakai dilepas — order refund tidak bisa menyalakan mesin.
+        await releaseBookingForOrderInTx(tx, order.id);
+        // Permintaan refund terbuka untuk order ini ikut selesai (satu eksekusi).
+        await tx.paymentReconciliation.updateMany({
+          where: {
+            orderId: order.id,
+            reason: { in: ORDER_REFUND_REASONS },
+            status: { in: ['OPEN', 'REQUESTED', 'APPROVED'] },
+          },
+          data: {
+            status: 'REFUNDED',
+            refundMethod: 'WALLET_CREDIT',
+            executedBy: actorUserId,
+            executedAt: new Date(),
+            executionRef: ledger.id,
           },
         });
 

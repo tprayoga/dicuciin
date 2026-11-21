@@ -10,6 +10,7 @@ import { createHash, timingSafeEqual } from 'crypto';
 import {
   CreateChargeInput,
   CreateChargeResult,
+  GatewayChargeStatus,
   GatewayWebhookResult,
   PaymentGateway,
 } from './payment-gateway.interface';
@@ -96,7 +97,7 @@ export class MidtransPaymentGateway implements PaymentGateway {
   }
 
   async createCharge(input: CreateChargeInput): Promise<CreateChargeResult> {
-    const paymentNumber = `PG-${input.orderNumber}`;
+    const paymentNumber = input.paymentNumber ?? `PG-${input.orderNumber}`;
     const payload: Record<string, unknown> = {
       transaction_details: {
         order_id: paymentNumber,
@@ -168,6 +169,59 @@ export class MidtransPaymentGateway implements PaymentGateway {
     };
   }
 
+  /**
+   * Expire tagihan PENDING (`POST /v2/{order_id}/expire`). Bila Midtrans
+   * menolak (mis. sudah settlement), status sebenarnya ditanyakan lewat
+   * `GET /v2/{order_id}/status` — pemanggil WAJIB menangani hasil `PAID`.
+   */
+  async cancelCharge(paymentNumber: string): Promise<GatewayChargeStatus> {
+    try {
+      const res = await this.request<MidtransChargeResponse>(
+        `/v2/${encodeURIComponent(paymentNumber)}/expire`,
+        undefined,
+        'POST',
+        true,
+      );
+      const mapped = this.mapTransactionStatus(res.transaction_status);
+      if (mapped === 'EXPIRED' || mapped === 'CANCELLED') return mapped;
+    } catch (error) {
+      this.logger.warn(
+        `Expire tagihan ${paymentNumber} ditolak/gagal: ${(error as Error).message}`,
+      );
+    }
+    return this.getChargeStatus(paymentNumber);
+  }
+
+  async getChargeStatus(paymentNumber: string): Promise<GatewayChargeStatus> {
+    const res = await this.request<MidtransChargeResponse>(
+      `/v2/${encodeURIComponent(paymentNumber)}/status`,
+      undefined,
+      'GET',
+      true,
+    );
+    if (res.status_code === '404') return 'NOT_FOUND';
+    return this.mapTransactionStatus(res.transaction_status) ?? 'PENDING';
+  }
+
+  private mapTransactionStatus(raw?: string): GatewayChargeStatus | null {
+    switch ((raw ?? '').toLowerCase()) {
+      case 'settlement':
+      case 'capture':
+        return 'PAID';
+      case 'pending':
+        return 'PENDING';
+      case 'expire':
+        return 'EXPIRED';
+      case 'cancel':
+        return 'CANCELLED';
+      case 'deny':
+      case 'failure':
+        return 'FAILED';
+      default:
+        return null;
+    }
+  }
+
   parseWebhook(payload: Record<string, unknown>): GatewayWebhookResult {
     const orderId = this.requiredString(payload, 'order_id');
     const statusCode = this.requiredString(payload, 'status_code');
@@ -224,22 +278,26 @@ export class MidtransPaymentGateway implements PaymentGateway {
 
   private async request<T>(
     path: string,
-    body: Record<string, unknown>,
+    body: Record<string, unknown> | undefined,
+    method: 'GET' | 'POST' = 'POST',
+    /** true: kembalikan body walau HTTP non-2xx (status API memakai status_code di body). */
+    rawOnError = false,
   ): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
     try {
       const response = await fetch(`${this.baseUrl}${path}`, {
-        method: 'POST',
+        method,
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
           Authorization: `Basic ${Buffer.from(`${this.serverKey}:`).toString('base64')}`,
         },
-        body: JSON.stringify(body),
+        body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
       const data = (await response.json()) as MidtransChargeResponse;
+      if (rawOnError) return data as T;
       if (!response.ok) {
         throw this.rejected(
           data.status_code ?? String(response.status),

@@ -79,7 +79,9 @@ class _BookingMachinesPageState extends State<_BookingMachinesPage> {
     }
   }
 
-  /// Alur booking: pilih waktu + layanan → reservasi mesin → checkout (order+bayar).
+  /// Alur booking: pilih waktu + layanan → checkout. Booking mesin dibuat
+  /// server BERSAMAAN dengan order (atomik) saat bayar, dan mesin baru bisa
+  /// dipakai setelah order lunas — tidak ada lagi reservasi terpisah.
   Future<void> _openBookingFlow(OutletMachine m) async {
     final token = _token;
     if (token == null) return;
@@ -88,29 +90,13 @@ class _BookingMachinesPageState extends State<_BookingMachinesPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _BookingFlowSheet(outlet: widget.outlet, machine: m),
+      builder: (_) => _BookingFlowSheet(
+        outlet: widget.outlet,
+        machine: m,
+        hours: _data?.operatingHours ?? const OperatingHours(),
+      ),
     );
     if (choice == null || !mounted) return;
-
-    // Reservasi mesin untuk waktu terjadwal.
-    setState(() => _reservingCode = m.deviceCode);
-    try {
-      await context.read<CustomerController>().reserveMachine(
-            accessToken: token,
-            deviceCode: m.deviceCode,
-            scheduledAt: choice.scheduledAt.toUtc().toIso8601String(),
-          );
-    } on ApiException catch (e) {
-      if (mounted) AppToast.error(context, e.message);
-      if (mounted) setState(() => _reservingCode = null);
-      return;
-    } catch (_) {
-      if (mounted) AppToast.error(context, 'Gagal booking. Coba lagi.');
-      if (mounted) setState(() => _reservingCode = null);
-      return;
-    }
-    if (!mounted) return;
-    setState(() => _reservingCode = null);
 
     // Lanjut ke checkout untuk order + pembayaran layanan terpilih.
     final svc = choice.service;
@@ -118,8 +104,9 @@ class _BookingMachinesPageState extends State<_BookingMachinesPage> {
       machineName: m.name,
       machineType:
           m.isWasher ? _MachineType.washer : _MachineType.dryer,
-      capacity: svc.capacityKg != null
-          ? '${svc.capacityKg!.toStringAsFixed(0)} KG'
+      // Batch 6 (S3): kapasitas dari data mesin, lalu dari layanan.
+      capacity: (m.capacityKg ?? svc.capacityKg) != null
+          ? '${(m.capacityKg ?? svc.capacityKg)!.toStringAsFixed(0)} KG'
           : '—',
       estimasi:
           svc.estimateMinutes != null ? '${svc.estimateMinutes} Menit' : '—',
@@ -129,6 +116,8 @@ class _BookingMachinesPageState extends State<_BookingMachinesPage> {
       date: _bookingDateLabel(choice.scheduledAt),
       serviceId: svc.serviceId,
       outletId: svc.outletId.isNotEmpty ? svc.outletId : widget.outlet.id,
+      deviceId: m.deviceId,
+      scheduledAt: choice.scheduledAt,
     );
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => _OrderCheckoutPage(data: data)),
@@ -428,7 +417,14 @@ class _BookingChoice {
 
 /// Bottom sheet: pilih waktu (slot jam) + layanan untuk mesin yang dibooking.
 class _BookingFlowSheet extends StatefulWidget {
-  const _BookingFlowSheet({required this.outlet, required this.machine});
+  const _BookingFlowSheet({
+    required this.outlet,
+    required this.machine,
+    this.hours = const OperatingHours(),
+  });
+
+  /// Batch 6 (T8): jam operasional outlet → slot booking.
+  final OperatingHours hours;
 
   final OutletOption outlet;
   final OutletMachine machine;
@@ -467,14 +463,22 @@ class _BookingFlowSheetState extends State<_BookingFlowSheet> {
             outletId: widget.outlet.id,
           );
       if (!mounted) return;
-      // Saring sesuai tipe mesin; bila tak ada yang cocok, tampilkan semua.
+      // Batch 6 (S3): mesin dengan layanan terdaftar → hanya layanan itu
+      // (server menolak layanan lain). Selain itu saring sesuai tipe mesin.
+      final machineServiceId = widget.machine.service?.serviceId;
+      final own = machineServiceId == null
+          ? const <ServicePriceOption>[]
+          : prices.where((p) => p.serviceId == machineServiceId).toList();
       final wantDryer = !widget.machine.isWasher;
       final filtered = prices
           .where((p) =>
               ((p.machineType ?? '').toUpperCase().contains('DRY')) == wantDryer)
           .toList();
       setState(() {
-        _services = filtered.isNotEmpty ? filtered : prices;
+        _services = own.isNotEmpty
+            ? own
+            : (filtered.isNotEmpty ? filtered : prices);
+        if (_services.length == 1) _service = _services.first;
         _loading = false;
       });
     } catch (_) {
@@ -487,17 +491,10 @@ class _BookingFlowSheetState extends State<_BookingFlowSheet> {
     }
   }
 
-  /// Slot jam untuk hari terpilih: hari ini mulai jam berikutnya, besok 08:00.
-  List<DateTime> get _slots {
-    final base = DateTime.now().add(Duration(days: _dayOffset));
-    final day = DateTime(base.year, base.month, base.day);
-    final startHour = _dayOffset == 0
-        ? (DateTime.now().hour + 1).clamp(8, 21)
-        : 8;
-    return [
-      for (int h = startHour; h <= 21; h++) day.add(Duration(hours: h)),
-    ];
-  }
+  /// Batch 6 (T8): slot jam dari jam operasional outlet (sama dengan
+  /// validasi server). Dulu tetap 08–21 dan tetap muncul setelah jam 21.
+  List<DateTime> get _slots =>
+      widget.hours.hourlySlots(now: DateTime.now(), dayOffset: _dayOffset);
 
   bool get _ready => _slot != null && _service != null;
 
@@ -563,6 +560,13 @@ class _BookingFlowSheetState extends State<_BookingFlowSheet> {
                           padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
                           children: [
                             _label('Pilih Waktu'),
+                            if (widget.hours.label.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Jam operasional: ${widget.hours.label} WIB',
+                                style: const TextStyle(fontSize: 12, color: _textMuted),
+                              ),
+                            ],
                             const SizedBox(height: 8),
                             _dayTabs(),
                             const SizedBox(height: 10),
@@ -619,15 +623,18 @@ class _BookingFlowSheetState extends State<_BookingFlowSheet> {
   Widget _slotChips() {
     final slots = _slots;
     if (slots.isEmpty) {
-      return const Text('Tidak ada slot tersisa hari ini.',
-          style: TextStyle(color: _textMuted, fontSize: 13));
+      return Text(
+          _dayOffset == 0
+              ? 'Tidak ada slot tersisa hari ini. Pilih "Besok".'
+              : 'Outlet tidak menerima booking pada hari ini.',
+          style: const TextStyle(color: _textMuted, fontSize: 13));
     }
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: slots.map((s) {
         final active = _slot == s;
-        final label = '${s.hour.toString().padLeft(2, '0')}:00';
+        final label = widget.hours.wallLabel(s);
         return GestureDetector(
           onTap: () => setState(() => _slot = s),
           child: Container(

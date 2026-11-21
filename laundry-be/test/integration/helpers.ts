@@ -1,0 +1,102 @@
+import { Prisma, PrismaClient, UserRole } from '@prisma/client';
+import { randomUUID } from 'crypto';
+
+/** Kosongkan semua tabel aplikasi (kecuali histori migrasi). */
+export async function resetDb(prisma: PrismaClient) {
+  const rows = await prisma.$queryRaw<{ tablename: string }[]>`
+    SELECT tablename FROM pg_tables
+    WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;
+  if (rows.length === 0) return;
+  const list = rows.map((r) => `"public"."${r.tablename}"`).join(', ');
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+}
+
+const short = () => randomUUID().slice(0, 8);
+
+export async function createOutlet(prisma: PrismaClient, name = 'Outlet') {
+  return prisma.outlet.create({
+    data: { name: `${name} ${short()}`, code: `OUT-${short()}`, address: 'Jl. Uji', phone: '0800' },
+  });
+}
+
+export async function createUser(prisma: PrismaClient, role: UserRole, name: string = role) {
+  return prisma.user.create({
+    data: { name, email: `${short()}@uji.test`, passwordHash: 'x', role },
+  });
+}
+
+export async function createCustomer(prisma: PrismaClient, opts: { balance?: number } = {}) {
+  const user = await createUser(prisma, UserRole.CUSTOMER, `Customer ${short()}`);
+  const customer = await prisma.customer.create({
+    data: { userId: user.id, memberCode: `MBR-${short()}` },
+  });
+  const wallet = await prisma.wallet.create({
+    data: { customerId: customer.id, balance: new Prisma.Decimal(opts.balance ?? 0) },
+  });
+  return { user, customer, wallet, auth: { userId: user.id, role: UserRole.CUSTOMER } };
+}
+
+export async function createMachine(
+  prisma: PrismaClient,
+  outletId: string,
+  type: 'WASHING_MACHINE' | 'DRYER_MACHINE' = 'WASHING_MACHINE',
+) {
+  return prisma.iotDevice.create({
+    data: {
+      outletId,
+      deviceCode: `M-${short()}`,
+      deviceType: type,
+      name: 'Mesin Uji',
+      status: 'ONLINE',
+    },
+  });
+}
+
+export async function createServiceWithPrice(prisma: PrismaClient, outletId: string, price = 10000) {
+  const service = await prisma.service.create({
+    data: { name: `Cuci ${short()}`, serviceType: 'WASH', machineType: 'WASHER', estimateMinutes: 25 },
+  });
+  await prisma.servicePrice.create({
+    data: { serviceId: service.id, outletId, pricingType: 'FIXED', price: new Prisma.Decimal(price), unit: 'CYCLE' },
+  });
+  return service;
+}
+
+export const inMinutes = (m: number) => new Date(Date.now() + m * 60_000);
+
+/** Gateway tiruan yang bisa dikendalikan test. */
+export function controllableGateway() {
+  const charges = new Map<string, string>();
+  const gw = {
+    name: 'mock',
+    charges,
+    createCharge: jest.fn(async (input: any) => {
+      charges.set(input.paymentNumber, 'PENDING');
+      return {
+        externalId: `ext-${input.paymentNumber}`,
+        qrString: input.method === 'QRIS' ? `qr-${input.paymentNumber}` : undefined,
+        vaNumber: input.method === 'VA' ? `8808${input.paymentNumber.length}000` : undefined,
+        bank: input.bank,
+        expiresAt: inMinutes(15),
+      };
+    }),
+    cancelCharge: jest.fn(async (pn: string) => {
+      if (charges.get(pn) === 'PAID') return 'PAID';
+      charges.set(pn, 'CANCELLED');
+      return 'CANCELLED';
+    }),
+    getChargeStatus: jest.fn(async (pn: string) => charges.get(pn) ?? 'NOT_FOUND'),
+    /**
+     * Batch 4: webhook "terverifikasi" tiruan (signature dianggap sah, seperti
+     * hasil MidtransPaymentGateway.parseWebhook) — bukan uji signature Midtrans.
+     */
+    parseWebhook: jest.fn((payload: Record<string, unknown>) => ({
+      paymentNumber: payload.order_id as string,
+      externalId: payload.transaction_id as string | undefined,
+      status: payload.status as 'PAID' | 'FAILED' | 'EXPIRED' | 'PENDING',
+      grossAmount: payload.gross_amount !== undefined ? Number(payload.gross_amount) : undefined,
+    })),
+  };
+  return gw;
+}
+

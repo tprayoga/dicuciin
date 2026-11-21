@@ -108,13 +108,13 @@ async function onFilePick(e: Event) {
 }
 
 function toInputDate(iso: string | null) {
-  return iso ? iso.slice(0, 10) : ''
+  return toWibInputDate(iso)
 }
 
 function periodLabel(b: AppBanner) {
   if (!b.startDate && !b.endDate) return 'Tanpa batas periode'
-  const start = b.startDate ? new Date(b.startDate).toLocaleDateString('id-ID') : '—'
-  const end = b.endDate ? new Date(b.endDate).toLocaleDateString('id-ID') : '—'
+  const start = b.startDate ? formatWibDate(b.startDate) : '—'
+  const end = b.endDate ? formatWibDate(b.endDate) : '—'
   return `${start} s.d. ${end}`
 }
 
@@ -180,8 +180,9 @@ function payload() {
     placement: form.placement,
     sortOrder: Number(form.sortOrder) || 0,
     isActive: form.isActive,
-    startDate: form.startDate ? new Date(form.startDate).toISOString() : undefined,
-    endDate: form.endDate ? new Date(form.endDate).toISOString() : undefined,
+    // null = periode dikosongkan (server menghapus batasnya saat edit).
+    startDate: form.startDate ? wibStartOfDay(form.startDate) : null,
+    endDate: form.endDate ? wibEndOfDay(form.endDate) : null,
   }
 }
 

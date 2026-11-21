@@ -1,9 +1,11 @@
 import {
+  Matches,
   IsString,
   IsNumber,
   IsOptional,
   IsArray,
   ValidateNested,
+  IsDateString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
@@ -78,6 +80,38 @@ export class CheckoutDto {
   @IsString()
   @IsOptional()
   kioskId?: string;
+
+  @ApiProperty({ required: false, description: 'Mesin yang dipesan (alur booking)' })
+  @IsString()
+  @IsOptional()
+  deviceId?: string;
+
+  @ApiProperty({ required: false, description: 'Kode mesin (alternatif deviceId)' })
+  @IsString()
+  @IsOptional()
+  deviceCode?: string;
+
+  @ApiProperty({ required: false, description: 'Jadwal pemakaian (ISO 8601); kosong = sekarang' })
+  @IsDateString()
+  @IsOptional()
+  scheduledAt?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Batch 3 (S1): bayar order yang SUDAH ada dengan saldo (tidak membuat order baru)',
+  })
+  @IsString()
+  @IsOptional()
+  orderId?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'PIN wallet (Batch 4). Tanpa PIN → wajib bukti dari /pin/verify yang baru sukses',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[0-9]{6}$/, { message: 'PIN harus 6 digit angka' })
+  pin?: string;
 }
 
 export class RefundTransactionDto {

@@ -26,6 +26,13 @@ class AuthController extends ChangeNotifier {
   String? _errorMessage;
   bool _isProfileUpdating = false;
 
+  /// Refresh yang sedang berjalan — dipakai bersama semua request yang kena 401
+  /// pada saat yang sama (server merotasi refresh token; refresh ganda dengan
+  /// token lama akan ditolak).
+  Future<String?>? _refreshing;
+
+  static const sessionExpiredMessage = 'Sesi berakhir. Silakan masuk lagi.';
+
   AuthStatus get status => _status;
   AppUser? get user => _user;
   String? get accessToken => _accessToken;
@@ -216,6 +223,106 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Batch 5 (T1): dipasang ke [ApiClient.onUnauthorized]. Mengembalikan access
+  /// token baru, atau null bila sesi benar-benar berakhir (lalu logout lokal
+  /// dengan pesan "Sesi berakhir").
+  Future<String?> handleUnauthorized(String failedAccessToken) async {
+    // Request lain sudah me-refresh → cukup pakai token terbaru.
+    if (_accessToken != null && _accessToken != failedAccessToken) {
+      return _accessToken;
+    }
+    if (_status != AuthStatus.authenticated && _status != AuthStatus.loading) {
+      return null;
+    }
+    final inflight = _refreshing;
+    if (inflight != null) return inflight;
+    final future = _refreshOnce();
+    _refreshing = future;
+    try {
+      return await future;
+    } finally {
+      _refreshing = null;
+    }
+  }
+
+  Future<String?> _refreshOnce() async {
+    if (_refreshToken == null) {
+      await _expireSession();
+      return null;
+    }
+    try {
+      await _refreshAccessToken();
+      notifyListeners();
+      return _accessToken;
+    } on ApiException catch (e) {
+      // 401/403 = refresh token ditolak (dicabut, kedaluwarsa, dipakai ulang).
+      // Error lain (jaringan, 5xx) = sesi dipertahankan; request gagal biasa.
+      if (e.statusCode == 401 || e.statusCode == 403) {
+        await _expireSession();
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _expireSession() async {
+    if (_status == AuthStatus.unauthenticated) return;
+    await signOut(localOnly: true);
+    _errorMessage = sessionExpiredMessage;
+    notifyListeners();
+  }
+
+  /// Batch 5: ganti kata sandi. Melempar [ApiException] dengan pesan server.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final token = _accessToken;
+    if (token == null) throw ApiException(sessionExpiredMessage, statusCode: 401);
+    await _authService.changePassword(
+      accessToken: token,
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+    );
+  }
+
+  /// Batch 6: pratinjau hapus akun. Melempar [ApiException] (mis. 403 bila
+  /// fitur belum diaktifkan — pesannya mengarahkan ke layanan pelanggan).
+  Future<Map<String, dynamic>> accountDeletionPreview() {
+    final token = _accessToken;
+    if (token == null) throw ApiException(sessionExpiredMessage, statusCode: 401);
+    return _authService.accountDeletionPreview(accessToken: token);
+  }
+
+  /// Batch 6: hapus akun. COMPLETED → logout lokal; PENDING_REVIEW → akun
+  /// tetap aktif (ada saldo/transaksi yang harus dituntaskan dulu).
+  Future<Map<String, dynamic>> deleteAccount({
+    required String password,
+    String? reason,
+  }) async {
+    final token = _accessToken;
+    if (token == null) throw ApiException(sessionExpiredMessage, statusCode: 401);
+    final result = await _authService.deleteAccount(
+      accessToken: token,
+      password: password,
+      reason: reason,
+    );
+    if (result['status'] == 'COMPLETED') {
+      await signOut(localOnly: true);
+    }
+    return result;
+  }
+
+  /// Batch 5: keluar dari semua perangkat, lalu logout lokal.
+  Future<void> signOutEverywhere() async {
+    final token = _accessToken;
+    if (token != null) {
+      await _authService.logoutAll(accessToken: token);
+    }
+    await signOut(localOnly: true);
+  }
+
   Future<void> signOut({bool localOnly = false}) async {
     if (!localOnly && _accessToken != null && _refreshToken != null) {
       try {
@@ -240,7 +347,6 @@ class AuthController extends ChangeNotifier {
   Future<bool> updateProfile({
     required String name,
     String? email,
-    String? phone,
   }) async {
     if (_user == null || _accessToken == null) return false;
 
@@ -251,10 +357,8 @@ class AuthController extends ChangeNotifier {
     try {
       _user = await _authService.updateProfile(
         accessToken: _accessToken!,
-        userId: _user!.id,
         name: name,
         email: email,
-        phone: phone,
       );
       _isProfileUpdating = false;
       notifyListeners();

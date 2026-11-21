@@ -62,6 +62,30 @@ enum PaymentStatus {
   FAILED
   EXPIRED
   REFUNDED
+  CANCELLED // percobaan diganti/dibatalkan (Batch 2) — tagihan gateway di-expire
+}
+
+enum ReconciliationReason {
+  DUPLICATE_PAYMENT // order sudah dibayar lewat pembayaran lain
+  PAID_AFTER_CANCEL // dana masuk setelah order CANCELLED/REFUNDED
+  PAID_BOOKING_UNAVAILABLE // order dibayar tetapi slot mesin sudah hilang
+  PAID_NOT_USED // booking dibayar tidak pernah dipakai (kedaluwarsa)
+  CUSTOMER_REQUEST // permintaan refund dari customer
+  TOPUP_LATE_SETTLEMENT // top-up lunas (terverifikasi provider) setelah kedaluwarsa/dibatalkan — saldo dikreditkan, ditinjau admin
+}
+
+enum ReconciliationStatus {
+  OPEN // butuh tinjauan admin (dibuat sistem)
+  REQUESTED // diajukan customer
+  APPROVED
+  REJECTED
+  REFUNDED // refund dieksekusi (sekali)
+  CLOSED // ditutup tanpa refund (mis. dijadwalkan ulang)
+}
+
+enum RefundMethod {
+  WALLET_CREDIT // kembalikan ke saldo MAIN customer (idempoten)
+  EXTERNAL // refund di luar sistem (dashboard Midtrans / transfer) — wajib referensi
 }
 
 enum PromoType {
@@ -86,6 +110,17 @@ enum OtpPurpose {
   REGISTER
   LOGIN
   RESET_PASSWORD
+  ACCOUNT_DELETION
+}
+
+/// Batch 6: status permintaan hapus akun.
+enum AccountDeletionStatus {
+  /// Tercatat tetapi belum bisa diproses (ada saldo/transaksi aktif) — ditinjau admin.
+  PENDING_REVIEW
+  /// Data pribadi sudah dianonimkan, akun dinonaktifkan.
+  COMPLETED
+  /// Dibatalkan pengguna/admin.
+  CANCELLED
 }
 
 enum BannerPlacement {
@@ -99,6 +134,7 @@ enum ReviewSource {
 }
 
 enum BookingStatus {
+  HOLD // order dibuat, menunggu pembayaran (kedaluwarsa singkat)
   RESERVED
   IN_USE
   DONE
@@ -176,26 +212,36 @@ enum ReferralStatus {
 // ============================================
 
 model User {
-  id              String    @id @default(uuid())
-  name            String
-  email           String?   @unique
-  phone           String?   @unique
-  passwordHash    String
-  role            UserRole  @default(CUSTOMER)
-  isActive        Boolean   @default(true)
-  avatarUrl       String?
-  phoneVerifiedAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                  String    @id @default(uuid())
+  name                String
+  email               String?   @unique
+  phone               String?   @unique
+  passwordHash        String
+  role                UserRole  @default(CUSTOMER)
+  isActive            Boolean   @default(true)
+  avatarUrl           String?
+  phoneVerifiedAt     DateTime?
+  /// Batch 5: waktu password terakhir diubah (token lama / token verifikasi sebelum ini ditolak).
+  passwordChangedAt   DateTime?
+  /// Batch 5: penguncian login per akun.
+  failedLoginAttempts Int       @default(0)
+  loginLockedUntil    DateTime?
+  /// Batch 6: akun dihapus atas permintaan pengguna (data pribadi dianonimkan).
+  deletedAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  customer       Customer?
-  outletUsers    OutletUser[]
-  auditLogs      AuditLog[]
-  refreshTokens  RefreshToken[]
-  reviews        Review[]       @relation("StaffReviews")
-  staffOrders    Order[]        @relation("StaffOrders")
-  kioskSessions  KioskSession[] @relation("StaffKioskSessions")
-  b2bPartner     B2BPartner?
+  customer         Customer?
+  authSessions     AuthSession[]
+  notifications    Notification[]
+  deletionRequests AccountDeletionRequest[]
+  outletUsers      OutletUser[]
+  auditLogs        AuditLog[]
+  refreshTokens    RefreshToken[]
+  reviews          Review[]                 @relation("StaffReviews")
+  staffOrders      Order[]                  @relation("StaffOrders")
+  kioskSessions    KioskSession[]           @relation("StaffKioskSessions")
+  b2bPartner       B2BPartner?
 
   @@index([email])
   @@index([phone])
@@ -204,26 +250,32 @@ model User {
 }
 
 model Customer {
-  id            String    @id @default(uuid())
-  userId        String    @unique
-  memberCode    String    @unique
-  birthDate     DateTime?
-  gender        String?
-  occupation    String?
-  walletPinHash String?
-  pinSetAt      DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                      String    @id @default(uuid())
+  userId                  String    @unique
+  memberCode              String    @unique
+  birthDate               DateTime?
+  gender                  String?
+  occupation              String?
+  walletPinHash           String?
+  pinSetAt                DateTime?
+  /// Percobaan PIN salah berturut-turut (dipakai verifikasi PIN di kiosk).
+  walletPinFailedAttempts Int       @default(0)
+  walletPinLockedUntil    DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
-  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  addresses        CustomerAddress[]
-  orders           Order[]
-  wallet           Wallet?
-  promoUsages      PromoUsage[]
-  reviews          Review[]
-  bookings         MachineBooking[]
-  userVouchers     UserVoucher[]
-  membershipStatus UserMembershipStatus?
+  user                   User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addresses              CustomerAddress[]
+  orders                 Order[]
+  wallet                 Wallet?
+  promoUsages            PromoUsage[]
+  reviews                Review[]
+  bookings               MachineBooking[]
+  userVouchers           UserVoucher[]
+  membershipStatus       UserMembershipStatus?
+  paymentReconciliations PaymentReconciliation[]
+  walletTopups           WalletTopup[]
+  walletPinProofs        WalletPinProof[]
 
   @@index([memberCode])
   @@map("customers")
@@ -267,12 +319,12 @@ model Outlet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  outletUsers    OutletUser[]
-  servicePrices  ServicePrice[]
-  orders         Order[]
-  kiosks         Kiosk[]
-  iotDevices     IotDevice[]
-  happyHourRules HappyHourRule[]
+  outletUsers     OutletUser[]
+  servicePrices   ServicePrice[]
+  orders          Order[]
+  kiosks          Kiosk[]
+  iotDevices      IotDevice[]
+  happyHourRules  HappyHourRule[]
   b2bPricingRules B2BPricingRule[]
 
   @@index([code])
@@ -309,9 +361,10 @@ model Service {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  servicePrices  ServicePrice[]
-  orderItems     OrderItem[]
-  happyHourRules HappyHourRule[]
+  servicePrices   ServicePrice[]
+  orderItems      OrderItem[]
+  machines        IotDevice[]
+  happyHourRules  HappyHourRule[]
   b2bPricingRules B2BPricingRule[]
 
   @@map("services")
@@ -363,24 +416,36 @@ model Order {
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
-  customer           Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  customerAddress    CustomerAddress?    @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
-  outlet             Outlet              @relation(fields: [outletId], references: [id])
-  kiosk              Kiosk?              @relation(fields: [kioskId], references: [id], onDelete: SetNull)
-  staff              User?               @relation("StaffOrders", fields: [staffUserId], references: [id], onDelete: SetNull)
-  promo              Promo?              @relation(fields: [promoId], references: [id], onDelete: SetNull)
-  partner            B2BPartner?         @relation(fields: [partnerId], references: [id], onDelete: SetNull)
-  items              OrderItem[]
-  statusLogs         OrderStatusLog[]
-  payments           Payment[]
-  walletTransactions WalletTransaction[]
-  walletLedgers      WalletLedger[]
-  pointLedgers       PointLedger[]
-  promoUsages        PromoUsage[]
-  voucherRedemption  VoucherRedemption?
+  customer             Customer?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerAddress      CustomerAddress?        @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
+  outlet               Outlet                  @relation(fields: [outletId], references: [id])
+  kiosk                Kiosk?                  @relation(fields: [kioskId], references: [id], onDelete: SetNull)
+  staff                User?                   @relation("StaffOrders", fields: [staffUserId], references: [id], onDelete: SetNull)
+  promo                Promo?                  @relation(fields: [promoId], references: [id], onDelete: SetNull)
+  partner              B2BPartner?             @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  items                OrderItem[]
+  statusLogs           OrderStatusLog[]
+  payments             Payment[]
+  /// Batch 2: SATU-SATUNYA pembayaran yang melunasi order (unik → satu
+  /// pembayaran tidak bisa melunasi dua order; order tidak dilunasi dua kali).
+  paidPaymentId        String?                 @unique
+  /// Batch 3: rincian harga dari mesin pricing tunggal (voucher, happy hour,
+  /// B2B, estimasi durasi) + reservasi voucher/kuota yang dipegang order.
+  pricingSnapshot      Json?
+  /// Kapan reservasi voucher/kuota dilepas (order batal) — idempoten.
+  pricingReleasedAt    DateTime?
+  paidPayment          Payment?                @relation("OrderPaidPayment", fields: [paidPaymentId], references: [id], onDelete: SetNull)
+  reconciliations      PaymentReconciliation[]
+  walletTransactions   WalletTransaction[]
+  walletLedgers        WalletLedger[]
+  pointLedgers         PointLedger[]
+  promoUsages          PromoUsage[]
+  voucherRedemption    VoucherRedemption?
   b2bPricingRuleUsages B2BPricingRuleUsage[]
-  iotCommands        IotCommand[]
-  review             Review?
+  iotCommands          IotCommand[]
+  review               Review?
+
+  machineBooking MachineBooking?
 
   @@index([orderNumber])
   @@index([customerId])
@@ -438,10 +503,19 @@ model Payment {
   externalId       String?
   externalResponse Json?
   notes            String?
+  /// Batch 2: kedaluwarsa otoritatif dari server (bukan timer klien).
+  expiresAt        DateTime?
+  provider         String?
+  cancelledAt      DateTime?
+  /// = orderId selama percobaan PENDING, NULL setelah final. Unik → paling
+  /// banyak SATU percobaan pembayaran aktif per order (dijaga database).
+  pendingSlot      String?       @unique
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order           Order                   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  settledOrder    Order?                  @relation("OrderPaidPayment")
+  reconciliations PaymentReconciliation[]
 
   @@index([orderId])
   @@index([paymentNumber])
@@ -463,6 +537,7 @@ model Wallet {
   transactions WalletTransaction[]
   ledgers      WalletLedger[]
   pointLedgers PointLedger[]
+  topups       WalletTopup[]
 
   @@map("wallets")
 }
@@ -550,16 +625,16 @@ model PromoUsage {
 }
 
 model Kiosk {
-  id            String    @id @default(uuid())
-  outletId      String
-  kioskCode     String    @unique
-  name          String
-  location      String?
-  status        String    @default("ACTIVE")
-  lastHeartbeat DateTime?
+  id                      String    @id @default(uuid())
+  outletId                String
+  kioskCode               String    @unique
+  name                    String
+  location                String?
+  status                  String    @default("ACTIVE")
+  lastHeartbeat           DateTime?
   enrollmentCodeHash      String?
   enrollmentCodeExpiresAt DateTime?
-  deviceTokenHash         String?    @unique
+  deviceTokenHash         String?   @unique
   deviceId                String?
   enrolledAt              DateTime?
   tokenRevokedAt          DateTime?
@@ -568,8 +643,8 @@ model Kiosk {
   scheduleOpenTime        String?
   scheduleCloseTime       String?
   timezone                String    @default("Asia/Jakarta")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   outlet   Outlet         @relation(fields: [outletId], references: [id], onDelete: Cascade)
   sessions KioskSession[]
@@ -612,11 +687,16 @@ model IotDevice {
   status          String     @default("OFFLINE")
   lastHeartbeatAt DateTime?
   metadata        Json?
+  /// Batch 6 (S3): kapasitas mesin (kg) — sumber kebenaran untuk aplikasi.
+  capacityKg      Float?
+  /// Batch 6 (S3): layanan yang dijalankan mesin ini (harga & durasi per outlet).
+  serviceId       String?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  outlet   Outlet       @relation(fields: [outletId], references: [id], onDelete: Cascade)
-  kiosk    Kiosk?       @relation(fields: [kioskId], references: [id], onDelete: SetNull)
+  outlet   Outlet           @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  kiosk    Kiosk?           @relation(fields: [kioskId], references: [id], onDelete: SetNull)
+  service  Service?         @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   commands IotCommand[]
   events   IotEvent[]
   bookings MachineBooking[]
@@ -687,17 +767,44 @@ model AuditLog {
 model RefreshToken {
   id        String    @id @default(uuid())
   userId    String
+  /// Batch 5: sesi pemilik token (null = token sebelum Batch 5).
+  sessionId String?
   tokenHash String    @unique
   expiresAt DateTime
   revokedAt DateTime?
+  /// Batch 5: diisi saat token ditukar (rotasi); pemakaian ulang setelahnya = indikasi pencurian.
+  rotatedAt DateTime?
   createdAt DateTime  @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session AuthSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([sessionId])
   @@index([tokenHash])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+/// Batch 5: satu login di satu perangkat. Access token membawa `sid`; mencabut
+/// sesi langsung menolak access & refresh token-nya.
+model AuthSession {
+  id            String    @id @default(uuid())
+  userId        String
+  createdAt     DateTime  @default(now())
+  lastUsedAt    DateTime  @default(now())
+  /// Umur maksimum sesi (AUTH_SESSION_MAX_DAYS); null = tanpa batas absolut.
+  expiresAt     DateTime?
+  revokedAt     DateTime?
+  revokedReason String?
+  userAgent     String?
+  ipAddress     String?
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
+
+  @@index([userId, revokedAt])
+  @@map("auth_sessions")
 }
 
 model OtpCode {
@@ -766,22 +873,26 @@ model Review {
 /// pemesan yang bisa mengaktifkan (verifikasi scan QR mesin) → cegah dipakai
 /// orang lain. orderId opsional (bila booking ditautkan ke pembayaran).
 model MachineBooking {
-  id          String        @id @default(uuid())
-  deviceId    String
-  customerId  String
-  orderId     String?       @unique
-  bookingCode String        @unique
-  status      BookingStatus @default(RESERVED)
-  reservedAt  DateTime      @default(now())
-  scheduledAt DateTime?
-  expiresAt   DateTime
-  startedAt   DateTime?
-  endedAt     DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id              String        @id @default(uuid())
+  deviceId        String
+  /// null = booking tamu kiosk (order kiosk tanpa akun customer).
+  customerId      String?
+  orderId         String?       @unique
+  bookingCode     String        @unique
+  status          BookingStatus @default(RESERVED)
+  reservedAt      DateTime      @default(now())
+  scheduledAt     DateTime?
+  /// Batch 3: lama pemakaian (mis. dryer 3 siklus); NULL = BOOKING_SLOT_MINUTES.
+  durationMinutes Int?
+  expiresAt       DateTime
+  startedAt       DateTime?
+  endedAt         DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   device   IotDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  customer Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  order    Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   @@index([deviceId, status])
   @@index([customerId])
@@ -810,8 +921,9 @@ model WalletLedger {
   idempotencyKey String?         @unique
   createdAt      DateTime        @default(now())
 
-  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  order  Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  wallet Wallet       @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  order  Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  topup  WalletTopup?
 
   @@index([walletId])
   @@index([walletType])
@@ -959,19 +1071,19 @@ model MembershipTierConfig {
 
 /// Konfigurasi tier partner B2B.
 model B2BPartnerTierConfig {
-  id                  String         @id @default(uuid())
-  tier                B2BPartnerTier @unique
-  name                String
-  level               Int            @unique
-  thresholdSpending   Decimal?       @db.Decimal(14, 2)
-  thresholdTxnCount   Int?
-  discountRate        Decimal        @default(0) @db.Decimal(5, 2) // % potongan harga partner
-  pointMultiplier     Decimal        @default(1) @db.Decimal(6, 2)
-  cashbackRate        Decimal        @default(0) @db.Decimal(5, 2)
-  benefitDescription  String?
-  isActive            Boolean        @default(true)
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+  id                 String         @id @default(uuid())
+  tier               B2BPartnerTier @unique
+  name               String
+  level              Int            @unique
+  thresholdSpending  Decimal?       @db.Decimal(14, 2)
+  thresholdTxnCount  Int?
+  discountRate       Decimal        @default(0) @db.Decimal(5, 2) // % potongan harga partner
+  pointMultiplier    Decimal        @default(1) @db.Decimal(6, 2)
+  cashbackRate       Decimal        @default(0) @db.Decimal(5, 2)
+  benefitDescription String?
+  isActive           Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
   @@map("b2b_partner_tiers")
 }
@@ -995,9 +1107,9 @@ model B2BPricingRule {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  partner B2BPartner? @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  outlet  Outlet?     @relation(fields: [outletId], references: [id], onDelete: Cascade)
-  service Service?    @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  partner B2BPartner?           @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  outlet  Outlet?               @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  service Service?              @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   usages  B2BPricingRuleUsage[]
 
   @@index([partnerId])
@@ -1068,12 +1180,12 @@ model B2BPartner {
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
-  user             User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
-  wallet           Wallet?
-  membershipStatus UserMembershipStatus?
-  userVouchers     UserVoucher[]
-  orders           Order[]
-  pricingRules     B2BPricingRule[]
+  user              User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  wallet            Wallet?
+  membershipStatus  UserMembershipStatus?
+  userVouchers      UserVoucher[]
+  orders            Order[]
+  pricingRules      B2BPricingRule[]
   pricingRuleUsages B2BPricingRuleUsage[]
 
   @@index([partnerCode])
@@ -1203,26 +1315,26 @@ model CampaignReward {
 
 /// Aturan happy hour: ubah harga mesin/layanan per hari & jam.
 model HappyHourRule {
-  id             String    @id @default(uuid())
-  name           String
-  outletId       String?
-  serviceId      String?
-  machineType    String?
-  daysOfWeek     String // CSV "1,2,3" (1=Senin)
-  startTime      String // "18:00"
-  endTime        String // "21:00"
-  timezone       String    @default("Asia/Jakarta")
-  adjustmentType String // PERCENTAGE_OFF | FIXED_OFF | FIXED_PRICE
-  value          Decimal   @db.Decimal(14, 2)
-  quota          Int?
-  usedQuota      Int       @default(0)
-  allowVoucherStack Boolean @default(true)
-  priority       Int       @default(0)
-  startDate      DateTime?
-  endDate        DateTime?
-  isActive       Boolean   @default(true)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id                String    @id @default(uuid())
+  name              String
+  outletId          String?
+  serviceId         String?
+  machineType       String?
+  daysOfWeek        String // CSV "1,2,3" (1=Senin)
+  startTime         String // "18:00"
+  endTime           String // "21:00"
+  timezone          String    @default("Asia/Jakarta")
+  adjustmentType    String // PERCENTAGE_OFF | FIXED_OFF | FIXED_PRICE
+  value             Decimal   @db.Decimal(14, 2)
+  quota             Int?
+  usedQuota         Int       @default(0)
+  allowVoucherStack Boolean   @default(true)
+  priority          Int       @default(0)
+  startDate         DateTime?
+  endDate           DateTime?
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   outlet  Outlet?  @relation(fields: [outletId], references: [id], onDelete: Cascade)
   service Service? @relation(fields: [serviceId], references: [id], onDelete: Cascade)
@@ -1274,4 +1386,164 @@ model PricingCalculationLog {
   @@index([customerId])
   @@index([partnerId])
   @@map("pricing_calculation_logs")
+}
+
+/// Penghitung nomor urut harian (ORD-YYYYMMDD-NNNNNN, MBR-…). Increment atomik
+/// lewat INSERT … ON CONFLICT DO UPDATE agar aman untuk request paralel.
+model DailySequence {
+  key       String   @id
+  value     Int
+  updatedAt DateTime @updatedAt
+
+  @@map("daily_sequences")
+}
+
+/// Batch 2 — rekonsiliasi keuangan: dana yang perlu ditinjau/di-refund.
+/// Satu baris per (pembayaran, alasan) → pencatatan idempoten.
+model PaymentReconciliation {
+  id           String               @id @default(uuid())
+  paymentId    String?
+  orderId      String?
+  /// Batch 4: rekonsiliasi top-up saldo (tanpa order).
+  topupId      String?
+  customerId   String?
+  amount       Decimal              @db.Decimal(14, 2)
+  refundAmount Decimal              @db.Decimal(14, 2)
+  provider     String?
+  providerRef  String?
+  reason       ReconciliationReason
+  status       ReconciliationStatus @default(OPEN)
+  note         String?
+  requestedBy  String?
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  refundMethod RefundMethod?
+  executedBy   String?
+  executedAt   DateTime?
+  /// Referensi eksekusi (id ledger wallet / referensi transfer) — bukti tunggal.
+  executionRef String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  payment  Payment?     @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  order    Order?       @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  topup    WalletTopup? @relation(fields: [topupId], references: [id], onDelete: Restrict)
+  customer Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@unique([paymentId, reason])
+  @@unique([topupId, reason])
+  @@index([status])
+  @@index([orderId])
+  @@map("payment_reconciliations")
+}
+
+enum TopupStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  CANCELLED
+  REFUNDED // dana dikembalikan di luar sistem + kredit saldo dibalik (debit kompensasi)
+}
+
+/// Batch 4 — top-up saldo mandiri lewat Midtrans (QRIS/VA). Saldo HANYA
+/// dikreditkan setelah pelunasan terverifikasi (webhook bertanda tangan atau
+/// status API provider), tepat sekali (`ledgerId` unik + idempotencyKey ledger).
+model WalletTopup {
+  id               String      @id @default(uuid())
+  /// = order_id Midtrans (unik per percobaan).
+  topupNumber      String      @unique
+  customerId       String
+  walletId         String
+  /// Nominal yang dikreditkan ke saldo.
+  amount           Decimal     @db.Decimal(14, 2)
+  adminFee         Decimal     @default(0) @db.Decimal(14, 2)
+  /// Nominal yang ditagih ke pelanggan (amount + adminFee) — dicek ke webhook.
+  chargeAmount     Decimal     @db.Decimal(14, 2)
+  method           String
+  bank             String?
+  status           TopupStatus @default(PENDING)
+  provider         String?
+  externalId       String?
+  externalResponse Json?
+  expiresAt        DateTime?
+  paidAt           DateTime?
+  cancelledAt      DateTime?
+  /// Refund eksternal (rekonsiliasi) — kredit saldo dibalik pada saat yang sama.
+  refundedAt       DateTime?
+  /// = customerId selama PENDING (unik → <=1 top-up aktif per customer).
+  pendingSlot      String?     @unique
+  /// Kredit ledger tunggal untuk top-up ini.
+  ledgerId         String?     @unique
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  customer        Customer                @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  wallet          Wallet                  @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  ledger          WalletLedger?           @relation(fields: [ledgerId], references: [id], onDelete: Restrict)
+  reconciliations PaymentReconciliation[]
+
+  @@index([customerId, createdAt])
+  @@index([status])
+  @@map("wallet_topups")
+}
+
+/// Batch 4 — bukti PIN sekali pakai untuk app lama (/pin/verify lalu bayar tanpa
+/// PIN). Terikat ke customer DAN sesi (hash SHA-256 access token), berumur
+/// pendek, dikonsumsi atomik sekali. Baris tidak dihapus (jejak audit).
+model WalletPinProof {
+  id          String    @id @default(uuid())
+  customerId  String
+  sessionHash String
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, sessionHash])
+  @@map("wallet_pin_proofs")
+}
+
+/// Batch 6 (R1): notifikasi dalam aplikasi. Ditulis di transaksi yang sama
+/// dengan kejadiannya; `dedupeKey` unik → percobaan ulang tidak menggandakan.
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  data      Json?
+  dedupeKey String?   @unique
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+/// Batch 6: permintaan hapus akun (aplikasi atau web). Disimpan untuk audit.
+model AccountDeletionRequest {
+  id              String                @id @default(uuid())
+  userId          String
+  status          AccountDeletionStatus
+  channel         String // APP | WEB
+  reason          String?
+  /// Penghalang saat diajukan (saldo, order/booking/pembayaran aktif, refund terbuka).
+  blockers        Json?
+  /// Saldo saat diajukan (rupiah) — catatan, bukan sumber kebenaran.
+  balanceSnapshot Decimal?              @db.Decimal(14, 2)
+  requestedAt     DateTime              @default(now())
+  completedAt     DateTime?
+  processedBy     String?
+  note            String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("account_deletion_requests")
 }

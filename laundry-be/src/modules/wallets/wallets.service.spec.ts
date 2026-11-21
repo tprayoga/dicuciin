@@ -1,3 +1,15 @@
+// Batch 4: logika PIN (penguncian, bukti, paralel) & kebijakan voucher refund diuji
+// nyata di integration (wallet-pin.int-spec, refund-voucher-policy). Di sini hanya
+// delegasi & kepemilikan.
+jest.mock('../../common/auth/wallet-pin', () => ({
+  setWalletPin: jest.fn().mockResolvedValue(undefined),
+  verifyWalletPinWithLockout: jest.fn().mockResolvedValue(undefined),
+  walletPinStatus: jest.fn().mockResolvedValue({ hasPin: true, lockedUntil: null }),
+}));
+jest.mock('../orders/voucher-refund-policy', () => ({
+  restoreVoucherAfterRefundInTx: jest.fn().mockResolvedValue({ restored: false, reason: 'NO_APPLIED_VOUCHER' }),
+}));
+import { setWalletPin, verifyWalletPinWithLockout } from '../../common/auth/wallet-pin';
 import { Test } from '@nestjs/testing';
 import {
   BadRequestException,
@@ -61,6 +73,9 @@ describe('WalletsService', () => {
         update: jest.fn().mockResolvedValue({ status: OrderStatus.PAID }),
       },
       orderStatusLog: { create: jest.fn().mockResolvedValue({}) },
+      // Batch 2: refund melepas booking & menutup permintaan refund terbuka.
+      machineBooking: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      paymentReconciliation: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     };
     prisma = {
       wallet: {
@@ -94,126 +109,8 @@ describe('WalletsService', () => {
     service = moduleRef.get(WalletsService);
   });
 
-  describe('pay', () => {
-    const dto = { orderId: 'ord-1', amount: 68400 };
-
-    function setup(opts: {
-      orderStatus?: OrderStatus;
-      orderCustomerId?: string | null;
-    }) {
-      prisma.wallet.findUnique.mockResolvedValue({ id: 'w-1' });
-      prisma.order.findUnique.mockResolvedValue({
-        id: 'ord-1',
-        orderNumber: 'ORD-1',
-        customerId: opts.orderCustomerId ?? 'cust-1',
-        status: opts.orderStatus ?? OrderStatus.WAITING_PAYMENT,
-        // SECURITY HOTFIX (K4): nominal debit = total order dari server.
-        totalAmount: dec('68400'),
-      });
-      ledger.debit.mockResolvedValue(
-        fullLedger({
-          direction: LedgerDirection.DEBIT,
-          referenceType: 'PAYMENT',
-          orderId: 'ord-1',
-          amount: dec('68400'),
-          balanceBefore: dec('350000'),
-          balanceAfter: dec('281600'),
-        }),
-      );
-    }
-
-    it('sukses: debit MAIN via WalletLedgerService, transaction dari ledger, order PAID', async () => {
-      setup({});
-      const res: any = await service.pay('cust-1', dto);
-
-      // Mutasi saldo didelegasikan: MAIN_BALANCE, jumlah & ref benar.
-      expect(ledger.debit).toHaveBeenCalledWith(
-        WalletType.MAIN_BALANCE,
-        expect.objectContaining({
-          walletId: 'w-1',
-          amount: 68400,
-          orderId: 'ord-1',
-          referenceType: 'PAYMENT',
-        }),
-      );
-      // Respons `transaction` diturunkan dari ledger (amount bertanda negatif).
-      expect(res.transaction.transactionType).toBe('PAYMENT');
-      expect(res.transaction.amount.toString()).toBe('-68400');
-      expect(res.transaction.balanceAfter.toString()).toBe('281600');
-      expect(res.order.status).toBe(OrderStatus.PAID);
-      expect(res.wallet.balance.toString()).toBe('281600');
-    });
-
-    it('saldo tidak cukup (ledger.debit menolak) → BadRequest', async () => {
-      setup({});
-      ledger.debit.mockRejectedValue(
-        new BadRequestException('Saldo tidak mencukupi'),
-      );
-      await expect(service.pay('cust-1', dto)).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
-      // Efek order tidak terjadi bila mutasi saldo gagal.
-      expect(tx.payment.create).not.toHaveBeenCalled();
-    });
-
-    it('order sudah PAID → Conflict (tanpa masuk transaksi)', async () => {
-      setup({ orderStatus: OrderStatus.PAID });
-      await expect(service.pay('cust-1', dto)).rejects.toBeInstanceOf(
-        ConflictException,
-      );
-      expect(prisma.$transaction).not.toHaveBeenCalled();
-      expect(ledger.debit).not.toHaveBeenCalled();
-    });
-
-    it('SECURITY HOTFIX (K4): nominal dari klien diabaikan — debit = total order (Rp0/Rp1 tidak bisa melunasi)', async () => {
-      for (const amount of [0, 1, 999999]) {
-        setup({});
-        ledger.debit.mockClear();
-        await service.pay('cust-1', { orderId: 'ord-1', amount });
-        expect(ledger.debit).toHaveBeenCalledWith(
-          WalletType.MAIN_BALANCE,
-          expect.objectContaining({ amount: 68400 }),
-        );
-      }
-    });
-
-    it.each([OrderStatus.CANCELLED, OrderStatus.REFUNDED, OrderStatus.COMPLETED])(
-      'SECURITY HOTFIX (K4): order %s tidak bisa dibayar saldo',
-      async (orderStatus) => {
-        setup({ orderStatus });
-        await expect(service.pay('cust-1', dto)).rejects.toBeInstanceOf(ConflictException);
-        expect(ledger.debit).not.toHaveBeenCalled();
-      },
-    );
-
-    it('order milik customer lain → Unauthorized', async () => {
-      setup({ orderCustomerId: 'cust-LAIN' });
-      await expect(service.pay('cust-1', dto)).rejects.toBeInstanceOf(
-        UnauthorizedException,
-      );
-    });
-
-    it('order tidak ada → NotFound', async () => {
-      prisma.wallet.findUnique.mockResolvedValue({ id: 'w-1' });
-      prisma.order.findUnique.mockResolvedValue(null);
-      await expect(service.pay('cust-1', dto)).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
-    });
-
-    it('bentrok unik (P2002) di transaksi → Conflict (double-pay)', async () => {
-      setup({});
-      prisma.$transaction.mockRejectedValue(
-        new Prisma.PrismaClientKnownRequestError('dup', {
-          code: 'P2002',
-          clientVersion: '5.8.0',
-        }),
-      );
-      await expect(service.pay('cust-1', dto)).rejects.toBeInstanceOf(
-        ConflictException,
-      );
-    });
-  });
+  // describe('pay') dipindah (Batch 1.5): WalletsService.pay dihapus; rute lama
+  // diuji di test/integration/mobile-compat.int-spec.ts (PostgreSQL nyata).
 
   describe('topup', () => {
     it('delegasi ke WalletLedgerService.topUp; transaction & wallet dari ledger', async () => {
@@ -391,35 +288,28 @@ describe('WalletsService', () => {
     });
   });
 
-  describe('verifyPin', () => {
+  describe('verifyPin / setPin (delegasi)', () => {
     beforeEach(() => {
-      prisma.customer.findUnique.mockResolvedValue({
-        id: 'cust-1',
-        userId: 'user-1',
-        walletPinHash: '$2b$10$hash',
+      prisma.customer.findUnique.mockResolvedValue({ id: 'cust-1', userId: 'user-1' });
+    });
+
+    it('PIN diverifikasi lewat modul terkunci + menerbitkan bukti sekali pakai', async () => {
+      await expect(service.verifyPin('cust-1', 'user-1', '123456')).resolves.toEqual({ valid: true });
+      expect(verifyWalletPinWithLockout).toHaveBeenCalledWith(prisma, 'cust-1', '123456', expect.any(Date), {
+        issueProofFor: null, // tanpa sesi → tidak ada bukti (sesi diberikan controller)
       });
     });
 
-    it('PIN benar → valid:true', async () => {
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-      await expect(
-        service.verifyPin('cust-1', 'user-1', '123456'),
-      ).resolves.toEqual({
-        valid: true,
-      });
+    it('ganti PIN meneruskan PIN lama ke modul (wajib bila PIN sudah ada)', async () => {
+      await service.setPin('cust-1', 'user-1', '654321', '123456');
+      expect(setWalletPin).toHaveBeenCalledWith(prisma, 'cust-1', '654321', '123456');
     });
 
-    it('PIN salah → Unauthorized', async () => {
-      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
-      await expect(
-        service.verifyPin('cust-1', 'user-1', '000000'),
-      ).rejects.toBeInstanceOf(UnauthorizedException);
-    });
-
-    it('customer milik user lain → Unauthorized', async () => {
-      await expect(
-        service.verifyPin('cust-1', 'user-LAIN', '123456'),
-      ).rejects.toBeInstanceOf(UnauthorizedException);
+    it('customer milik user lain → Unauthorized, modul PIN tidak dipanggil', async () => {
+      (verifyWalletPinWithLockout as jest.Mock).mockClear();
+      await expect(service.verifyPin('cust-1', 'user-LAIN', '123456')).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(verifyWalletPinWithLockout).not.toHaveBeenCalled();
     });
   });
+
 });

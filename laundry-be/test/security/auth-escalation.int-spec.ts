@@ -303,13 +303,15 @@ describe('SECURITY HOTFIX — eskalasi hak akses akun (skema production)', () =>
 
   // ===================================================================== V3
   describe('V3 — GET /users/:id', () => {
-    it('pelanggan membaca user lain → 403; diri sendiri → 200; admin → 200', async () => {
+    // Diperketat (Batch 1.5): GET /users/:id hanya SUPER_ADMIN/OWNER — termasuk
+    // diri sendiri (klien membaca profil lewat /auth/me; app lama hanya PATCH).
+    it('pelanggan membaca user lain → 403; diri sendiri → 403; admin → 200', async () => {
       const a = await makeUser(UserRole.CUSTOMER);
       const b = await makeUser(UserRole.CUSTOMER);
       const owner = await makeUser(UserRole.OWNER);
       expect((await h.http().get(`/users/${b.id}`).set(auth(a))).status).toBe(403);
       expect((await h.http().get(`/users/${owner.id}`).set(auth(a))).status).toBe(403);
-      expect((await h.http().get(`/users/${a.id}`).set(auth(a))).status).toBe(200);
+      expect((await h.http().get(`/users/${a.id}`).set(auth(a))).status).toBe(403);
       expect((await h.http().get(`/users/${b.id}`).set(auth(owner))).status).toBe(200);
     });
   });

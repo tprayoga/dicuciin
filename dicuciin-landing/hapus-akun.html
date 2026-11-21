@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hapus Akun — Di.Cuciin</title>
+    <meta name="description" content="Ajukan penghapusan akun Di.Cuciin tanpa aplikasi, dengan verifikasi kode WhatsApp." />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" type="image/png" href="assets/logo.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      .del-card { border: 1px solid #dde5f0; border-radius: 14px; padding: 18px; margin: 18px 0; background: #fff; }
+      .del-field { display: block; width: 100%; margin: 6px 0 14px; padding: 12px 14px; border: 1px solid #c9d4e3; border-radius: 10px; font: inherit; box-sizing: border-box; }
+      .del-btn { display: inline-block; padding: 12px 20px; border: 0; border-radius: 10px; font: inherit; font-weight: 700; cursor: pointer; background: #0360da; color: #fff; }
+      .del-btn--danger { background: #d6280b; }
+      .del-btn[disabled] { opacity: .55; cursor: not-allowed; }
+      .del-msg { margin: 12px 0 0; padding: 12px 14px; border-radius: 10px; display: none; }
+      .del-msg--ok { background: #e7f6ec; color: #145c2e; display: block; }
+      .del-msg--err { background: #fde8e4; color: #8a1b08; display: block; }
+      .del-msg--info { background: #eef4fd; color: #0b3b7a; display: block; }
+      .del-step[hidden] { display: none; }
+    </style>
+  </head>
+  <body>
+    <header class="legal-header">
+      <div class="container">
+        <a href="index.html"><img src="assets/logo.png" alt="Di.Cuciin" /></a>
+        <a href="index.html" class="legal-back">← Kembali ke Beranda</a>
+      </div>
+    </header>
+
+    <main class="legal">
+      <h1>Hapus Akun</h1>
+      <p>Halaman ini untuk menghapus akun Di.Cuciin <strong>tanpa aplikasi</strong>. Kamu juga bisa melakukannya di aplikasi: menu <em>Akun → Hapus Akun</em>.</p>
+
+      <h2>Yang terjadi bila akun dihapus</h2>
+      <ul>
+        <li>Nama, nomor ponsel, email, foto, alamat, dan PIN saldo dihapus. Kamu tidak bisa masuk lagi dengan akun ini.</li>
+        <li>Poin dan saldo bonus (bukan uang) hangus.</li>
+        <li>Riwayat transaksi tetap disimpan <strong>tanpa identitasmu</strong>, karena kewajiban pencatatan keuangan dan perpajakan.</li>
+        <li>Jika masih ada <strong>saldo</strong>, order yang belum selesai, booking aktif, atau pengajuan refund, akun belum dihapus: permintaanmu dicatat dan tim kami menghubungimu untuk menuntaskannya (termasuk mengembalikan saldo).</li>
+        <li>Nomor ponselmu bisa dipakai untuk mendaftar lagi kapan pun.</li>
+      </ul>
+
+      <div class="del-card">
+        <div class="del-step" id="step-phone">
+          <label for="phone"><strong>1. Nomor ponsel akun</strong></label>
+          <input class="del-field" id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0812xxxxxxxx" />
+          <button class="del-btn" id="btn-otp" type="button">Kirim kode WhatsApp</button>
+        </div>
+
+        <div class="del-step" id="step-confirm" hidden>
+          <label for="code"><strong>2. Kode verifikasi (4 digit) dari WhatsApp</strong></label>
+          <input class="del-field" id="code" inputmode="numeric" maxlength="4" autocomplete="one-time-code" />
+          <label for="reason">Alasan (opsional)</label>
+          <textarea class="del-field" id="reason" rows="3" maxlength="500"></textarea>
+          <label for="confirm"><strong>3. Ketik HAPUS untuk konfirmasi</strong></label>
+          <input class="del-field" id="confirm" autocomplete="off" />
+          <button class="del-btn del-btn--danger" id="btn-delete" type="button">Hapus akun saya</button>
+        </div>
+
+        <p class="del-msg" id="msg" role="status" aria-live="polite"></p>
+      </div>
+
+      <p>Butuh bantuan? WhatsApp <a href="https://wa.me/628118882908">+62 811-888-2908</a> atau email <a href="mailto:di.cuciin.hq@gmail.com">di.cuciin.hq@gmail.com</a>.</p>
+    </main>
+
+    <script>
+      // Alamat API tetap (sengaja TIDAK bisa ditimpa lewat URL: tautan palsu
+      // bisa mengarahkan nomor + kode OTP ke server lain).
+      var API = 'https://api.dicuciin.com/api/v1';
+      var phoneEl = document.getElementById('phone');
+      var msg = document.getElementById('msg');
+
+      function show(text, kind) {
+        msg.textContent = text;
+        msg.className = 'del-msg del-msg--' + kind;
+      }
+
+      function call(path, body) {
+        return fetch(API + path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }).then(function (res) {
+          return res.json().catch(function () { return {}; }).then(function (json) {
+            var data = json && json.data !== undefined ? json.data : json;
+            if (!res.ok) {
+              var m = json && json.message;
+              throw new Error(Array.isArray(m) ? m.join(', ') : m || 'Permintaan gagal (' + res.status + ')');
+            }
+            return data;
+          });
+        });
+      }
+
+      function busy(btn, on) { btn.disabled = on; }
+
+      document.getElementById('btn-otp').addEventListener('click', function () {
+        var btn = this;
+        var phone = phoneEl.value.trim();
+        if (!phone) return show('Masukkan nomor ponsel.', 'err');
+        busy(btn, true);
+        call('/auth/otp/request', { phone: phone, purpose: 'ACCOUNT_DELETION' })
+          .then(function () {
+            show('Kode dikirim ke WhatsApp ' + phone + '. Berlaku 5 menit.', 'info');
+            document.getElementById('step-confirm').hidden = false;
+            phoneEl.readOnly = true;
+          })
+          .catch(function (e) { show(e.message, 'err'); busy(btn, false); });
+      });
+
+      document.getElementById('btn-delete').addEventListener('click', function () {
+        var btn = this;
+        var phone = phoneEl.value.trim();
+        var code = document.getElementById('code').value.trim();
+        var confirmText = document.getElementById('confirm').value.trim();
+        if (!/^\d{4}$/.test(code)) return show('Masukkan 4 digit kode dari WhatsApp.', 'err');
+        if (confirmText.toUpperCase() !== 'HAPUS') return show('Ketik HAPUS untuk konfirmasi.', 'err');
+        busy(btn, true);
+        call('/auth/otp/verify', { phone: phone, code: code, purpose: 'ACCOUNT_DELETION' })
+          .then(function (v) {
+            return call('/account/deletion/web', {
+              phone: phone,
+              verificationToken: v.verificationToken,
+              confirm: 'HAPUS',
+              reason: document.getElementById('reason').value.trim() || undefined,
+            });
+          })
+          .then(function (r) {
+            document.getElementById('step-confirm').hidden = true;
+            document.getElementById('step-phone').hidden = true;
+            if (r.status === 'COMPLETED') {
+              show('Akun berhasil dihapus. Terima kasih telah menggunakan Di.Cuciin.', 'ok');
+            } else {
+              var list = (r.blockers || []).map(function (b) { return b.message; }).join(' ');
+              show('Permintaan dicatat, tetapi akun belum bisa dihapus: ' + list + ' Tim kami akan menghubungimu.', 'info');
+            }
+          })
+          .catch(function (e) { show(e.message, 'err'); busy(btn, false); });
+      });
+    </script>
+  </body>
+</html>

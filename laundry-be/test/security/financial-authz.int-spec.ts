@@ -29,10 +29,18 @@ describe('SECURITY HOTFIX — otorisasi keuangan & mesin (skema production)', ()
       data: { name: role, email: `${short()}@uji.test`, role, passwordHash: bcrypt.hashSync('x', 4) },
     });
   }
+  // Batch 4 (S5): setiap debit saldo wajib PIN wallet → pelanggan uji punya PIN.
+  const PIN = '123456';
+  const PIN_HASH = bcrypt.hashSync(PIN, 4);
   async function makeCustomer(balance = 50000) {
     const user = await makeUser(UserRole.CUSTOMER);
     const customer = await h.prisma.customer.create({
-      data: { userId: user.id, memberCode: `MBR-${short()}`, wallet: { create: { balance: new Prisma.Decimal(balance) } } },
+      data: {
+        userId: user.id,
+        memberCode: `MBR-${short()}`,
+        walletPinHash: PIN_HASH,
+        wallet: { create: { balance: new Prisma.Decimal(balance) } },
+      },
       include: { wallet: true },
     });
     return { user, customer };
@@ -107,7 +115,7 @@ describe('SECURITY HOTFIX — otorisasi keuangan & mesin (skema production)', ()
     const attacker = await makeCustomer(0);
     const victim = await makeCustomer(50000);
     const o = await makeOrder(attacker.customer.id);
-    const r = await h.http().post(`/wallets/customer/${victim.customer.id}/pay`).set(auth(attacker.user)).send({ orderId: o.id, amount: 20000 });
+    const r = await h.http().post(`/wallets/customer/${victim.customer.id}/pay`).set(auth(attacker.user)).send({ orderId: o.id, amount: 20000, pin: PIN });
     expect(r.status).toBe(403);
     expect(await balance(victim.customer.id)).toBe(50000);
   });
@@ -115,7 +123,7 @@ describe('SECURITY HOTFIX — otorisasi keuangan & mesin (skema production)', ()
   it('K4: nominal dari klien diabaikan — "bayar Rp0" memotong total order dari server', async () => {
     const c = await makeCustomer(50000);
     const o = await makeOrder(c.customer.id, 20000);
-    const r = await h.http().post(`/wallets/customer/${c.customer.id}/pay`).set(auth(c.user)).send({ orderId: o.id, amount: 0 });
+    const r = await h.http().post(`/wallets/customer/${c.customer.id}/pay`).set(auth(c.user)).send({ orderId: o.id, amount: 0, pin: PIN });
     expect(r.status).toBe(201);
     expect(await balance(c.customer.id)).toBe(30000);
     expect((await h.prisma.order.findUniqueOrThrow({ where: { id: o.id } })).status).toBe(OrderStatus.PAID);
@@ -125,7 +133,7 @@ describe('SECURITY HOTFIX — otorisasi keuangan & mesin (skema production)', ()
   it('K4: saldo kurang dari total order → ditolak walau klien mengirim nominal kecil', async () => {
     const c = await makeCustomer(1000);
     const o = await makeOrder(c.customer.id, 20000);
-    const r = await h.http().post(`/wallets/customer/${c.customer.id}/pay`).set(auth(c.user)).send({ orderId: o.id, amount: 1 });
+    const r = await h.http().post(`/wallets/customer/${c.customer.id}/pay`).set(auth(c.user)).send({ orderId: o.id, amount: 1, pin: PIN });
     expect(r.status).toBe(400);
     expect(await balance(c.customer.id)).toBe(1000);
     expect((await h.prisma.order.findUniqueOrThrow({ where: { id: o.id } })).status).toBe(OrderStatus.WAITING_PAYMENT);
@@ -135,8 +143,10 @@ describe('SECURITY HOTFIX — otorisasi keuangan & mesin (skema production)', ()
     const c = await makeCustomer(50000);
     const o = await makeOrder(c.customer.id, 20000);
     await h.prisma.order.update({ where: { id: o.id }, data: { status: OrderStatus.CANCELLED } });
-    const r = await h.http().post(`/wallets/customer/${c.customer.id}/pay`).set(auth(c.user)).send({ orderId: o.id, amount: 20000 });
-    expect(r.status).toBe(409);
+    const r = await h.http().post(`/wallets/customer/${c.customer.id}/pay`).set(auth(c.user)).send({ orderId: o.id, amount: 20000, pin: PIN });
+    // PaymentsService.assertPayable: status selain DRAFT/WAITING_PAYMENT → 400.
+    expect(r.status).toBe(400);
+    expect(body(r)?.message ?? r.body?.message).toMatch(/tidak bisa dibayar/);
     expect(await balance(c.customer.id)).toBe(50000);
   });
 
@@ -145,7 +155,7 @@ describe('SECURITY HOTFIX — otorisasi keuangan & mesin (skema production)', ()
     const o = await makeOrder(c.customer.id, 20000);
     const rs = await Promise.all(
       Array.from({ length: 6 }, () =>
-        h.http().post(`/wallets/customer/${c.customer.id}/pay`).set(auth(c.user)).send({ orderId: o.id, amount: 20000 }),
+        h.http().post(`/wallets/customer/${c.customer.id}/pay`).set(auth(c.user)).send({ orderId: o.id, amount: 20000, pin: PIN }),
       ),
     );
     expect(rs.filter((r) => r.status === 201)).toHaveLength(1);

@@ -19,12 +19,30 @@ export class WhatsappService {
 
   constructor(private readonly configService: ConfigService) {}
 
+  /** True bila kunci provider WhatsApp terpasang. */
+  isConfigured(): boolean {
+    return !!this.configService.get<string>('WA_API_KEY');
+  }
+
+  /**
+   * Batch 5 (T7): dev-fallback (pesan hanya dicatat di log) HANYA di luar
+   * production. Di production tanpa WA_API_KEY pengiriman GAGAL — OTP tidak
+   * pernah dicatat ke log dan klien tidak menerima "OTP terkirim".
+   */
+  devFallbackAllowed(): boolean {
+    return this.configService.get<string>('APP_ENV', 'development') !== 'production';
+  }
+
   /** Kirim pesan teks ke nomor (format internasional tanpa '+', mis. 6281234567890). */
   async sendText(phone: string, message: string): Promise<void> {
     const apiKey = this.configService.get<string>('WA_API_KEY');
     const provider = this.configService.get<string>('WA_PROVIDER', 'fonnte');
 
     if (!apiKey) {
+      if (!this.devFallbackAllowed()) {
+        this.logger.error('WA_API_KEY kosong di production — pesan tidak dikirim');
+        throw new Error('WhatsApp provider belum dikonfigurasi');
+      }
       this.logger.warn(
         `[WA dev-fallback] WA_API_KEY kosong — pesan tidak benar-benar dikirim. To: ${phone} | ${message}`,
       );
@@ -56,6 +74,8 @@ export class WhatsappService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ target, message }),
+      // Batch 5: jangan menggantung request OTP bila provider lambat.
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!response.ok) {

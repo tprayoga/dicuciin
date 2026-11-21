@@ -26,6 +26,11 @@ describe('PointService', () => {
       },
     };
     prisma.$transaction = jest.fn((fn: any) => fn(prisma));
+    // Batch 6 (R3): kunci template + syarat penukaran.
+    prisma.$queryRaw = jest.fn().mockResolvedValue([]);
+    prisma.userVoucher = { count: jest.fn().mockResolvedValue(0) };
+    prisma.userMembershipStatus = { findUnique: jest.fn().mockResolvedValue(null) };
+    prisma.b2BPartner = { findUnique: jest.fn().mockResolvedValue(null) };
     voucherService = {
       issue: jest.fn().mockResolvedValue({ id: 'uv1', code: 'POINT-AAAA' }),
     };
@@ -164,6 +169,8 @@ describe('PointService', () => {
       code: 'POINT100',
       isActive: true,
       pointCost: 100,
+      segment: 'RETAIL',
+      issuedCount: 0,
     });
 
     const res = await service.redeemVoucherForUser(

@@ -4,7 +4,8 @@ enum _MainTab { home, promo, location, order }
 
 enum _PaymentMethod { saldo, qris, va }
 
-enum _MachineStatus { available, inUse, maintenance }
+/// Batch 6 (S7): `offline` terpisah dari `maintenance` (dulu OFFLINE tampil "Maintenance").
+enum _MachineStatus { available, inUse, maintenance, offline }
 
 enum _MachineType { washer, dryer }
 
@@ -22,6 +23,7 @@ class _MachineData {
     this.price = 20000,
     this.serviceId = '',
     this.outletId = '',
+    this.deviceId = '',
   });
 
   final String name;
@@ -34,6 +36,9 @@ class _MachineData {
   /// ID layanan & outlet untuk membuat order nyata (kosong = data mock lama).
   final String serviceId;
   final String outletId;
+
+  /// ID mesin nyata (untuk booking terikat order).
+  final String deviceId;
 }
 
 /// Ringkasan order yang dibawa dari pilih mesin → checkout → pembayaran → sukses.
@@ -49,6 +54,8 @@ class _CheckoutData {
     required this.date,
     required this.serviceId,
     required this.outletId,
+    this.deviceId = '',
+    this.scheduledAt,
   });
 
   factory _CheckoutData.fromMachine(
@@ -66,6 +73,7 @@ class _CheckoutData {
       date: _formatDateId(DateTime.now()),
       serviceId: machine.serviceId,
       outletId: machine.outletId,
+      deviceId: machine.deviceId,
     );
   }
 
@@ -81,6 +89,22 @@ class _CheckoutData {
   /// ID layanan & outlet untuk membuat order nyata di checkout.
   final String serviceId;
   final String outletId;
+
+  /// Mesin yang dipesan & jadwalnya — order + booking dibuat atomik di server
+  /// (mesin hanya bisa dipakai setelah order lunas). `scheduledAt` null = sekarang.
+  final String deviceId;
+  final DateTime? scheduledAt;
+
+  /// Batch 6 (S8): jadwal pakai sebenarnya (dulu teks tetap "11:00 s/d 11:30").
+  String get scheduleLabel {
+    final start = (scheduledAt ?? DateTime.now()).toLocal();
+    final minutes = int.tryParse(RegExp(r'\d+').firstMatch(estimasi)?.group(0) ?? '') ?? 30;
+    final end = start.add(Duration(minutes: minutes));
+    String hm(DateTime t) =>
+        '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    final prefix = scheduledAt == null ? 'Mulai sekarang' : _formatDateId(start);
+    return '$prefix • ${hm(start)} s/d ${hm(end)}';
+  }
 }
 
 const _idMonths = [

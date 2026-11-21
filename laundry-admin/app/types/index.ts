@@ -206,6 +206,10 @@ export interface IotDevice {
   firmwareVersion: string | null
   status: 'ONLINE' | 'OFFLINE' | 'ERROR' | 'MAINTENANCE'
   lastHeartbeatAt: string | null
+  /** Batch 6 (S3): kapasitas (kg) & layanan yang dijalankan mesin. */
+  capacityKg?: number | null
+  serviceId?: string | null
+  service?: { id: string; name: string; machineType: string | null } | null
   createdAt: string
   updatedAt: string
   outlet?: Outlet

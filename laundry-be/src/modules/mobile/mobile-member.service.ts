@@ -7,6 +7,11 @@ import {
   VoucherStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import {
+  REWARD_BLOCKER_MESSAGE,
+  isRewardVisible,
+  rewardBlockers,
+} from '../points/reward-eligibility';
 
 const tierLabel = (tier?: MembershipTier | null) => {
   if (!tier) return 'Silver';
@@ -122,7 +127,8 @@ export class MobileMemberService {
         lifetimePoints: lifetimePoints._sum.points ?? currentPoints,
         lifetimeSpending: earnedSpending,
         lifetimeTransactions: status?.successfulTxnCount ?? 0,
-        nextTier: tierLabel(nextTierConfig?.tier),
+        // Batch 6 (S6): tier tertinggi → null (dulu "Silver" karena label default).
+        nextTier: nextTierConfig ? tierLabel(nextTierConfig.tier) : null,
         nextTierCode: nextTierConfig?.tier ?? null,
         pointsToNextTier,
         tierProgressPercent,
@@ -145,6 +151,59 @@ export class MobileMemberService {
         available: promos,
       },
     };
+  }
+
+  /**
+   * Batch 6 (R3): katalog voucher yang bisa ditukar poin, dengan status &
+   * alasan per item (aturan sama dengan penukaran di server).
+   */
+  async getRewards(userId: string) {
+    const { customer } = await this.getCustomerContext(userId);
+    const now = new Date();
+    const pointBalance = customer.wallet?.pointBalance ?? 0;
+    const tier = customer.membershipStatus?.currentTier ?? MembershipTier.SILVER;
+    const [templates, owned] = await Promise.all([
+      this.prisma.voucherTemplate.findMany({
+        where: { isActive: true, pointCost: { gt: 0 }, segment: UserSegment.RETAIL },
+        orderBy: [{ pointCost: 'asc' }, { name: 'asc' }],
+        take: 100,
+      }),
+      this.prisma.userVoucher.groupBy({
+        by: ['templateId'],
+        where: { customerId: customer.id },
+        _count: { _all: true },
+      }),
+    ]);
+    const ownedByTemplate = new Map(owned.map((o) => [o.templateId, o._count._all]));
+    const items = templates
+      .map((t) => {
+        const blockers = rewardBlockers(t, {
+          now,
+          segment: UserSegment.RETAIL,
+          tier,
+          ownedCount: ownedByTemplate.get(t.id) ?? 0,
+          pointBalance,
+        });
+        return { t, blockers };
+      })
+      .filter(({ blockers }) => isRewardVisible(blockers))
+      .map(({ t, blockers }) => ({
+        templateId: t.id,
+        code: t.code,
+        name: t.name,
+        description: t.description,
+        bannerUrl: t.bannerUrl,
+        voucherType: t.voucherType,
+        value: toNumber(t.value),
+        maxDiscount: t.maxDiscount == null ? null : toNumber(t.maxDiscount),
+        minTransaction: t.minTransaction == null ? null : toNumber(t.minTransaction),
+        validityDays: t.validityDays,
+        endDate: t.endDate,
+        pointCost: t.pointCost ?? 0,
+        canRedeem: blockers.length === 0,
+        reason: blockers.length ? REWARD_BLOCKER_MESSAGE[blockers[0]] : null,
+      }));
+    return { walletId: customer.wallet?.id ?? null, pointBalance, items };
   }
 
   async getVouchers(userId: string) {

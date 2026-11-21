@@ -20,16 +20,17 @@ void main() {
   final apiClient = ApiClient(baseUrl: AppConfig.apiBaseUrl);
   final tokenStorage = TokenStorage();
   final authService = AuthService(apiClient);
+  final authController = AuthController(
+    authService: authService,
+    tokenStorage: tokenStorage,
+  );
+  // Batch 5 (T1): 401 → refresh token sekali (bersama) → ulangi request.
+  apiClient.onUnauthorized = authController.handleUnauthorized;
 
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(
-          create: (_) => AuthController(
-            authService: authService,
-            tokenStorage: tokenStorage,
-          ),
-        ),
+        ChangeNotifierProvider.value(value: authController),
         ChangeNotifierProxyProvider<AuthController, CustomerController>(
           create: (_) =>
               CustomerController(customerService: CustomerService(apiClient)),

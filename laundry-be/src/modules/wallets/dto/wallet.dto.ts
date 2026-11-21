@@ -24,21 +24,8 @@ export class TopupWalletDto {
   idempotencyKey?: string;
 }
 
-export class PayWithWalletDto {
-  @ApiProperty()
-  @IsString()
-  orderId: string;
-
-  @ApiProperty()
-  @IsNumber()
-  @Min(0)
-  amount: number;
-
-  @ApiProperty({ required: false })
-  @IsString()
-  @IsOptional()
-  idempotencyKey?: string;
-}
+// PayWithWalletDto dihapus (Batch 1.5): rute bayar-saldo lama kini
+// LegacyWalletPayController + LegacyPayWithWalletDto di modul payments.
 
 export class RefundWalletDto {
   @ApiProperty()

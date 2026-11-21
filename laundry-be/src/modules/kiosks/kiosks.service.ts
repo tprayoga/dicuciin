@@ -17,6 +17,12 @@ import { CreateGatewayPaymentDto } from '../payments/dto/payment.dto';
 import { TransactionService } from '../transactions/transaction.service';
 import { IotMachineService } from '../iot/iot-machine.service';
 import * as crypto from 'crypto';
+import {
+  authenticateKioskToken,
+  hashKioskSecret,
+} from '../../common/auth/kiosk-device';
+import { verifyWalletPinWithLockout } from '../../common/auth/wallet-pin';
+import { phoneCandidates } from '../../common/utils/phone.util';
 
 @Injectable()
 export class KiosksService {
@@ -32,7 +38,20 @@ export class KiosksService {
 
   /** Status aktivasi mesin untuk order kiosk (read-only). */
   async deviceMachineStatus(deviceToken: string, orderId: string) {
-    await this.authenticateDevice(deviceToken);
+    const kiosk = await this.authenticateDevice(deviceToken);
+    await this.assertOrderOwnedByKiosk(orderId, kiosk.id);
+    return this.iotMachineService.getMachineStatusForOrder(orderId);
+  }
+
+  /**
+   * Coba nyalakan ulang mesin untuk order kiosk yang SUDAH dibayar (mis. START
+   * sebelumnya FAILED / broker sempat mati). Validasi penuh di
+   * IotMachineService.startKioskOrder; idempoten, maksimal N percobaan.
+   */
+  async retryDeviceMachineStart(deviceToken: string, orderId: string) {
+    const kiosk = await this.authenticateDevice(deviceToken);
+    await this.assertOrderOwnedByKiosk(orderId, kiosk.id);
+    await this.iotMachineService.startKioskOrder(orderId, kiosk.id);
     return this.iotMachineService.getMachineStatusForOrder(orderId);
   }
 
@@ -308,16 +327,26 @@ export class KiosksService {
     if (!schedule.isOpen) {
       throw new ForbiddenException('Kiosk berada di luar jadwal operasional');
     }
-    const { customerLookup, ...orderDto } = dto;
+    const { customerLookup, scheduledAt: _scheduledAt, ...orderDto } = dto;
+    this.assertMachineSelected(dto);
     const customerId = dto.customerId ?? await this.resolveCustomerLookup(customerLookup);
-    return this.ordersService.create({
-      ...orderDto,
+    // Batch 3: harga dari mesin pricing tunggal (promo, happy hour) — sama dengan
+    // mobile. Voucher pribadi TIDAK dipakai di sini: customer kiosk hanya
+    // diidentifikasi No. HP tanpa PIN (voucher kiosk hanya lewat checkout saldo ber-PIN).
+    return this.transactionService.createOrder({
       customerId,
       outletId: kiosk.outletId,
       kioskId: kiosk.id,
-      staffUserId: undefined,
       sourcePlatform: 'KIOSK',
+      items: orderDto.items as any,
+      promoCode: orderDto.promoCode,
+      voucherCode: undefined,
+      deliveryFee: orderDto.deliveryFee,
       notes: dto.notes || `Order dibuat dari ${kiosk.kioskCode}`,
+      deviceId: orderDto.deviceId,
+      deviceCode: orderDto.deviceCode,
+      // Kiosk = pemakaian di tempat, sekarang juga (tidak ada booking terjadwal).
+      scheduledAt: undefined,
     });
   }
 
@@ -327,27 +356,58 @@ export class KiosksService {
     if (!schedule.isOpen) {
       throw new ForbiddenException('Kiosk berada di luar jadwal operasional');
     }
-    const customerId = dto.customerId ?? await this.resolveCustomerLookup(dto.customerLookup);
+    this.assertMachineSelected(dto);
+    // Checkout kiosk = bayar pakai SALDO customer. Customer hanya diidentifikasi
+    // lewat No. HP/kode member, jadi PIN wallet wajib (dengan penguncian) —
+    // tanpa PIN siapa pun bisa memakai saldo orang lain dari kiosk.
+    const customerId = await this.resolveCustomerLookup(
+      dto.customerLookup ?? dto.customerId,
+      true,
+    );
+    if (!customerId) {
+      throw new BadRequestException(
+        'No HP atau kode member wajib diisi untuk pembayaran saldo',
+      );
+    }
+    await verifyWalletPinWithLockout(this.prisma, customerId, dto.pin);
     return this.transactionService.checkout({
       customerId,
-      partnerId: dto.partnerId,
+      partnerId: undefined,
       outletId: kiosk.outletId,
       kioskId: kiosk.id,
       sourcePlatform: 'KIOSK',
       items: dto.items,
       voucherCode: dto.voucherCode,
       promoCode: dto.promoCode,
+      deviceId: dto.deviceId,
+      deviceCode: dto.deviceCode,
     });
   }
 
-  private async resolveCustomerLookup(customerLookup?: string) {
+  /**
+   * Kiosk versi baru WAJIB mengirim mesin: order kiosk tanpa mesin tidak akan
+   * pernah menyalakan mesin walau sudah dibayar (akar masalah Batch 1.5 #2).
+   * Kiosk versi lama (hanya menulis mesin di `notes`) ditolak dengan pesan
+   * jelas SEBELUM pelanggan membayar.
+   */
+  private assertMachineSelected(dto: { deviceId?: string; deviceCode?: string }) {
+    if (!dto.deviceId && !dto.deviceCode) {
+      throw new BadRequestException(
+        'Pilih mesin terlebih dahulu. Bila pesan ini muncul terus, aplikasi kiosk perlu diperbarui.',
+      );
+    }
+  }
+
+  private async resolveCustomerLookup(customerLookup?: string, allowId = false) {
     const keyword = customerLookup?.trim();
     if (!keyword) return undefined;
     const customer = await this.prisma.customer.findFirst({
       where: {
         OR: [
+          ...(allowId ? [{ id: keyword }] : []),
           { memberCode: keyword },
-          { user: { phone: keyword } },
+          // Batch 5 (T6): nomor dalam format apa pun (08…/+62…/62…).
+          { user: { phone: { in: phoneCandidates(keyword).length ? phoneCandidates(keyword) : [keyword] } } },
           { user: { email: keyword } },
         ],
       },
@@ -369,21 +429,23 @@ export class KiosksService {
   async createDevicePayment(deviceToken: string, dto: CreateGatewayPaymentDto) {
     const kiosk = await this.authenticateDevice(deviceToken);
     await this.assertOrderOwnedByKiosk(dto.orderId, kiosk.id);
-    return this.paymentsService.createKioskGatewayPayment(dto.orderId, dto);
+    return this.paymentsService.createKioskGatewayPayment(dto.orderId, dto, kiosk.id);
   }
 
   /** Status pembayaran untuk polling dari kiosk. */
   async devicePaymentStatus(deviceToken: string, paymentNumber: string) {
-    await this.authenticateDevice(deviceToken);
+    const kiosk = await this.authenticateDevice(deviceToken);
+    await this.assertPaymentOwnedByKiosk(paymentNumber, kiosk.id);
     return this.paymentsService.getStatus(paymentNumber);
   }
 
   /** Dev-only: simulasikan pembayaran kiosk berhasil (mock gateway). */
   async simulateDevicePayment(deviceToken: string, paymentNumber: string) {
-    await this.authenticateDevice(deviceToken);
+    const kiosk = await this.authenticateDevice(deviceToken);
     if (this.config.get<string>('APP_ENV', 'development') === 'production') {
       throw new ForbiddenException('Tidak tersedia di produksi');
     }
+    await this.assertPaymentOwnedByKiosk(paymentNumber, kiosk.id);
     return this.paymentsService.simulatePaid(paymentNumber);
   }
 
@@ -398,6 +460,48 @@ export class KiosksService {
     }
   }
 
+  private async assertPaymentOwnedByKiosk(paymentNumber: string, kioskId: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { paymentNumber },
+      select: { order: { select: { kioskId: true } } },
+    });
+    // 404 juga untuk pembayaran kiosk lain: jangan bocorkan keberadaannya.
+    if (!payment || payment.order?.kioskId !== kioskId) {
+      throw new NotFoundException('Payment not found');
+    }
+  }
+
+  /**
+   * Batalkan order kiosk yang BELUM dibayar (pelanggan menekan "Batal"/kembali
+   * dari layar pembayaran) → booking HOLD dilepas sehingga mesin bisa dipesan
+   * lagi. Bila tagihan QRIS/VA tetap dibayar setelahnya, pembayaran tercatat
+   * namun order tidak hidup lagi (lihat PaymentsService.settlePaidInTx).
+   */
+  async cancelDeviceOrder(deviceToken: string, orderId: string) {
+    const kiosk = await this.authenticateDevice(deviceToken);
+    await this.assertOrderOwnedByKiosk(orderId, kiosk.id);
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { status: true },
+    });
+    if (order?.status === 'CANCELLED') return { id: orderId, status: 'CANCELLED' };
+    if (order?.status !== 'DRAFT' && order?.status !== 'WAITING_PAYMENT') {
+      throw new BadRequestException(
+        'Order yang sudah dibayar tidak bisa dibatalkan dari kiosk. Hubungi petugas outlet.',
+      );
+    }
+    // requireUnpaid diperiksa ulang di bawah kunci baris order (anti-balapan
+    // dengan webhook PAID).
+    const cancelled = await this.ordersService.cancel(
+      orderId,
+      { cancelReason: `Dibatalkan di kiosk ${kiosk.kioskCode}` },
+      undefined,
+      undefined,
+      { requireUnpaid: true },
+    );
+    return { id: cancelled.id, status: cancelled.status };
+  }
+
   async endSession(sessionId: string) {
     const session = await this.prisma.kioskSession.findUnique({ where: { id: sessionId } });
     if (!session) throw new NotFoundException('Session not found');
@@ -408,16 +512,8 @@ export class KiosksService {
     });
   }
 
-  private async authenticateDevice(deviceToken: string) {
-    if (!deviceToken) throw new UnauthorizedException('Device token required');
-    const kiosk = await this.prisma.kiosk.findUnique({
-      where: { deviceTokenHash: this.hash(deviceToken) },
-      include: { outlet: true },
-    });
-    if (!kiosk || kiosk.tokenRevokedAt || kiosk.status !== 'ACTIVE') {
-      throw new UnauthorizedException('Device token tidak valid atau telah dicabut');
-    }
-    return kiosk;
+  private authenticateDevice(deviceToken: string) {
+    return authenticateKioskToken(this.prisma, deviceToken);
   }
 
   private deviceView(kiosk: any) {
@@ -495,6 +591,6 @@ export class KiosksService {
   }
 
   private hash(value: string) {
-    return crypto.createHash('sha256').update(value).digest('hex');
+    return hashKioskSecret(value);
   }
 }

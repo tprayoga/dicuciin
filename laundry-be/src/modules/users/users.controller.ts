@@ -1,25 +1,15 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Delete,
-  Param,
-  Body,
-  Query,
-  UseGuards,
-  Request,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Request, ForbiddenException } from '@nestjs/common';
 import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { USER_ADMIN_ROLES, UsersService } from './users.service';
+import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { USER_ADMIN_ROLES } from '../../common/auth/access-policy';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -32,9 +22,14 @@ export class UsersController {
   @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER)
   @ApiOperation({ summary: 'Create new user' })
   async create(@Body() createUserDto: CreateUserDto, @Request() req: any) {
-    // SECURITY HOTFIX: OWNER tidak boleh membuat SUPER_ADMIN.
-    this.usersService.assertCanManage(req.user, null, createUserDto.role ?? UserRole.CASHIER);
-    return this.usersService.create(createUserDto);
+    return this.usersService.create(createUserDto, req.user);
+  }
+
+  // Didaftarkan sebelum ':id' agar 'me' tidak tertangkap sebagai id.
+  @Patch('me')
+  @ApiOperation({ summary: 'Ubah profil sendiri (nama, email, foto)' })
+  async updateMe(@Body() dto: UpdateMyProfileDto, @Request() req: any) {
+    return this.usersService.updateMe(req.user.userId, dto);
   }
 
   @Get()
@@ -50,40 +45,41 @@ export class UsersController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get user by ID (admin, atau diri sendiri)' })
-  async findOne(@Param('id') id: string, @Request() req: any) {
-    // SECURITY HOTFIX: sebelumnya user mana pun bisa membaca data user lain.
-    const isUserAdmin = (USER_ADMIN_ROLES as string[]).includes(req.user?.role);
-    if (!isUserAdmin && req.user?.userId !== id) {
-      throw new ForbiddenException('Insufficient permissions');
-    }
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER)
+  @ApiOperation({ summary: 'Get user by ID' })
+  async findOne(@Param('id') id: string) {
     return this.usersService.findOne(id);
   }
 
   @Patch(':id')
   @ApiOperation({
-    summary: 'Update user (SUPER_ADMIN/OWNER). User biasa hanya nama/email dirinya sendiri',
+    summary:
+      'Update user (admin: SUPER_ADMIN/OWNER). Kompatibilitas app lama: user boleh mengubah nama/email DIRINYA SENDIRI',
   })
   async update(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
     @Request() req: any,
   ) {
-    // SECURITY HOTFIX: sebelumnya rute ini tanpa @Roles — user mana pun (termasuk
-    // pelanggan) bisa mengubah role/password/isActive user mana pun.
-    const isUserAdmin = (USER_ADMIN_ROLES as string[]).includes(req.user?.role);
+    const isUserAdmin = (USER_ADMIN_ROLES as string[]).includes(req.user.role);
     if (!isUserAdmin) {
-      if (req.user?.userId !== id) {
+      if (req.user.userId !== id) {
         throw new ForbiddenException('Insufficient permissions');
       }
+      // Batch 1.5 — app mobile lama memanggil PATCH /users/:id untuk profil
+      // sendiri ({name, email, phone}). Hanya nama & email yang boleh berubah
+      // (aturan sama dengan PATCH /users/me); field istimewa → 403.
       const privileged = ['role', 'password', 'isActive', 'outletId', 'shiftName'] as const;
-      if (privileged.some((k) => updateUserDto[k] !== undefined && updateUserDto[k] !== null)) {
+      if (privileged.some((k) => updateUserDto[k] !== undefined)) {
         throw new ForbiddenException('Tidak boleh mengubah field ini');
       }
-      return this.usersService.updateOwnProfile(id, updateUserDto);
+      return this.usersService.updateMe(id, {
+        name: updateUserDto.name,
+        email: updateUserDto.email ?? undefined,
+        phone: updateUserDto.phone ?? undefined,
+      });
     }
-    this.usersService.assertCanManage(req.user, await this.usersService.roleOf(id), updateUserDto.role);
-    return this.usersService.update(id, updateUserDto);
+    return this.usersService.update(id, updateUserDto, req.user);
   }
 
   @Delete(':id')

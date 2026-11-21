@@ -607,6 +607,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   final voucher = TextEditingController();
   final customerLookup = TextEditingController();
+  final walletPin = TextEditingController();
   String method = 'QRIS';
   bool vaExpanded = false;
   String selectedBank = 'BCA';
@@ -615,6 +616,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void dispose() {
     voucher.dispose();
     customerLookup.dispose();
+    walletPin.dispose();
     super.dispose();
   }
 
@@ -768,6 +770,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       Icons.person_outline_rounded,
                     ),
                   ),
+                  if (method == 'WALLET') ...[
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: walletPin,
+                      obscureText: true,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      decoration: inputDecoration(
+                        'PIN wallet (6 digit)',
+                        Icons.lock_outline_rounded,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 22),
                   const SectionTitle('Voucher/Kode Promo'),
                   const SizedBox(height: 10),
@@ -928,8 +943,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           if (method == 'WALLET') {
             controller.submitWalletCheckout(
               customerLookup: customerLookup.text,
+              pin: walletPin.text,
               voucherCode: voucher.text,
             );
+            walletPin.clear();
             return;
           }
           controller.submitCheckout(
@@ -967,7 +984,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           children: [
             CenterHeader(
               title: 'Pembayaran',
-              onBack: controller.backToCheckout,
+              onBack: () => _confirmLeavePayment(context, controller),
             ),
             Expanded(
               child: payment == null
@@ -983,9 +1000,29 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                 value: rupiah(payment.amount),
                                 emphasized: true,
                               ),
-                              if (payment.expiresAt != null) ...[
+                              if (payment.isPending) ...[
                                 const SizedBox(height: 6),
-                                CountdownRow(expiresAtIso: payment.expiresAt!),
+                                CountdownRow(
+                                  key: ValueKey(payment.paymentNumber),
+                                  secondsRemaining: payment.secondsRemaining,
+                                ),
+                              ],
+                              if (payment.isEnded) ...[
+                                const SizedBox(height: 10),
+                                ErrorMessage(
+                                  payment.status == 'EXPIRED'
+                                      ? 'Tagihan kedaluwarsa dan belum ada pembayaran masuk.'
+                                      : 'Tagihan ini sudah tidak berlaku.',
+                                ),
+                                const SizedBox(height: 10),
+                                if (payment.canRetry)
+                                  OutlinedButton.icon(
+                                    onPressed: controller.loading
+                                        ? null
+                                        : controller.renewPayment,
+                                    icon: const Icon(Icons.refresh_rounded),
+                                    label: const Text('Buat Tagihan Baru'),
+                                  ),
                               ],
                             ],
                           ),
@@ -1011,7 +1048,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ? null
           : TwoButtonBar(
               secondaryLabel: 'Ganti Metode',
-              onSecondary: controller.backToCheckout,
+              onSecondary: () => _confirmLeavePayment(context, controller),
               primaryLabel: paymentSimulationEnabled
                   ? 'Simulasikan Bayar'
                   : 'Cek Status',
@@ -1247,7 +1284,7 @@ class SuccessScreen extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            'Selamat ${machine?.name ?? 'mesin'} sudah bisa digunakan!',
+                            _machineStatusLabel(controller, machine?.name),
                             style: const TextStyle(
                               fontSize: 16,
                               color: textDark,
@@ -1279,13 +1316,69 @@ class SuccessScreen extends StatelessWidget {
         ),
       ),
       bottomNavigationBar: TwoButtonBar(
-        secondaryLabel: 'Cetak',
-        onSecondary: null,
+        secondaryLabel: _machineNeedsRetry(controller)
+            ? 'Nyalakan Ulang'
+            : 'Cetak',
+        onSecondary:
+            _machineNeedsRetry(controller) && !controller.machineRetrying
+            ? controller.retryMachineStart
+            : null,
         primaryLabel: 'Selesai',
         onPrimary: controller.newOrder,
       ),
     );
   }
+}
+
+/// Kembali dari layar bayar membatalkan order (mesin dilepas). Minta konfirmasi
+/// agar pelanggan yang sedang membayar tidak membatalkan tanpa sengaja.
+Future<void> _confirmLeavePayment(
+  BuildContext context,
+  KioskController controller,
+) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Batalkan pembayaran?'),
+      content: const Text(
+        'Pesanan akan dibatalkan dan mesin dilepas. '
+        'Jika Anda SUDAH membayar, jangan batalkan — tunggu konfirmasi.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Tetap di sini'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Batalkan'),
+        ),
+      ],
+    ),
+  );
+  if (ok == true) controller.backToCheckout();
+}
+
+bool _machineNeedsRetry(KioskController c) =>
+    c.machineCommandStatus == 'FAILED' || c.machineStatusTimedOut;
+
+/// Teks status mesin di layar sukses — berdasarkan status perintah START dari
+/// server (bukan asumsi): mesin baru dinyatakan menyala setelah lapor RUNNING.
+String _machineStatusLabel(KioskController c, String? machineName) {
+  final name = machineName ?? 'Mesin';
+  if (c.error != null && _machineNeedsRetry(c)) return c.error!;
+  switch (c.machineCommandStatus) {
+    case 'RUNNING':
+      return '$name sudah menyala. Selamat mencuci!';
+    case 'COMPLETED':
+      return '$name telah selesai.';
+    case 'FAILED':
+      return '$name gagal dinyalakan. Tekan "Nyalakan Ulang" atau hubungi petugas.';
+  }
+  if (c.machineStatusTimedOut) {
+    return '$name belum merespons. Tekan "Nyalakan Ulang" atau hubungi petugas.';
+  }
+  return 'Menyalakan $name…';
 }
 
 // ── Komponen bersama ─────────────────────────────────────────────────
@@ -1417,9 +1510,10 @@ class DashedDivider extends StatelessWidget {
 }
 
 class CountdownRow extends StatefulWidget {
-  const CountdownRow({required this.expiresAtIso, super.key});
+  const CountdownRow({required this.secondsRemaining, super.key});
 
-  final String expiresAtIso;
+  /// Sisa detik dari SERVER saat status diterima.
+  final int secondsRemaining;
 
   @override
   State<CountdownRow> createState() => _CountdownRowState();
@@ -1432,8 +1526,7 @@ class _CountdownRowState extends State<CountdownRow> {
   @override
   void initState() {
     super.initState();
-    _expiry =
-        DateTime.tryParse(widget.expiresAtIso)?.toLocal() ?? DateTime.now();
+    _expiry = DateTime.now().add(Duration(seconds: widget.secondsRemaining));
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
@@ -1448,9 +1541,9 @@ class _CountdownRowState extends State<CountdownRow> {
   @override
   Widget build(BuildContext context) {
     final left = _expiry.difference(DateTime.now());
-    final expired = left.isNegative;
-    final mm = (expired ? 0 : left.inMinutes).toString().padLeft(2, '0');
-    final ss = (expired ? 0 : left.inSeconds % 60).toString().padLeft(2, '0');
+    final done = left.isNegative || left.inSeconds == 0;
+    final mm = (done ? 0 : left.inMinutes).toString().padLeft(2, '0');
+    final ss = (done ? 0 : left.inSeconds % 60).toString().padLeft(2, '0');
     return Row(
       children: [
         const Text(
@@ -1459,7 +1552,8 @@ class _CountdownRowState extends State<CountdownRow> {
         ),
         const Spacer(),
         Text(
-          expired ? 'Kedaluwarsa' : '$mm:$ss',
+          // Habis di layar ≠ kedaluwarsa: status akhir ditentukan server.
+          done ? 'Memastikan status…' : '$mm:$ss',
           style: const TextStyle(
             color: errorColor,
             fontSize: 16,

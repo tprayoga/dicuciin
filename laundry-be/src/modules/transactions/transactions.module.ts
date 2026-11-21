@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { PaymentsModule } from '../payments/payments.module';
+import { OrderCreateController } from './order-create.controller';
 import { TransactionService } from './transaction.service';
 import { TransactionsController } from './transactions.controller';
 import { OrdersModule } from '../orders/orders.module';
@@ -24,8 +26,9 @@ import { IotModule } from '../iot/iot.module';
     PromosModule,
     CampaignsModule,
     IotModule,
+    PaymentsModule,
   ],
-  controllers: [TransactionsController],
+  controllers: [TransactionsController, OrderCreateController],
   providers: [TransactionService],
   exports: [TransactionService],
 })

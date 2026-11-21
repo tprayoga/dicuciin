@@ -77,8 +77,9 @@ class WalletController extends ChangeNotifier {
     }
   }
 
-  /// Set / ganti PIN wallet di backend. Melempar [ApiException] bila gagal.
-  Future<void> setPin(String pin) async {
+  /// Set / ganti PIN wallet di backend ([currentPin] wajib bila sudah punya PIN).
+  /// Melempar [ApiException] bila gagal (pesan server: salah / terkunci).
+  Future<void> setPin(String pin, {String? currentPin}) async {
     final token = _accessToken;
     final customerId = _customerId;
     if (token == null || customerId == null) {
@@ -88,12 +89,14 @@ class WalletController extends ChangeNotifier {
       accessToken: token,
       customerId: customerId,
       pin: pin,
+      currentPin: currentPin,
     );
     _hasPin = true;
     notifyListeners();
   }
 
-  /// Verifikasi PIN wallet ke backend. true bila cocok, false bila salah.
+  /// Verifikasi PIN wallet ke backend. true bila cocok. PIN salah/terkunci →
+  /// [ApiException] berisi pesan server (mis. "PIN wallet terkunci sementara…").
   Future<bool> verifyPin(String input) async {
     final token = _accessToken;
     final customerId = _customerId;
@@ -107,13 +110,10 @@ class WalletController extends ChangeNotifier {
 
   bool canPay(int amount) => amount <= _balance;
 
-  /// Bayar [amount] untuk [orderId] memakai saldo. Backend memotong saldo,
-  /// membuat Payment, dan menandai order PAID. Saldo lokal diperbarui dari
-  /// respons server. Melempar [ApiException] bila gagal (mis. saldo kurang).
-  Future<void> payOrder({
-    required String orderId,
-    required int amount,
-  }) async {
+  /// Bayar [orderId] memakai saldo. Backend menentukan nominal dari total
+  /// order, memotong saldo, membuat Payment, dan menandai order PAID.
+  /// Melempar [ApiException] bila gagal (mis. saldo kurang).
+  Future<void> payOrder({required String orderId}) async {
     final token = _accessToken;
     final customerId = _customerId;
     if (token == null || customerId == null) {
@@ -123,20 +123,6 @@ class WalletController extends ChangeNotifier {
       accessToken: token,
       customerId: customerId,
       orderId: orderId,
-      amount: amount,
-    );
-    notifyListeners();
-  }
-
-  /// Top up saldo via backend. Saldo diperbarui dari respons server.
-  Future<void> topUp(int amount) async {
-    final token = _accessToken;
-    final customerId = _customerId;
-    if (amount <= 0 || token == null || customerId == null) return;
-    _balance = await _authService.topUpWallet(
-      accessToken: token,
-      customerId: customerId,
-      amount: amount,
     );
     notifyListeners();
   }

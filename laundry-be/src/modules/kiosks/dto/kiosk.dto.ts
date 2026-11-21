@@ -140,4 +140,26 @@ export class KioskCheckoutDto {
   @IsString()
   @IsOptional()
   promoCode?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Mesin yang dibeli (wajib di aplikasi kiosk versi baru)',
+  })
+  @IsString()
+  @IsOptional()
+  deviceId?: string;
+
+  @ApiProperty({ required: false, description: 'Kode mesin (alternatif deviceId)' })
+  @IsString()
+  @IsOptional()
+  deviceCode?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'PIN wallet customer (wajib untuk bayar pakai saldo di kiosk)',
+  })
+  @IsString()
+  @IsOptional()
+  @Matches(/^\d{6}$/, { message: 'PIN wallet harus 6 digit angka' })
+  pin?: string;
 }

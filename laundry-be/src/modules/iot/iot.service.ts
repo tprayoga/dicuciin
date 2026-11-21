@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { DeviceType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateIotDeviceDto, UpdateIotDeviceDto } from './dto/iot.dto';
 
@@ -16,22 +17,46 @@ export class IotService {
       where: { deviceCode: createIotDeviceDto.deviceCode },
     });
     if (existing) throw new ConflictException('Device code already exists');
+    await this.assertServiceFitsMachine(createIotDeviceDto.deviceType, createIotDeviceDto.serviceId);
 
     return this.prisma.iotDevice.create({
       data: createIotDeviceDto,
-      include: { outlet: true, kiosk: true },
+      include: { outlet: true, kiosk: true, service: { select: { id: true, name: true, machineType: true } } },
     });
   }
 
   async updateDevice(id: string, updateIotDeviceDto: UpdateIotDeviceDto) {
     const device = await this.prisma.iotDevice.findUnique({ where: { id } });
     if (!device) throw new NotFoundException('Device not found');
+    await this.assertServiceFitsMachine(device.deviceType, updateIotDeviceDto.serviceId);
 
     return this.prisma.iotDevice.update({
       where: { id },
       data: updateIotDeviceDto,
-      include: { outlet: true, kiosk: true },
+      include: { outlet: true, kiosk: true, service: { select: { id: true, name: true, machineType: true } } },
     });
+  }
+
+  /**
+   * Batch 6 (S3): layanan mesin harus ada, aktif, dan cocok tipe mesin
+   * (pengering ↔ layanan DRYER; mesin cuci ↔ WASHER/WASHER_DRYER).
+   */
+  private async assertServiceFitsMachine(deviceType: DeviceType, serviceId?: string | null) {
+    if (!serviceId) return;
+    const service = await this.prisma.service.findUnique({ where: { id: serviceId } });
+    if (!service || !service.isActive) throw new NotFoundException('Layanan tidak ditemukan / tidak aktif');
+    const mt = (service.machineType ?? '').toUpperCase();
+    const ok =
+      deviceType === DeviceType.DRYER_MACHINE
+        ? mt === 'DRYER'
+        : deviceType === DeviceType.WASHING_MACHINE
+          ? mt === 'WASHER' || mt === 'WASHER_DRYER'
+          : false;
+    if (!ok) {
+      throw new BadRequestException(
+        `Layanan "${service.name}" (${service.machineType ?? '-'}) tidak cocok untuk perangkat ${deviceType}`,
+      );
+    }
   }
 
   async removeDevice(id: string) {
@@ -51,7 +76,7 @@ export class IotService {
         where,
         skip,
         take: limit,
-        include: { outlet: true, kiosk: true },
+        include: { outlet: true, kiosk: true, service: { select: { id: true, name: true, machineType: true } } },
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.iotDevice.count({ where }),

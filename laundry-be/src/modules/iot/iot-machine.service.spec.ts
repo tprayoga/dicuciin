@@ -2,18 +2,25 @@ import { BadRequestException } from '@nestjs/common';
 import { IotMachineService } from './iot-machine.service';
 
 function makePrisma(): any {
-  return {
-    order: { findUnique: jest.fn() },
+  const prisma: any = {
+    order: { findUnique: jest.fn(), update: jest.fn() },
+    orderStatusLog: { create: jest.fn() },
     iotCommand: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
+      findUniqueOrThrow: jest.fn(async () => ({ id: 'cmd1', status: 'PUBLISHED' })),
       create: jest.fn(({ data }: any) => ({ id: 'cmd1', ...data })),
       update: jest.fn(({ data }: any) => ({ id: 'cmd1', ...data })),
+      // Batch 2: klaim atomik PENDING → PUBLISHED.
+      updateMany: jest.fn(async () => ({ count: 1 })),
     },
     iotDevice: { findUnique: jest.fn(), update: jest.fn() },
     iotEvent: { create: jest.fn() },
-    machineBooking: { findUnique: jest.fn(), updateMany: jest.fn() },
+    machineBooking: { findUnique: jest.fn(), updateMany: jest.fn(async () => ({ count: 1 })) },
+    $queryRaw: jest.fn(async () => []),
   };
+  prisma.$transaction = jest.fn((fn: any) => fn(prisma));
+  return prisma;
 }
 
 describe('IotMachineService', () => {
@@ -94,8 +101,12 @@ describe('IotMachineService', () => {
       'START_MACHINE',
       expect.objectContaining({ commandId: 'cmd1' }),
     );
-    expect(prisma.iotCommand.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: 'PUBLISHED' }) }),
+    // Batch 2: klaim atomik PENDING → PUBLISHED lewat updateMany bersyarat.
+    expect(prisma.iotCommand.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: 'PENDING' }),
+        data: expect.objectContaining({ status: 'PUBLISHED' }),
+      }),
     );
   });
 
@@ -149,6 +160,32 @@ describe('IotMachineService', () => {
     expect(prisma.machineBooking.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: 'DONE' }) }),
     );
+  });
+
+  it('publikasi ganda: klaim atomik kalah → MQTT TIDAK dipublikasikan lagi', async () => {
+    prisma.iotCommand.findUnique.mockResolvedValue({
+      id: 'cmd1', status: 'PENDING', command: 'START_MACHINE', payload: {}, device: { deviceCode: 'WASH-01' },
+    });
+    prisma.iotCommand.updateMany.mockResolvedValue({ count: 0 }); // worker lain menang
+    await service.markPublished('cmd1');
+    expect(mqtt.publishCommand).not.toHaveBeenCalled();
+  });
+
+  it('event COMPLETED juga menyelesaikan order PAID → COMPLETED', async () => {
+    prisma.iotDevice.findUnique.mockResolvedValue({ id: 'd1', deviceCode: 'WASH-01' });
+    prisma.iotCommand.findFirst.mockResolvedValue({ id: 'cmd1', status: 'RUNNING', orderId: 'o1' });
+    prisma.order.findUnique.mockResolvedValue({ id: 'o1', status: 'PAID' });
+    await service.handleDeviceEvent({ deviceCode: 'WASH-01', eventType: 'COMPLETED' });
+    expect(prisma.order.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED' }) }),
+    );
+  });
+
+  it('event RUNNING terlambat untuk START yang TIMEOUT tetap diterima', async () => {
+    prisma.iotDevice.findUnique.mockResolvedValue({ id: 'd1', deviceCode: 'WASH-01' });
+    prisma.iotCommand.findUnique.mockResolvedValue({ id: 'cmd1', status: 'TIMEOUT', orderId: 'o1' });
+    const res: any = await service.handleDeviceEvent({ deviceCode: 'WASH-01', eventType: 'RUNNING', commandId: 'cmd1' } as any);
+    expect(res.commandUpdated).toBe(true);
   });
 
   it('event ERROR → command FAILED', async () => {

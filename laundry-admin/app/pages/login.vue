@@ -29,6 +29,15 @@ async function login() {
     }
     // Handle wrapped response { success, data: { user, accessToken, refreshToken } }
     const data = body?.data ?? body
+    // Panel admin hanya untuk staf — akun pelanggan ditolak (sesinya dicabut).
+    if (!data?.user?.role || data.user.role === 'CUSTOMER') {
+      await fetch(`${config.public.apiBase}/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data?.accessToken}` },
+        body: JSON.stringify({ refreshToken: data?.refreshToken }),
+      }).catch(() => {})
+      throw new Error('Akun ini bukan akun staf. Gunakan aplikasi Di.Cuciin untuk pelanggan.')
+    }
     authStore.setAuth(data)
     router.push('/dashboard')
   } catch (e: any) {

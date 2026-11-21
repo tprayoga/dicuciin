@@ -13,6 +13,12 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const authStore = useAuthStore()
   await authStore.initAuth()
 
+  // Sesi pelanggan (mis. tersimpan dari sebelum login dibatasi) tidak boleh
+  // memakai panel admin.
+  if (authStore.isAuthenticated && authStore.user?.role === 'CUSTOMER') {
+    authStore.clearAuth()
+  }
+
   if (GUEST_ONLY_ROUTES.has(to.path)) {
     if (authStore.isAuthenticated) {
       return navigateTo('/dashboard')

@@ -23,7 +23,7 @@ const loading = ref(false)
 const activeTab = ref<TabKey>('dashboard')
 const search = ref('')
 const statusFilter = ref('ALL')
-const month = ref(new Date().toISOString().slice(0, 7))
+const month = ref(currentWibMonth())
 const errorMessage = ref('')
 
 const dashboard = ref<any>({
@@ -234,7 +234,7 @@ function formatMoney(value: any) {
 }
 
 function formatDate(value: string | null | undefined) {
-  return value ? new Date(value).toLocaleDateString('id-ID') : '-'
+  return formatWibDate(value)
 }
 
 function badgeColor(value: string | boolean) {
@@ -326,8 +326,8 @@ function openVoucher(item?: any) {
     value: item.value,
     quota: item.quota ?? 100,
     validityDays: item.validityDays ?? 30,
-    startDate: item.startDate?.slice(0, 10) || '',
-    endDate: item.endDate?.slice(0, 10) || '',
+    startDate: toWibInputDate(item.startDate),
+    endDate: toWibInputDate(item.endDate),
     minTransaction: item.minTransaction ?? 0,
     maxDiscount: item.maxDiscount ?? 0,
     applicableOutlets: item.applicableOutlets || '',
@@ -363,8 +363,8 @@ function voucherPayload() {
     value: Number(voucherForm.value),
     quota: voucherForm.quota ? Number(voucherForm.quota) : undefined,
     validityDays: voucherForm.validityDays ? Number(voucherForm.validityDays) : undefined,
-    startDate: voucherForm.startDate || undefined,
-    endDate: voucherForm.endDate || undefined,
+    startDate: voucherForm.startDate ? wibStartOfDay(voucherForm.startDate) : undefined,
+    endDate: voucherForm.endDate ? wibEndOfDay(voucherForm.endDate) : undefined,
     minTransaction: voucherForm.minTransaction ? Number(voucherForm.minTransaction) : undefined,
     maxDiscount: voucherForm.maxDiscount ? Number(voucherForm.maxDiscount) : undefined,
     applicableOutlets: voucherForm.applicableOutlets || undefined,
@@ -413,8 +413,8 @@ async function saveCampaign() {
       name: campaignForm.name,
       description: campaignForm.description || undefined,
       segment: campaignForm.segment,
-      startDate: campaignForm.startDate || undefined,
-      endDate: campaignForm.endDate || undefined,
+      startDate: campaignForm.startDate ? wibStartOfDay(campaignForm.startDate) : undefined,
+      endDate: campaignForm.endDate ? wibEndOfDay(campaignForm.endDate) : undefined,
       rules,
       rewards,
     })
@@ -468,8 +468,8 @@ function openB2BSpecialPrice(item?: any) {
     machineType: item.machineType || '',
     priceType: item.priceType || 'FIXED_PRICE',
     value: item.value ?? 0,
-    startDate: item.startDate?.slice(0, 10) || '',
-    endDate: item.endDate?.slice(0, 10) || '',
+    startDate: toWibInputDate(item.startDate),
+    endDate: toWibInputDate(item.endDate),
     priority: item.priority ?? 0,
     isActive: item.isActive,
   } : {
@@ -499,8 +499,8 @@ function b2bSpecialPricePayload() {
     machineType: b2bSpecialPriceForm.machineType || undefined,
     value: Number(b2bSpecialPriceForm.value),
     priority: Number(b2bSpecialPriceForm.priority),
-    startDate: b2bSpecialPriceForm.startDate || undefined,
-    endDate: b2bSpecialPriceForm.endDate || undefined,
+    startDate: b2bSpecialPriceForm.startDate ? wibStartOfDay(b2bSpecialPriceForm.startDate) : undefined,
+    endDate: b2bSpecialPriceForm.endDate ? wibEndOfDay(b2bSpecialPriceForm.endDate) : undefined,
   }
 }
 
@@ -592,8 +592,8 @@ function openHappyHour(item?: any) {
     quota: item.quota ?? 0,
     allowVoucherStack: item.allowVoucherStack ?? true,
     priority: item.priority ?? 0,
-    startDate: item.startDate?.slice(0, 10) || '',
-    endDate: item.endDate?.slice(0, 10) || '',
+    startDate: toWibInputDate(item.startDate),
+    endDate: toWibInputDate(item.endDate),
     isActive: item.isActive,
   } : {
     name: '',
@@ -625,8 +625,8 @@ async function saveHappyHour() {
     outletId: happyHourForm.outletId || undefined,
     serviceId: happyHourForm.serviceId || undefined,
     machineType: happyHourForm.machineType || undefined,
-    startDate: happyHourForm.startDate || undefined,
-    endDate: happyHourForm.endDate || undefined,
+    startDate: happyHourForm.startDate ? wibStartOfDay(happyHourForm.startDate) : undefined,
+    endDate: happyHourForm.endDate ? wibEndOfDay(happyHourForm.endDate) : undefined,
     value: Number(happyHourForm.value),
     quota: happyHourForm.quota ? Number(happyHourForm.quota) : undefined,
     allowVoucherStack: happyHourForm.allowVoucherStack,

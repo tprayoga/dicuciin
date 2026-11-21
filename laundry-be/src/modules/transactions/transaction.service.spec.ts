@@ -14,6 +14,13 @@ import { PromosService } from '../promos/promos.service';
 import { CampaignService } from '../campaigns/campaign.service';
 import { LoyaltyConfigService } from '../loyalty-config/loyalty-config.service';
 import { IotMachineService } from '../iot/iot-machine.service';
+import { PaymentsService } from '../payments/payments.service';
+
+// Batch 4: kebijakan voucher refund diuji nyata di integration (refund-voucher-policy).
+jest.mock('../orders/voucher-refund-policy', () => ({
+  restoreVoucherAfterRefundInTx: jest.fn().mockResolvedValue({ restored: true }),
+}));
+import { restoreVoucherAfterRefundInTx } from '../orders/voucher-refund-policy';
 
 jest.mock('../../common/utils/sequence.util', () => ({
   generateDailySequence: jest.fn().mockResolvedValue('ORD-TEST-001'),
@@ -54,10 +61,30 @@ describe('TransactionService', () => {
       },
       orderStatusLog: { create: jest.fn().mockResolvedValue({}) },
       b2BPricingRuleUsage: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      // Batch 1.5: pengikatan HOLD app lama (tidak ada HOLD → tidak diikat).
+      service: { findMany: jest.fn().mockResolvedValue([{ machineType: 'WASHER' }]) },
+      machineBooking: { findMany: jest.fn().mockResolvedValue([]) },
     };
     prisma = {
-      order: { findUnique: jest.fn() },
+      order: {
+        findUnique: jest.fn(),
+        findUniqueOrThrow: jest.fn(async ({ where }: any) => ({
+          id: where.id,
+          orderNumber: 'ORD-TEST-001',
+          status: OrderStatus.PAID,
+          subtotal: new Prisma.Decimal(50000),
+          deliveryFee: new Prisma.Decimal(0),
+          totalAmount: new Prisma.Decimal(50000),
+          pricingSnapshot: { version: 1, basePrice: 50000, voucherDiscount: 0 },
+        })),
+      },
       b2BPartner: { findUnique: jest.fn() },
+      walletLedger: {
+        findMany: jest.fn().mockResolvedValue([
+          { direction: 'DEBIT', walletType: 'MAIN_BALANCE', amount: new Prisma.Decimal(50000), referenceType: 'PAYMENT' },
+        ]),
+      },
+      pointLedger: { aggregate: jest.fn().mockResolvedValue({ _sum: { points: 50 } }) },
       $transaction: jest.fn((fn: any) => fn(tx)),
     };
 
@@ -66,8 +93,12 @@ describe('TransactionService', () => {
         priceItems: jest.fn().mockResolvedValue({
           orderItems: [{ serviceId: 'svc-1', subtotal: new Prisma.Decimal(50000) }],
           subtotal: new Prisma.Decimal(50000),
+          estimatedMinutes: null,
         }),
+        create: jest.fn().mockResolvedValue({ id: 'o1' }),
+        cancel: jest.fn().mockResolvedValue({}),
       },
+      paymentsService: { payOrderWithWalletForPayer: jest.fn().mockResolvedValue({ status: 'PAID' }) },
       pricingService: { calculate: jest.fn().mockResolvedValue(baseBreakdown()) },
       walletService: {
         getOrCreateWallet: jest.fn().mockResolvedValue({ id: 'w1' }),
@@ -112,6 +143,7 @@ describe('TransactionService', () => {
         { provide: PromosService, useValue: mocks.promosService },
         { provide: CampaignService, useValue: mocks.campaignService },
         { provide: IotMachineService, useValue: mocks.iotMachineService },
+        { provide: PaymentsService, useValue: mocks.paymentsService },
         LoyaltyConfigService,
       ],
     }).compile();
@@ -124,156 +156,101 @@ describe('TransactionService', () => {
     items: [{ serviceId: 'svc-1', quantity: 1 }],
   };
 
-  it('transaksi normal tanpa promo', async () => {
+  // Batch 3: checkout = order ber-harga (mesin pricing tunggal + reservasi) lalu
+  // dibayar lewat jalur bayar-saldo tunggal (PaymentsService). Efek nyata
+  // (voucher APPLIED, kuota, ledger, poin, B2B) diuji di
+  // test/integration/checkout-pricing.int-spec.ts (PostgreSQL nyata).
+  it('checkout = buat order ber-harga lalu bayar lewat jalur saldo tunggal', async () => {
     const res = await service.checkout(checkoutInput);
     expect(res.status).toBe(OrderStatus.PAID);
-    expect(tx.order.create).toHaveBeenCalledWith(
+    expect(mocks.ordersService.create).toHaveBeenCalledWith(
+      expect.objectContaining({ customerId: 'cust-1', outletId: 'out-1' }),
+      'cust-1',
       expect.objectContaining({
-        data: expect.objectContaining({
-          items: {
-            create: [
-              expect.not.objectContaining({ machineType: expect.anything() }),
-            ],
-          },
-        }),
+        totalAmount: new Prisma.Decimal(50000),
+        snapshot: expect.objectContaining({ version: 1, finalAmount: 50000 }),
       }),
     );
+    expect(mocks.paymentsService.payOrderWithWalletForPayer).toHaveBeenCalledWith({ customerId: 'cust-1' }, 'o1');
     expect(res.breakdown.mainBalanceUsed).toBe(50000);
     expect(res.breakdown.pointEarned).toBe(50);
-    expect(mocks.pointService.earn).toHaveBeenCalled();
-    expect(mocks.membershipTierService.recordSuccessfulTransaction).toHaveBeenCalled();
-    expect(mocks.voucherService.redeem).not.toHaveBeenCalled();
   });
 
-  it('transaksi dengan voucher → voucher di-redeem', async () => {
+  it('voucher & happy hour masuk snapshot harga order (direservasi saat order dibuat)', async () => {
     mocks.pricingService.calculate.mockResolvedValue(
       baseBreakdown({
         discountSource: 'VOUCHER',
         voucherDiscount: 10000,
-        spendingAmount: 40000,
-        finalAmount: 40000,
+        happyHourDiscount: 5000,
+        spendingAmount: 35000,
+        finalAmount: 35000,
         voucherId: 'uv1',
         voucherCode: 'WELCOME-AAAA',
+        happyHourRules: [{ ruleId: 'hh-1', quantity: 1, discountAmount: 5000 }],
       }),
     );
-    const res = await service.checkout({ ...checkoutInput, voucherCode: 'WELCOME-AAAA' });
-    expect(res.breakdown.voucherDiscount).toBe(10000);
-    expect(mocks.voucherService.redeem).toHaveBeenCalledWith(
-      tx,
-      expect.objectContaining({ userVoucherId: 'uv1', orderId: 'o1' }),
-    );
+    await service.checkout({ ...checkoutInput, voucherCode: 'WELCOME-AAAA' });
+    const priced = mocks.ordersService.create.mock.calls[0][2];
+    expect(priced.totalAmount).toEqual(new Prisma.Decimal(35000));
+    expect(priced.snapshot).toMatchObject({
+      voucherId: 'uv1',
+      voucherDiscount: 10000,
+      happyHourRules: [{ ruleId: 'hh-1', quantity: 1, discountAmount: 5000 }],
+    });
   });
 
-  it('transaksi dengan happy hour memakai breakdown dari pricing API', async () => {
-    mocks.pricingService.calculate.mockResolvedValue(
-      baseBreakdown({
-        happyHourDiscount: 10000,
-        spendingAmount: 40000,
-        finalAmount: 40000,
-        pointsToEarn: 40,
-        happyHourRules: [{ ruleId: 'hh-1', quantity: 1, discountAmount: 10000 }],
-      }),
-    );
-    mocks.walletService.payWithWallet.mockResolvedValue({
-      bonusUsed: new Prisma.Decimal(5000),
-      mainUsed: new Prisma.Decimal(35000),
-    });
-
-    const res = await service.checkout(checkoutInput);
-
-    expect(res.breakdown.happyHourDiscount).toBe(10000);
-    expect(res.breakdown.bonusBalanceUsed).toBe(5000);
-    expect(res.breakdown.mainBalanceUsed).toBe(35000);
-    expect(res.breakdown.finalAmount).toBe(40000);
-    expect(mocks.campaignService.consumeHappyHourQuota).toHaveBeenCalledWith(tx, [
-      { ruleId: 'hh-1', quantity: 1 },
-    ]);
-  });
-
-  it('pembayaran B2B hanya untuk partner ACTIVE dan mencatat transaksi partner', async () => {
-    prisma.b2BPartner.findUnique.mockResolvedValue({
-      id: 'p1',
-      status: 'ACTIVE',
-      tier: B2BPartnerTier.GOLD_PARTNER,
-    });
+  it('B2B: harga segmen B2B, dibayar dari dompet partner', async () => {
+    prisma.b2BPartner.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE', tier: B2BPartnerTier.GOLD_PARTNER });
     mocks.walletService.getOrCreateWallet.mockResolvedValue({ id: 'wallet-b2b' });
-    mocks.pricingService.calculate.mockResolvedValue(
-      baseBreakdown({
-        b2bDiscount: 5000,
-        spendingAmount: 45000,
-        finalAmount: 45000,
-        b2bPricingRules: [{ ruleId: 'rule-1', discountAmount: 5000 }],
-      }),
-    );
-    mocks.walletService.payWithWallet.mockResolvedValue({
-      bonusUsed: new Prisma.Decimal(0),
-      mainUsed: new Prisma.Decimal(45000),
-    });
-
-    const res = await service.checkout({
-      partnerId: 'p1',
-      outletId: 'out-1',
-      items: [{ serviceId: 'svc-1', quantity: 1 }],
-    });
-
+    const res = await service.checkout({ partnerId: 'p1', outletId: 'out-1', items: [{ serviceId: 'svc-1', quantity: 1 }] });
     expect(res.segment).toBe(UserSegment.B2B);
     expect(mocks.pricingService.calculate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        segment: UserSegment.B2B,
-        partnerId: 'p1',
-        b2bTier: B2BPartnerTier.GOLD_PARTNER,
-      }),
+      expect.objectContaining({ segment: UserSegment.B2B, partnerId: 'p1', b2bTier: B2BPartnerTier.GOLD_PARTNER }),
     );
-    expect(mocks.b2bPartnerService.recordSuccessfulTransaction).toHaveBeenCalledWith(
-      tx,
-      'p1',
-      45000,
-    );
-    expect(tx.b2BPricingRuleUsage.createMany).toHaveBeenCalledWith({
-      data: [
-        {
-          orderId: 'o1',
-          ruleId: 'rule-1',
-          partnerId: 'p1',
-          discountAmount: new Prisma.Decimal(5000),
-        },
-      ],
-      skipDuplicates: true,
-    });
-    expect(mocks.membershipTierService.recordSuccessfulTransaction).not.toHaveBeenCalled();
+    expect(mocks.ordersService.create.mock.calls[0][2]).toMatchObject({ partnerId: 'p1' });
+    expect(mocks.paymentsService.payOrderWithWalletForPayer).toHaveBeenCalledWith({ partnerId: 'p1' }, 'o1');
   });
 
-  it('pembayaran B2B ditolak jika partner belum approved/aktif', async () => {
-    prisma.b2BPartner.findUnique.mockResolvedValue({
-      id: 'p1',
-      status: 'SUSPENDED',
-      tier: B2BPartnerTier.BUSINESS_PARTNER,
-    });
-
+  it('pembayaran B2B ditolak jika partner belum approved/aktif (tanpa order)', async () => {
+    prisma.b2BPartner.findUnique.mockResolvedValue({ id: 'p1', status: 'SUSPENDED', tier: B2BPartnerTier.BUSINESS_PARTNER });
     await expect(
-      service.checkout({
-        partnerId: 'p1',
-        outletId: 'out-1',
-        items: [{ serviceId: 'svc-1', quantity: 1 }],
-      }),
+      service.checkout({ partnerId: 'p1', outletId: 'out-1', items: [{ serviceId: 'svc-1', quantity: 1 }] }),
     ).rejects.toThrow('Partner B2B belum approved/aktif');
-    expect(mocks.walletService.getOrCreateWallet).not.toHaveBeenCalled();
+    expect(mocks.ordersService.create).not.toHaveBeenCalled();
   });
 
-  it('transaksi gagal karena saldo kurang', async () => {
-    mocks.walletService.payWithWallet.mockRejectedValue(
-      new BadRequestException('Saldo wallet tidak cukup'),
-    );
+  it('saldo kurang → error diteruskan & order yang baru dibuat DIBATALKAN (tanpa order yatim)', async () => {
+    mocks.paymentsService.payOrderWithWalletForPayer.mockRejectedValue(new BadRequestException('Saldo tidak mencukupi'));
     await expect(service.checkout(checkoutInput)).rejects.toBeInstanceOf(BadRequestException);
+    expect(mocks.ordersService.cancel).toHaveBeenCalledWith(
+      'o1',
+      expect.anything(),
+      undefined,
+      undefined,
+      { requireUnpaid: true },
+    );
   });
 
-  it('transaksi gagal karena voucher tidak valid', async () => {
-    mocks.pricingService.calculate.mockRejectedValue(
-      new BadRequestException('Voucher sudah kedaluwarsa'),
-    );
-    await expect(
-      service.checkout({ ...checkoutInput, voucherCode: 'EXPIRED' }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+  it('checkout dengan orderId membayar order YANG ADA — tidak membuat order baru', async () => {
+    await service.checkout({ ...checkoutInput, orderId: 'o-existing' });
+    expect(mocks.ordersService.create).not.toHaveBeenCalled();
+    expect(mocks.paymentsService.payOrderWithWalletForPayer).toHaveBeenCalledWith({ customerId: 'cust-1' }, 'o-existing');
+  });
+
+  it('voucher tidak valid → ditolak sebelum order dibuat', async () => {
+    mocks.pricingService.calculate.mockRejectedValue(new BadRequestException('Voucher sudah kedaluwarsa'));
+    await expect(service.checkout({ ...checkoutInput, voucherCode: 'EXPIRED' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(mocks.ordersService.create).not.toHaveBeenCalled();
+  });
+
+  it('quote mengembalikan estimasi durasi dari server', async () => {
+    mocks.ordersService.priceItems.mockResolvedValue({
+      orderItems: [{ serviceId: 'svc-1', subtotal: new Prisma.Decimal(20000) }],
+      subtotal: new Prisma.Decimal(20000),
+      estimatedMinutes: 120,
+    });
+    const q: any = await service.quote(checkoutInput);
+    expect(q.estimatedMinutes).toBe(120);
   });
 
   it('refund mengembalikan saldo, poin, voucher, dan tier', async () => {
@@ -299,7 +276,7 @@ describe('TransactionService', () => {
     expect(res.status).toBe(OrderStatus.REFUNDED);
     expect(mocks.walletService.credit).toHaveBeenCalledTimes(1);
     expect(mocks.pointService.reverseForOrder).toHaveBeenCalledWith(tx, 'w1', 'o1');
-    expect(mocks.voucherService.reverseRedemption).toHaveBeenCalledWith(tx, 'o1');
+    expect(restoreVoucherAfterRefundInTx).toHaveBeenCalledWith(tx, 'o1', 'admin-1');
     expect(mocks.membershipTierService.reverseTransaction).toHaveBeenCalled();
   });
 

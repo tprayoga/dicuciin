@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../core/network/api_exception.dart';
@@ -42,9 +44,7 @@ class CustomerController extends ChangeNotifier {
 
   bool _isLoading = false;
   bool _isSubmittingOrder = false;
-  bool _isUploadingPaymentProof = false;
   bool _isCancellingOrder = false;
-  bool _isRefundingOrder = false;
   String? _errorMessage;
   WalletData? _wallet;
   List<OrderSummary> _orders = const [];
@@ -61,9 +61,7 @@ class CustomerController extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
   bool get isSubmittingOrder => _isSubmittingOrder;
-  bool get isUploadingPaymentProof => _isUploadingPaymentProof;
   bool get isCancellingOrder => _isCancellingOrder;
-  bool get isRefundingOrder => _isRefundingOrder;
   String? get errorMessage => _errorMessage;
   WalletData? get wallet => _wallet;
   List<OrderSummary> get orders => _orders;
@@ -110,6 +108,8 @@ class CustomerController extends ChangeNotifier {
     final memberSummaryF = _guard(
       () => _customerService.getMemberSummary(accessToken: accessToken),
     );
+    // Batch 6 (R1): jumlah notifikasi belum dibaca untuk badge lonceng.
+    unawaited(refreshUnreadCount(accessToken: accessToken));
     final memberPointsF = _guard(
       () => _customerService.getMemberPoints(accessToken: accessToken),
     );
@@ -220,26 +220,6 @@ class CustomerController extends ChangeNotifier {
       deviceCode: deviceCode,
     );
   }
-
-  /// Reservasi mesin berdasarkan kode perangkat. [scheduledAt] (ISO) opsional.
-  Future<MachineBooking> reserveMachine({
-    required String accessToken,
-    required String deviceCode,
-    String? scheduledAt,
-  }) async {
-    final booking = await _customerService.reserveBooking(
-      accessToken: accessToken,
-      deviceCode: deviceCode,
-      scheduledAt: scheduledAt,
-    );
-    _activeBookings = [
-      booking,
-      ..._activeBookings.where((item) => item.id != booking.id),
-    ];
-    notifyListeners();
-    return booking;
-  }
-
   /// Daftar mesin nyata + keramaian sebuah outlet.
   Future<OutletMachines> getOutletMachines({
     required String accessToken,
@@ -250,6 +230,43 @@ class CustomerController extends ChangeNotifier {
       outletId: outletId,
     );
   }
+
+  // ---------------------------------------------------- Batch 6: notifikasi
+  int _unreadNotifications = 0;
+  int get unreadNotifications => _unreadNotifications;
+
+  Future<NotificationInbox> loadNotifications({required String accessToken}) async {
+    final inbox = await _customerService.getNotifications(accessToken: accessToken);
+    _unreadNotifications = inbox.unreadCount;
+    notifyListeners();
+    return inbox;
+  }
+
+  /// Hanya jumlah belum dibaca (badge lonceng); gagal → diam (bukan fitur kritis).
+  Future<void> refreshUnreadCount({required String accessToken}) async {
+    try {
+      await loadNotifications(accessToken: accessToken);
+    } catch (_) {}
+  }
+
+  Future<void> markNotificationRead({
+    required String accessToken,
+    required String id,
+  }) async {
+    await _customerService.markNotificationRead(accessToken: accessToken, id: id);
+    if (_unreadNotifications > 0) _unreadNotifications--;
+    notifyListeners();
+  }
+
+  Future<void> markAllNotificationsRead({required String accessToken}) async {
+    await _customerService.markAllNotificationsRead(accessToken: accessToken);
+    _unreadNotifications = 0;
+    notifyListeners();
+  }
+
+  // ------------------------------------------------ Batch 6: tukar poin (R3)
+  Future<RewardCatalog> getRewards({required String accessToken}) =>
+      _customerService.getRewards(accessToken: accessToken);
 
   /// Ringkasan keramaian semua outlet (map by outletId).
   Future<Map<String, OutletOccupancy>> getOccupancyMap({
@@ -331,6 +348,46 @@ class CustomerController extends ChangeNotifier {
   }
 
   /// [DEV] Simulasikan pembayaran gateway berhasil.
+  // ── Batch 4: top-up saldo (saldo bertambah HANYA dari pelunasan server) ──
+  Future<GatewayPayment> createWalletTopup({
+    required String accessToken,
+    required int amount,
+    required String method,
+    String? bank,
+  }) => _customerService.createWalletTopup(
+    accessToken: accessToken,
+    amount: amount,
+    method: method,
+    bank: bank,
+  );
+
+  Future<GatewayPayment> getWalletTopupStatus({
+    required String accessToken,
+    required String topupNumber,
+  }) => _customerService.getWalletTopupStatus(
+    accessToken: accessToken,
+    topupNumber: topupNumber,
+  );
+
+  Future<GatewayPayment> cancelWalletTopup({
+    required String accessToken,
+    required String topupNumber,
+  }) => _customerService.cancelWalletTopup(
+    accessToken: accessToken,
+    topupNumber: topupNumber,
+  );
+
+  Future<void> simulateWalletTopup({
+    required String accessToken,
+    required String topupNumber,
+  }) => _customerService.simulateWalletTopup(
+    accessToken: accessToken,
+    topupNumber: topupNumber,
+  );
+
+  Future<List<GatewayPayment>> listWalletTopups({required String accessToken}) =>
+      _customerService.listWalletTopups(accessToken: accessToken);
+
   Future<void> simulatePayment({
     required String accessToken,
     required String paymentNumber,
@@ -466,45 +523,52 @@ class CustomerController extends ChangeNotifier {
     notifyListeners();
     return results;
   }
-
-  Future<LoyaltyCheckoutResult?> checkoutLoyalty({
+  /// Bayar order yang sudah ada dengan saldo. Mengembalikan true bila sukses;
+  /// pesan error di [errorMessage].
+  Future<bool> payOrderWithWallet({
     required AppUser user,
     required String accessToken,
-    required String outletId,
-    required List<CreateOrderItemInput> items,
-    String? voucherCode,
+    required String orderId,
   }) async {
-    final customerId = user.customer?.id;
-    final partnerId = user.b2bPartner?.id;
-    if (customerId == null && partnerId == null) {
-      _errorMessage = 'Akun ini belum terhubung ke profil customer/partner.';
-      notifyListeners();
-      return null;
-    }
-
     _isSubmittingOrder = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      final result = await _customerService.checkoutLoyalty(
+      await _customerService.payOrderWithWallet(
         accessToken: accessToken,
-        customerId: customerId ?? '',
-        partnerId: partnerId,
-        outletId: outletId,
-        items: items,
-        voucherCode: voucherCode,
+        orderId: orderId,
       );
       await loadDashboard(user: user, accessToken: accessToken);
-      return result;
+      return true;
     } on ApiException catch (e) {
       _errorMessage = e.message;
-      return null;
+      return false;
     } catch (_) {
-      _errorMessage = 'Pembayaran gagal. Coba lagi.';
-      return null;
+      _errorMessage = 'Pembayaran saldo gagal. Coba lagi.';
+      return false;
     } finally {
       _isSubmittingOrder = false;
       notifyListeners();
+    }
+  }
+
+  /// Ajukan refund order. Mengembalikan null bila sukses, atau pesan error.
+  Future<String?> requestRefund({
+    required String accessToken,
+    required String orderId,
+    required String reason,
+  }) async {
+    try {
+      await _customerService.requestRefund(
+        accessToken: accessToken,
+        orderId: orderId,
+        reason: reason,
+      );
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Pengajuan refund gagal. Coba lagi.';
     }
   }
 
@@ -587,7 +651,10 @@ class CustomerController extends ChangeNotifier {
     required String outletId,
     required List<CreateOrderItemInput> items,
     String? promoCode,
+    String? voucherCode,
     String? notes,
+    String? deviceId,
+    DateTime? scheduledAt,
   }) async {
     final customerId = user.customer?.id;
     if (customerId == null) {
@@ -607,7 +674,10 @@ class CustomerController extends ChangeNotifier {
         outletId: outletId,
         items: items,
         promoCode: promoCode,
+        voucherCode: voucherCode,
         notes: notes,
+        deviceId: deviceId,
+        scheduledAt: scheduledAt,
       );
 
       await loadDashboard(user: user, accessToken: accessToken);
@@ -620,33 +690,6 @@ class CustomerController extends ChangeNotifier {
       return null;
     } finally {
       _isSubmittingOrder = false;
-      notifyListeners();
-    }
-  }
-
-  Future<PaymentProofUploadResult?> uploadPaymentProof({
-    required String accessToken,
-    required String orderId,
-    required String imagePath,
-  }) async {
-    _isUploadingPaymentProof = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      return await _customerService.uploadPaymentProof(
-        accessToken: accessToken,
-        orderId: orderId,
-        imagePath: imagePath,
-      );
-    } on ApiException catch (e) {
-      _errorMessage = e.message;
-      return null;
-    } catch (_) {
-      _errorMessage = 'Gagal upload bukti pembayaran.';
-      return null;
-    } finally {
-      _isUploadingPaymentProof = false;
       notifyListeners();
     }
   }
@@ -678,41 +721,4 @@ class CustomerController extends ChangeNotifier {
     }
   }
 
-  Future<int?> refundOrder({
-    required AppUser user,
-    required String accessToken,
-    required String orderId,
-    required String reason,
-  }) async {
-    final customerId = user.customer?.id;
-    if (customerId == null) {
-      _errorMessage = 'Akun ini belum terhubung ke profil customer.';
-      notifyListeners();
-      return null;
-    }
-
-    _isRefundingOrder = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      final balance = await _customerService.refundOrderToWallet(
-        accessToken: accessToken,
-        customerId: customerId,
-        orderId: orderId,
-        reason: reason,
-      );
-      await refreshOrdersAndBookings(user: user, accessToken: accessToken);
-      return balance;
-    } on ApiException catch (e) {
-      _errorMessage = e.message;
-      return null;
-    } catch (_) {
-      _errorMessage = 'Refund gagal diproses.';
-      return null;
-    } finally {
-      _isRefundingOrder = false;
-      notifyListeners();
-    }
-  }
 }

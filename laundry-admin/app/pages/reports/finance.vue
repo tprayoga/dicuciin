@@ -11,7 +11,7 @@ const api = useApi()
 const toast = useToast()
 
 const loading = ref(false)
-const month = ref(new Date().toISOString().slice(0, 7))
+const month = ref(currentWibMonth())
 const selectedOutlet = ref('ALL_OUTLETS')
 
 const outlets = ref<Outlet[]>([])

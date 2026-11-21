@@ -5,12 +5,16 @@ class _HomePage extends StatefulWidget {
     required this.onOpenAccount,
     required this.onOpenScan,
     required this.onOpenLocation,
+    this.onOpenLocationFor,
     required this.onOpenPromo,
   });
 
   final VoidCallback onOpenAccount;
   final VoidCallback onOpenScan;
   final VoidCallback onOpenLocation;
+
+  /// Batch 6 (S7): buka lokasi dengan filter tipe mesin.
+  final void Function(_MachineType type)? onOpenLocationFor;
   final VoidCallback onOpenPromo;
 
   @override
@@ -58,52 +62,8 @@ class _HomePageState extends State<_HomePage> {
     }
   }
 
-  void _showContactSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Text(
-                'Hubungi Kami',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: _textDark,
-                ),
-              ),
-              SizedBox(height: 16),
-              _ContactRow(
-                icon: Icons.chat,
-                label: 'WhatsApp',
-                value: '+62 811-888-2908',
-              ),
-              SizedBox(height: 12),
-              _ContactRow(
-                icon: Icons.email_outlined,
-                label: 'Email',
-                value: 'di.cuciin.hq@gmail.com',
-              ),
-              SizedBox(height: 12),
-              _ContactRow(
-                icon: Icons.headset_mic_outlined,
-                label: 'Call Center',
-                value: '0811-888-2908',
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  void _showContactSheet(BuildContext context) => _showSupportSheet(context);
+
 
   Widget _memberSummaryCard(
     CustomerController controller,
@@ -484,6 +444,8 @@ class _HomePageState extends State<_HomePage> {
                                     color: Colors.white,
                                     size: 21,
                                   ),
+                                  // Batch 6 (R1): titik hanya bila ada notifikasi belum dibaca.
+                                  if (context.watch<CustomerController>().unreadNotifications > 0)
                                   Positioned(
                                     right: -2,
                                     top: -2,
@@ -579,6 +541,7 @@ class _HomePageState extends State<_HomePage> {
                           ],
                         ),
                       ),
+                      if (AppConfig.walletTopUpEnabled)
                       OutlinedButton.icon(
                         onPressed: () => Navigator.of(context).push(
                           MaterialPageRoute(
@@ -921,14 +884,18 @@ class _HomePageState extends State<_HomePage> {
                 Expanded(
                   child: _ServiceTile(
                     label: 'Washing\nmachine',
-                    onTap: widget.onOpenLocation,
+                    onTap: () => widget.onOpenLocationFor != null
+                        ? widget.onOpenLocationFor!(_MachineType.washer)
+                        : widget.onOpenLocation(),
                   ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: _ServiceTile(
                     label: 'Dryer\nmachine',
-                    onTap: widget.onOpenLocation,
+                    onTap: () => widget.onOpenLocationFor != null
+                        ? widget.onOpenLocationFor!(_MachineType.dryer)
+                        : widget.onOpenLocation(),
                   ),
                 ),
               ],
@@ -1014,15 +981,22 @@ class _ContactRow extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
+    this.uri,
   });
 
   final IconData icon;
   final String label;
   final String value;
 
+  /// Batch 6 (R2): baris kontak bisa diketuk (WhatsApp / email / telepon).
+  final Uri? uri;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: uri == null ? null : () => _openBannerLink(context, uri.toString()),
+      child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: AppColors.background,
@@ -1060,6 +1034,7 @@ class _ContactRow extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }

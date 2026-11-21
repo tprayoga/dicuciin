@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CustomersService } from './customers.service';
@@ -7,23 +7,38 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
 import { CreateCustomerDto } from './dto/create-customer.dto';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { STAFF_ROLES, assertCustomerAccess } from '../../common/auth/access-policy';
 
 @ApiTags('Customers')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('customers')
 export class CustomersController {
-  constructor(private readonly customersService: CustomersService) {}
+  constructor(
+    private readonly customersService: CustomersService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Post()
   @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER, UserRole.ADMIN_OUTLET, UserRole.CASHIER, UserRole.OPERATOR)
   @ApiOperation({ summary: 'Create new customer/member' })
-  async create(@Body() createCustomerDto: CreateCustomerDto) {
+  async create(@Body() createCustomerDto: CreateCustomerDto, @Request() req: any) {
+    // K1: saldo awal = kredit saldo tanpa pembayaran → aturan sama dengan
+    // top-up manual (POST /wallets/customer/:id/topup): hanya SUPER_ADMIN/OWNER.
+    if (
+      (createCustomerDto.initialBalance ?? 0) > 0 &&
+      req.user?.role !== UserRole.SUPER_ADMIN &&
+      req.user?.role !== UserRole.OWNER
+    ) {
+      throw new ForbiddenException('Hanya Owner yang boleh mengisi saldo awal member');
+    }
     return this.customersService.create(createCustomerDto);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all customers' })
+  @Roles(...STAFF_ROLES)
+  @ApiOperation({ summary: 'Get all customers (staf)' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async findAll(
@@ -34,32 +49,37 @@ export class CustomersController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get customer by ID' })
-  async findOne(@Param('id') id: string) {
+  @ApiOperation({ summary: 'Get customer by ID (pemilik atau staf)' })
+  async findOne(@Param('id') id: string, @Request() req: any) {
+    await assertCustomerAccess(this.prisma, req.user, id);
     return this.customersService.findOne(id);
   }
 
   @Get(':id/orders')
-  @ApiOperation({ summary: 'Get customer orders' })
+  @ApiOperation({ summary: 'Get customer orders (pemilik atau staf)' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getOrders(
     @Param('id') id: string,
+    @Request() req: any,
     @Query('page', new ParseOptionalIntPipe(1)) page?: number,
     @Query('limit', new ParseOptionalIntPipe(10)) limit?: number,
   ) {
+    await assertCustomerAccess(this.prisma, req.user, id);
     return this.customersService.getOrders(id, page, limit);
   }
 
   @Get(':id/wallet')
-  @ApiOperation({ summary: 'Get customer wallet' })
-  async getWallet(@Param('id') id: string) {
+  @ApiOperation({ summary: 'Get customer wallet (pemilik atau staf)' })
+  async getWallet(@Param('id') id: string, @Request() req: any) {
+    await assertCustomerAccess(this.prisma, req.user, id);
     return this.customersService.getWallet(id);
   }
 
   @Get(':id/stats')
-  @ApiOperation({ summary: 'Statistik member (total order, belanja, dll)' })
-  async getStats(@Param('id') id: string) {
+  @ApiOperation({ summary: 'Statistik member (pemilik atau staf)' })
+  async getStats(@Param('id') id: string, @Request() req: any) {
+    await assertCustomerAccess(this.prisma, req.user, id);
     return this.customersService.getStats(id);
   }
 }

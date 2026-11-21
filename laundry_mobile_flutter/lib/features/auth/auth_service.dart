@@ -121,16 +121,17 @@ class AuthService {
     return (payload as Map<String, dynamic>?)?['url'] as String?;
   }
 
-  /// Set PIN wallet 6 digit (disimpan ter-hash di server).
+  /// Set / ganti PIN wallet 6 digit (Batch 4: ganti PIN wajib [currentPin]).
   Future<void> setWalletPin({
     required String accessToken,
     required String customerId,
     required String pin,
+    String? currentPin,
   }) async {
     await _apiClient.post(
-      '/wallets/customer/$customerId/pin/set',
+      '/wallets/me/pin',
       headers: {'Authorization': 'Bearer $accessToken'},
-      body: jsonEncode({'pin': pin}),
+      body: jsonEncode({'pin': pin, 'currentPin': ?currentPin}),
     );
   }
 
@@ -140,8 +141,9 @@ class AuthService {
     required String customerId,
     required String pin,
   }) async {
+    // Batch 4: PIN salah → 400, terkunci → 403 (ApiException dengan pesan server).
     final payload = await _apiClient.post(
-      '/wallets/customer/$customerId/pin/verify',
+      '/wallets/me/pin/verify',
       headers: {'Authorization': 'Bearer $accessToken'},
       body: jsonEncode({'pin': pin}),
     );
@@ -162,12 +164,12 @@ class AuthService {
     return _moneyToInt(map['balance']);
   }
 
-  /// Bayar order memakai saldo wallet. Mengembalikan saldo terbaru.
+  /// Bayar order memakai saldo wallet. Nominal ditentukan server dari total
+  /// order. Mengembalikan saldo terbaru.
   Future<int> payWithWallet({
     required String accessToken,
     required String customerId,
     required String orderId,
-    required int amount,
     String? idempotencyKey,
   }) async {
     final payload = await _apiClient.post(
@@ -175,26 +177,8 @@ class AuthService {
       headers: {'Authorization': 'Bearer $accessToken'},
       body: jsonEncode({
         'orderId': orderId,
-        'amount': amount,
         'idempotencyKey': ?idempotencyKey,
       }),
-    );
-    final wallet =
-        (payload as Map<String, dynamic>)['wallet'] as Map<String, dynamic>?;
-    return _moneyToInt(wallet?['balance']);
-  }
-
-  /// Top up saldo wallet. Mengembalikan saldo terbaru.
-  Future<int> topUpWallet({
-    required String accessToken,
-    required String customerId,
-    required int amount,
-    String? idempotencyKey,
-  }) async {
-    final payload = await _apiClient.post(
-      '/wallets/customer/$customerId/topup',
-      headers: {'Authorization': 'Bearer $accessToken'},
-      body: jsonEncode({'amount': amount, 'idempotencyKey': ?idempotencyKey}),
     );
     final wallet =
         (payload as Map<String, dynamic>)['wallet'] as Map<String, dynamic>?;
@@ -230,17 +214,73 @@ class AuthService {
     );
   }
 
+  /// Batch 5: ganti kata sandi (wajib kata sandi lama). Server mengeluarkan
+  /// perangkat lain; sesi di HP ini tetap berlaku.
+  Future<void> changePassword({
+    required String accessToken,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await _apiClient.post(
+      '/auth/password/change',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      }),
+    );
+  }
+
+  /// Batch 6: pratinjau hapus akun (penghalang & poin/bonus yang hangus).
+  Future<Map<String, dynamic>> accountDeletionPreview({required String accessToken}) async {
+    final payload = await _apiClient.get(
+      '/account/deletion/preview',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return payload as Map<String, dynamic>;
+  }
+
+  /// Batch 6: hapus akun (re-autentikasi kata sandi + ketik HAPUS).
+  /// Mengembalikan `{status: COMPLETED|PENDING_REVIEW, blockers: [...]}`.
+  Future<Map<String, dynamic>> deleteAccount({
+    required String accessToken,
+    required String password,
+    String? reason,
+  }) async {
+    final payload = await _apiClient.post(
+      '/account/deletion',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: jsonEncode({
+        'password': password,
+        'confirm': 'HAPUS',
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      }),
+    );
+    return payload as Map<String, dynamic>;
+  }
+
+  /// Batch 5: keluar dari semua perangkat (semua sesi dicabut di server).
+  Future<void> logoutAll({required String accessToken}) async {
+    await _apiClient.post(
+      '/auth/logout-all',
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+  }
+
+  /// Ubah profil sendiri lewat PATCH /users/me (nama & email saja; nomor HP
+  /// diubah lewat alur OTP).
   Future<AppUser> updateProfile({
     required String accessToken,
-    required String userId,
     required String name,
     String? email,
-    String? phone,
   }) async {
     await _apiClient.patch(
-      '/users/$userId',
+      '/users/me',
       headers: {'Authorization': 'Bearer $accessToken'},
-      body: jsonEncode({'name': name, 'email': email, 'phone': phone}),
+      body: jsonEncode({
+        'name': name,
+        if (email != null && email.isNotEmpty) 'email': email,
+      }),
     );
 
     return getMe(accessToken);

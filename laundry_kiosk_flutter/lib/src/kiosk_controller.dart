@@ -45,6 +45,18 @@ class KioskController extends ChangeNotifier {
   String? completedPaymentMethod;
   Timer? _heartbeatTimer;
   Timer? _paymentTimer;
+  bool _paymentChecking = false;
+  String _lastMethod = 'QRIS';
+  String? _lastBank;
+
+  // ── Status aktivasi mesin setelah bayar (Batch 1.5) ─────────────────
+  /// null = belum dicek; selain itu status perintah START dari server:
+  /// PENDING/PUBLISHED/ACKED (sedang dinyalakan), RUNNING, COMPLETED, FAILED.
+  String? machineCommandStatus;
+  bool machineStatusTimedOut = false;
+  bool machineRetrying = false;
+  Timer? _machineTimer;
+  int _machinePolls = 0;
 
   /// Total tagihan setelah order dibuat (kalau ada), kalau belum pakai harga layanan.
   double get total =>
@@ -232,6 +244,7 @@ class KioskController extends ChangeNotifier {
   }
 
   void backToMachines() {
+    _cancelUnpaidOrder();
     error = null;
     stage = KioskStage.machines;
     notifyListeners();
@@ -239,6 +252,7 @@ class KioskController extends ChangeNotifier {
 
   void backToCheckout() {
     _paymentTimer?.cancel();
+    _cancelUnpaidOrder();
     error = null;
     stage = KioskStage.checkout;
     notifyListeners();
@@ -257,6 +271,9 @@ class KioskController extends ChangeNotifier {
       return;
     }
     await _run(() async {
+      // Order lama yang belum dibayar (mis. pelanggan kembali dari layar bayar)
+      // dibatalkan dulu agar mesin tidak tertahan oleh order sendiri.
+      await _cancelUnpaidOrder();
       final orderPayload =
           await _api.post(
                 '/kiosks/device/orders',
@@ -265,6 +282,9 @@ class KioskController extends ChangeNotifier {
                   'outletId': terminal!.outlet.id,
                   'kioskId': terminal!.id,
                   'sourcePlatform': 'KIOSK',
+                  // Batch 1.5: order kiosk wajib terikat mesin (server menolak
+                  // order tanpa mesin) → mesin menyala otomatis setelah bayar.
+                  'deviceId': selectedMachine!.deviceId,
                   'items': [
                     {'serviceId': selectedService!.serviceId, 'quantity': 1},
                   ],
@@ -283,25 +303,39 @@ class KioskController extends ChangeNotifier {
           ? promoCode!.trim()
           : null;
 
-      final paymentPayload =
-          await _api.post(
-                '/kiosks/device/payments',
-                token: deviceToken,
-                body: {
-                  'orderId': createdOrder!.id,
-                  'method': method,
-                  'bank': ?bank,
-                },
-              )
-              as Map<String, dynamic>;
-      payment = KioskPayment.fromJson(paymentPayload);
+      _lastMethod = method;
+      _lastBank = bank;
+      await _requestPayment();
       stage = KioskStage.payment;
-      _startPaymentPolling();
     });
+  }
+
+  Future<void> _requestPayment() async {
+    final paymentPayload =
+        await _api.post(
+              '/kiosks/device/payments',
+              token: deviceToken,
+              body: {
+                'orderId': createdOrder!.id,
+                'method': _lastMethod,
+                'bank': ?_lastBank,
+              },
+            )
+            as Map<String, dynamic>;
+    payment = KioskPayment.fromJson(paymentPayload);
+    _startPaymentPolling();
+  }
+
+  /// Tagihan lama tidak berlaku lagi (menurut server) → tagihan baru untuk
+  /// order yang SAMA (server membuat percobaan baru; mesin tetap ditahan).
+  Future<void> renewPayment() async {
+    if (createdOrder == null || loading) return;
+    await _run(_requestPayment);
   }
 
   Future<void> submitWalletCheckout({
     required String customerLookup,
+    required String pin,
     String? voucherCode,
   }) async {
     if (selectedService == null ||
@@ -314,13 +348,21 @@ class KioskController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    if (!RegExp(r'^\d{6}$').hasMatch(pin.trim())) {
+      error = 'Masukkan PIN wallet 6 digit.';
+      notifyListeners();
+      return;
+    }
     await _run(() async {
+      await _cancelUnpaidOrder();
       final payload =
           await _api.post(
                 '/kiosks/device/checkout',
                 token: deviceToken,
                 body: {
                   'customerLookup': customerLookup.trim(),
+                  'pin': pin.trim(),
+                  'deviceId': selectedMachine!.deviceId,
                   'items': [
                     {
                       'serviceId': selectedService!.serviceId,
@@ -344,7 +386,88 @@ class KioskController extends ChangeNotifier {
           ? voucherCode!.trim()
           : null;
       stage = KioskStage.success;
+      _startMachinePolling();
     });
+  }
+
+  /// Batalkan order kiosk yang belum dibayar (melepas mesin). Best-effort.
+  Future<void> _cancelUnpaidOrder() async {
+    final order = createdOrder;
+    if (order == null || order.id.isEmpty) return;
+    if (completedPaymentMethod != null || (payment?.isPaid ?? false)) return;
+    _paymentTimer?.cancel();
+    createdOrder = null;
+    payment = null;
+    try {
+      await _api.post(
+        '/kiosks/device/orders/${order.id}/cancel',
+        token: deviceToken,
+      );
+    } catch (_) {
+      // Abaikan: booking HOLD tetap kedaluwarsa sendiri di server.
+    }
+  }
+
+  void _startMachinePolling() {
+    _machineTimer?.cancel();
+    machineCommandStatus = null;
+    machineStatusTimedOut = false;
+    _machinePolls = 0;
+    _checkMachineStatus();
+    _machineTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _checkMachineStatus(),
+    );
+  }
+
+  Future<void> _checkMachineStatus() async {
+    final order = createdOrder;
+    if (order == null || order.id.isEmpty) return;
+    _machinePolls++;
+    try {
+      final payload =
+          await _api.get(
+                '/kiosks/device/orders/${order.id}/machine-status',
+                token: deviceToken,
+              )
+              as Map<String, dynamic>;
+      machineCommandStatus = payload['commandStatus'] as String?;
+    } catch (_) {
+      // Coba lagi pada polling berikutnya.
+    }
+    final done = const {
+      'RUNNING',
+      'COMPLETED',
+      'FAILED',
+    }.contains(machineCommandStatus);
+    if (done || _machinePolls >= 40) {
+      machineStatusTimedOut = !done;
+      _machineTimer?.cancel();
+    }
+    notifyListeners();
+  }
+
+  /// Minta server menyalakan ulang mesin (order sudah dibayar; dibatasi server).
+  Future<void> retryMachineStart() async {
+    final order = createdOrder;
+    if (order == null || order.id.isEmpty || machineRetrying) return;
+    machineRetrying = true;
+    error = null;
+    notifyListeners();
+    try {
+      await _api.post(
+        '/kiosks/device/orders/${order.id}/machine-start',
+        token: deviceToken,
+      );
+      _startMachinePolling();
+    } on ApiException catch (exception) {
+      error = exception.message;
+    } catch (_) {
+      error = 'Gagal menghubungi server. Coba lagi.';
+    } finally {
+      machineRetrying = false;
+      notifyListeners();
+    }
   }
 
   void _startPaymentPolling() {
@@ -356,7 +479,8 @@ class KioskController extends ChangeNotifier {
   }
 
   Future<void> _checkPayment() async {
-    if (payment == null) return;
+    if (payment == null || _paymentChecking) return;
+    _paymentChecking = true;
     try {
       final payload = await _api.get(
         '/kiosks/device/payments/${payment!.paymentNumber}/status',
@@ -365,11 +489,19 @@ class KioskController extends ChangeNotifier {
       payment = KioskPayment.fromJson(payload as Map<String, dynamic>);
       if (payment!.isPaid) {
         _paymentTimer?.cancel();
-        stage = KioskStage.success;
+        if (stage != KioskStage.success) {
+          stage = KioskStage.success;
+          _startMachinePolling();
+        }
+      } else if (payment!.isEnded) {
+        // Server menyatakan tagihan berakhir → hentikan polling.
+        _paymentTimer?.cancel();
       }
       notifyListeners();
     } catch (_) {
       // Abaikan error polling sesaat; percobaan berikutnya akan mengulang.
+    } finally {
+      _paymentChecking = false;
     }
   }
 
@@ -391,6 +523,7 @@ class KioskController extends ChangeNotifier {
   }
 
   void newOrder() {
+    _cancelUnpaidOrder();
     _resetOrderState();
     stage = KioskStage.welcome;
     notifyListeners();
@@ -398,6 +531,9 @@ class KioskController extends ChangeNotifier {
 
   void _resetOrderState() {
     _paymentTimer?.cancel();
+    _machineTimer?.cancel();
+    machineCommandStatus = null;
+    machineStatusTimedOut = false;
     machines = const [];
     occupancy = null;
     selectedMachine = null;
@@ -509,6 +645,7 @@ class KioskController extends ChangeNotifier {
   void dispose() {
     _heartbeatTimer?.cancel();
     _paymentTimer?.cancel();
+    _machineTimer?.cancel();
     super.dispose();
   }
 }

@@ -8,7 +8,7 @@ import {
   Request,
   UseGuards,
   ParseIntPipe,
-  ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import {
@@ -20,19 +20,21 @@ import {
 import { WalletsService } from './wallets.service';
 import {
   TopupWalletDto,
-  PayWithWalletDto,
   RefundWalletDto,
   AdminRefundWalletDto,
 } from './dto/wallet.dto';
-import { WalletPinDto } from './dto/wallet-pin.dto';
+import { SetWalletPinDto, WalletPinDto } from './dto/wallet-pin.dto';
+import { walletSessionKey } from '../../common/auth/wallet-pin';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { assertCustomerAccess } from '../../common/auth/access-policy';
 
 @ApiTags('Wallets')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('wallets')
 export class WalletsController {
   constructor(
@@ -40,25 +42,10 @@ export class WalletsController {
     private readonly prisma: PrismaService,
   ) {}
 
-  /**
-   * SECURITY HOTFIX (K4/K6): pelanggan hanya boleh mengakses dompet MILIKNYA.
-   * Staf tetap seperti sebelumnya (kasir/admin melayani pelanggan).
-   */
-  private async assertOwnWalletOrStaff(req: any, customerId: string) {
-    if (req.user?.role !== UserRole.CUSTOMER) return;
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
-      select: { userId: true },
-    });
-    if (!customer || customer.userId !== req.user.userId) {
-      throw new ForbiddenException('Tidak boleh mengakses dompet pelanggan lain');
-    }
-  }
-
   @Get('customer/:customerId')
-  @ApiOperation({ summary: 'Get customer wallet' })
+  @ApiOperation({ summary: 'Get customer wallet (pemilik atau staf)' })
   async getWallet(@Param('customerId') customerId: string, @Request() req: any) {
-    await this.assertOwnWalletOrStaff(req, customerId);
+    await assertCustomerAccess(this.prisma, req.user, customerId);
     return this.walletsService.getWallet(customerId);
   }
 
@@ -68,15 +55,16 @@ export class WalletsController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getTransactions(
     @Param('customerId') customerId: string,
+    @Request() req: any,
     @Query('page', new ParseOptionalIntPipe(1)) page?: number,
     @Query('limit', new ParseOptionalIntPipe(10)) limit?: number,
-    @Request() req?: any,
   ) {
-    await this.assertOwnWalletOrStaff(req, customerId);
+    await assertCustomerAccess(this.prisma, req.user, customerId);
     return this.walletsService.getTransactions(customerId, page, limit);
   }
 
-  // SECURITY HOTFIX (K1): kredit saldo TANPA pembayaran → hanya admin (top-up manual).
+  // K1: kredit saldo langsung TANPA pembayaran → hanya admin (top-up manual).
+  // Top-up pelanggan lewat Midtrans dibuat di Fase 2.
   @Post('customer/:customerId/topup')
   @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER)
   @ApiOperation({ summary: 'Top-up wallet manual (admin)' })
@@ -87,18 +75,11 @@ export class WalletsController {
     return this.walletsService.topup(customerId, topupWalletDto);
   }
 
-  @Post('customer/:customerId/pay')
-  @ApiOperation({ summary: 'Pay with wallet' })
-  async pay(
-    @Param('customerId') customerId: string,
-    @Body() payWithWalletDto: PayWithWalletDto,
-    @Request() req: any,
-  ) {
-    await this.assertOwnWalletOrStaff(req, customerId);
-    return this.walletsService.pay(customerId, payWithWalletDto);
-  }
+  // Rute `POST customer/:customerId/pay` dipindah ke LegacyWalletPayController
+  // (modul payments) — Batch 1.5: satu jalur bayar-saldo dengan booking & kunci order.
 
-  // SECURITY HOTFIX (K3): refund ke saldo hanya oleh admin (bukan mandiri).
+  // K3: refund mandiri oleh customer ditutup; refund lewat admin
+  // (POST /wallets/orders/:orderId/refund) sesuai kebijakan owner.
   @Post('customer/:customerId/refund')
   @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER, UserRole.ADMIN_OUTLET)
   @ApiOperation({ summary: 'Refund paid order to customer wallet (admin)' })
@@ -107,10 +88,20 @@ export class WalletsController {
     @Request() req: any,
     @Body() refundWalletDto: RefundWalletDto,
   ) {
-    return this.walletsService.refund(
-      customerId,
+    // Rute lama dipertahankan untuk kompatibilitas, tetapi kini hanya admin
+    // dan memakai alur refund admin (cek outlet + idempoten). Order harus milik
+    // customer di URL agar tidak salah sasaran.
+    const order = await this.prisma.order.findUnique({
+      where: { id: refundWalletDto.orderId },
+      select: { customerId: true },
+    });
+    if (!order || order.customerId !== customerId) {
+      throw new NotFoundException('Order tidak ditemukan untuk customer ini');
+    }
+    return this.walletsService.refundByAdmin(
+      refundWalletDto.orderId,
       req.user.userId,
-      refundWalletDto,
+      refundWalletDto.description ?? 'Refund oleh admin',
     );
   }
 
@@ -130,22 +121,57 @@ export class WalletsController {
   }
 
   @Post('customer/:customerId/pin/set')
-  @ApiOperation({ summary: 'Set / ganti PIN wallet' })
+  @ApiOperation({ summary: 'Set / ganti PIN wallet (ganti: wajib currentPin)' })
   async setPin(
     @Param('customerId') customerId: string,
     @Request() req: any,
-    @Body() dto: WalletPinDto,
+    @Body() dto: SetWalletPinDto,
   ) {
-    return this.walletsService.setPin(customerId, req.user.userId, dto.pin);
+    return this.walletsService.setPin(customerId, req.user.userId, dto.pin, dto.currentPin);
   }
 
   @Post('customer/:customerId/pin/verify')
-  @ApiOperation({ summary: 'Verifikasi PIN wallet' })
+  @ApiOperation({ summary: 'Verifikasi PIN wallet (penguncian 5×/15 menit)' })
   async verifyPin(
     @Param('customerId') customerId: string,
     @Request() req: any,
     @Body() dto: WalletPinDto,
   ) {
-    return this.walletsService.verifyPin(customerId, req.user.userId, dto.pin);
+    return this.walletsService.verifyPin(
+      customerId,
+      req.user.userId,
+      dto.pin,
+      walletSessionKey(req.headers?.authorization),
+    );
+  }
+
+  // ── Batch 4: rute PIN milik sendiri (customer dari JWT) ─────────────────
+  @Get('me/pin')
+  @Roles(UserRole.CUSTOMER)
+  @ApiOperation({ summary: 'Status PIN (ada/tidak, terkunci sampai)' })
+  async myPinStatus(@Request() req: any) {
+    const customerId = await this.walletsService.customerIdOf(req.user.userId);
+    return this.walletsService.pinStatus(customerId, req.user.userId);
+  }
+
+  @Post('me/pin')
+  @Roles(UserRole.CUSTOMER)
+  @ApiOperation({ summary: 'Set / ganti PIN (ganti: wajib currentPin)' })
+  async setMyPin(@Body() dto: SetWalletPinDto, @Request() req: any) {
+    const customerId = await this.walletsService.customerIdOf(req.user.userId);
+    return this.walletsService.setPin(customerId, req.user.userId, dto.pin, dto.currentPin);
+  }
+
+  @Post('me/pin/verify')
+  @Roles(UserRole.CUSTOMER)
+  @ApiOperation({ summary: 'Verifikasi PIN (penguncian 5×/15 menit)' })
+  async verifyMyPin(@Body() dto: WalletPinDto, @Request() req: any) {
+    const customerId = await this.walletsService.customerIdOf(req.user.userId);
+    return this.walletsService.verifyPin(
+      customerId,
+      req.user.userId,
+      dto.pin,
+      walletSessionKey(req.headers?.authorization),
+    );
   }
 }

@@ -9,12 +9,20 @@ import {
   HttpCode,
   ForbiddenException,
   UnauthorizedException,
+  NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
-import { CreateGatewayPaymentDto, PaymentWebhookDto } from './dto/payment.dto';
+import { requireWalletAuthorization, walletSessionKey } from '../../common/auth/wallet-pin';
+import {
+  CreateGatewayPaymentDto,
+  PayOrderWithWalletDto,
+  PaymentWebhookDto,
+} from './dto/payment.dto';
 import { Public } from '../../common/decorators/public.decorator';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { assertOrderAccess } from '../../common/auth/access-policy';
 
 @ApiTags('Payments')
 @Controller('payments')
@@ -22,6 +30,7 @@ export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Post('gateway')
@@ -34,10 +43,36 @@ export class PaymentsController {
     return this.paymentsService.createGatewayPayment(req.user.userId, dto);
   }
 
+  @Post('wallet')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Bayar order yang sudah ada memakai saldo (nominal dari server)' })
+  async payWithWallet(@Request() req: any, @Body() dto: PayOrderWithWalletDto) {
+    // Batch 4 (S5): PIN ditegakkan SERVER untuk setiap debit saldo.
+    const customer = await this.prisma.customer.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (customer) {
+      await requireWalletAuthorization(
+        this.prisma,
+        customer.id,
+        dto.pin,
+        walletSessionKey(req.headers?.authorization),
+      );
+    }
+    return this.paymentsService.payOrderWithWallet(req.user.userId, dto.orderId);
+  }
+
   @Get(':paymentNumber/status')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cek status pembayaran (untuk polling)' })
-  async status(@Param('paymentNumber') paymentNumber: string) {
+  async status(@Param('paymentNumber') paymentNumber: string, @Request() req: any) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { paymentNumber },
+      select: { orderId: true },
+    });
+    if (!payment) throw new NotFoundException('Payment not found');
+    await assertOrderAccess(this.prisma, req.user, payment.orderId);
     return this.paymentsService.getStatus(paymentNumber);
   }
 
