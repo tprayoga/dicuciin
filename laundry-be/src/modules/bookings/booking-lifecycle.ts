@@ -137,6 +137,21 @@ export function parseScheduledAt(
 }
 
 /** Ambil & validasi mesin yang boleh dibooking. */
+/**
+ * Status fisik mesin yang dipakai untuk ketersediaan. Mesin mode MANUAL (belum
+ * terintegrasi IoT) tidak pernah mengirim heartbeat → status OFFLINE/belum
+ * terhubung diabaikan; admin hanya memilih Tersedia (ONLINE) atau MAINTENANCE.
+ */
+export function physicalDeviceStatus(device: { status: string; controlMode?: string | null }): string {
+  if (device.controlMode === "MANUAL") {
+    return device.status === "MAINTENANCE" ? "MAINTENANCE" : "ONLINE";
+  }
+  return device.status;
+}
+
+export const isManualDevice = (device: { controlMode?: string | null } | null | undefined) =>
+  device?.controlMode === "MANUAL";
+
 export async function resolveBookableDevice(
   tx: Prisma.TransactionClient,
   ref: { deviceId?: string; deviceCode?: string },
@@ -155,7 +170,8 @@ export async function resolveBookableDevice(
   if (expectedOutletId && device.outletId !== expectedOutletId) {
     throw new BadRequestException("Mesin tidak berada di outlet order ini");
   }
-  if (device.status === "OFFLINE" || device.status === "MAINTENANCE") {
+  const physical = physicalDeviceStatus(device);
+  if (physical === "OFFLINE" || physical === "MAINTENANCE") {
     throw new ConflictException("Mesin sedang tidak tersedia");
   }
   return device;
@@ -387,7 +403,7 @@ export async function completeBookingForOrder(
     $transaction: <T>(fn: (tx: Prisma.TransactionClient) => Promise<T>) => Promise<T>;
   },
   orderId: string,
-  source: "IOT_COMPLETED_EVENT" | "DURATION_FALLBACK",
+  source: "IOT_COMPLETED_EVENT" | "DURATION_FALLBACK" | "MANUAL_DURATION",
 ) {
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
@@ -420,7 +436,9 @@ export async function completeBookingForOrder(
           notes:
             source === "IOT_COMPLETED_EVENT"
               ? "Mesin melaporkan selesai"
-              : "Selesai otomatis (batas durasi, tanpa event mesin)",
+              : source === "MANUAL_DURATION"
+                ? "Selesai otomatis (mesin mode manual, sesuai estimasi durasi)"
+                : "Selesai otomatis (batas durasi, tanpa event mesin)",
         },
       });
     }

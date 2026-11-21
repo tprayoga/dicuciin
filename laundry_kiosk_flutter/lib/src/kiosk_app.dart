@@ -1370,6 +1370,8 @@ String _machineStatusLabel(KioskController c, String? machineName) {
   switch (c.machineCommandStatus) {
     case 'RUNNING':
       return '$name sudah menyala. Selamat mencuci!';
+    case 'MANUAL':
+      return '$name siap dipakai. Silakan nyalakan mesin secara manual. Selamat mencuci!';
     case 'COMPLETED':
       return '$name telah selesai.';
     case 'FAILED':

@@ -17,7 +17,9 @@ import {
   bookingConfig,
   createBookingInTx,
   isBookingActive,
+  isManualDevice,
   lockDevice,
+  physicalDeviceStatus,
   parseScheduledAt,
   resolveBookableDevice,
   slotStart,
@@ -251,8 +253,10 @@ export class BookingsService {
         where: { id: target.booking.id },
         include: bookingInclude,
       }),
-      activation: { commandId: command.id, status: command.status },
-      message: "Pembayaran terverifikasi. Mesin sedang dinyalakan…",
+      activation: { commandId: command.id, status: command.status, manual: isManualDevice(device) },
+      message: isManualDevice(device)
+        ? `Pembayaran terverifikasi. Silakan nyalakan ${device.name} sekarang — waktu pemakaian sudah berjalan.`
+        : "Pembayaran terverifikasi. Mesin sedang dinyalakan…",
     };
   }
 
@@ -374,7 +378,7 @@ export class BookingsService {
     );
 
     const machines = devices.map((d) => {
-      const status = this.effectiveStatus(d.status, statusByDevice.get(d.id));
+      const status = this.effectiveStatus(d, statusByDevice.get(d.id));
       // Batch 6 (S3): kapasitas & layanan dari data mesin. Layanan hanya
       // dikirim bila aktif DAN punya harga aktif di outlet ini.
       const price = d.service?.isActive ? d.service.servicePrices[0] : undefined;
@@ -424,7 +428,7 @@ export class BookingsService {
       }),
       this.prisma.iotDevice.findMany({
         where: { deviceType: { in: MACHINE_TYPES } },
-        select: { id: true, outletId: true, status: true },
+        select: { id: true, outletId: true, status: true, controlMode: true },
       }),
     ]);
 
@@ -436,7 +440,7 @@ export class BookingsService {
       const machines = devices
         .filter((d) => d.outletId === o.id)
         .map((d) => ({
-          status: this.effectiveStatus(d.status, statusByDevice.get(d.id)),
+          status: this.effectiveStatus(d, statusByDevice.get(d.id)),
         }));
       return { outletId: o.id, ...this.occupancyOf(machines) };
     });
@@ -475,7 +479,11 @@ export class BookingsService {
    * Status efektif sebuah mesin: booking aktif diprioritaskan (IN_USE/RESERVED),
    * lalu fallback ke status fisik perangkat (OFFLINE/IN_USE), sisanya AVAILABLE.
    */
-  private effectiveStatus(deviceStatus: string, bs?: BookingStatus): string {
+  private effectiveStatus(
+    device: { status: string; controlMode?: string | null },
+    bs?: BookingStatus,
+  ): string {
+    const deviceStatus = physicalDeviceStatus(device);
     // Booking aktif (query sudah mengecualikan yang expired) = sumber kebenaran
     // untuk RESERVED/IN_USE-via-reservasi.
     if (bs === BookingStatus.IN_USE) return "IN_USE";
@@ -483,6 +491,8 @@ export class BookingsService {
     // Status fisik perangkat: OFFLINE (mati) atau IN_USE (mesin benar2 berjalan).
     // 'RESERVED' sengaja TIDAK dibaca dari device agar flag lama tak nyangkut.
     if (deviceStatus === "OFFLINE") return "OFFLINE";
+    // Dulu MAINTENANCE jatuh ke AVAILABLE padahal order-nya ditolak server.
+    if (deviceStatus === "MAINTENANCE") return "MAINTENANCE";
     if (deviceStatus === "IN_USE") return "IN_USE";
     return "AVAILABLE";
   }
@@ -490,7 +500,9 @@ export class BookingsService {
   /** Hitung ringkasan keramaian dari daftar status mesin. */
   private occupancyOf(machines: { status: string }[]) {
     const total = machines.length;
-    const offline = machines.filter((m) => m.status === "OFFLINE").length;
+    const offline = machines.filter(
+      (m) => m.status === "OFFLINE" || m.status === "MAINTENANCE",
+    ).length;
     const busy = machines.filter(
       (m) => m.status === "IN_USE" || m.status === "RESERVED",
     ).length;

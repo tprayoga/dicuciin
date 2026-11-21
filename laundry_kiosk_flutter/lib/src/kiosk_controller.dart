@@ -51,7 +51,8 @@ class KioskController extends ChangeNotifier {
 
   // ── Status aktivasi mesin setelah bayar (Batch 1.5) ─────────────────
   /// null = belum dicek; selain itu status perintah START dari server:
-  /// PENDING/PUBLISHED/ACKED (sedang dinyalakan), RUNNING, COMPLETED, FAILED.
+  /// PENDING/PUBLISHED/ACKED (sedang dinyalakan), RUNNING, MANUAL (mesin tanpa IoT —
+  /// dinyalakan pelanggan), COMPLETED, FAILED.
   String? machineCommandStatus;
   bool machineStatusTimedOut = false;
   bool machineRetrying = false;
@@ -435,8 +436,10 @@ class KioskController extends ChangeNotifier {
     } catch (_) {
       // Coba lagi pada polling berikutnya.
     }
+    // MANUAL: mesin belum terhubung IoT — pelanggan menyalakan sendiri.
     final done = const {
       'RUNNING',
+      'MANUAL',
       'COMPLETED',
       'FAILED',
     }.contains(machineCommandStatus);

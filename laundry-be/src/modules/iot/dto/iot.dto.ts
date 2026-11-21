@@ -1,4 +1,8 @@
-import { IsString, IsOptional, IsEnum, IsNumber, IsUUID, Max, Min } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber, IsUUID, IsIn, Max, Min } from 'class-validator';
+
+/** IOT = status dari perangkat; MANUAL = belum terintegrasi IoT, kondisi diatur admin. */
+export const CONTROL_MODES = ['IOT', 'MANUAL'] as const;
+export const DEVICE_STATUSES = ['ONLINE', 'OFFLINE', 'MAINTENANCE'] as const;
 import { ApiProperty } from '@nestjs/swagger';
 import { DeviceType } from '@prisma/client';
 
@@ -52,6 +56,17 @@ export class CreateIotDeviceDto {
   @IsUUID()
   @IsOptional()
   serviceId?: string | null;
+
+  /** IOT (default) atau MANUAL (tanpa IoT: scan QR langsung menandai mesin dipakai). */
+  @ApiProperty({ required: false, enum: CONTROL_MODES, example: 'MANUAL' })
+  @IsIn(CONTROL_MODES as unknown as string[], { message: 'controlMode harus IOT atau MANUAL' })
+  @IsOptional()
+  controlMode?: (typeof CONTROL_MODES)[number];
+
+  @ApiProperty({ required: false, enum: DEVICE_STATUSES })
+  @IsIn(DEVICE_STATUSES as unknown as string[], { message: 'status harus ONLINE, OFFLINE, atau MAINTENANCE' })
+  @IsOptional()
+  status?: string;
 }
 
 export class UpdateIotDeviceDto {
@@ -65,10 +80,17 @@ export class UpdateIotDeviceDto {
   @IsOptional()
   firmwareVersion?: string;
 
-  @ApiProperty({ required: false })
-  @IsString()
+  /** Kondisi mesin. Mode MANUAL: ONLINE = Tersedia, MAINTENANCE = tidak bisa dipesan. */
+  @ApiProperty({ required: false, enum: DEVICE_STATUSES })
+  @IsIn(DEVICE_STATUSES as unknown as string[], { message: 'status harus ONLINE, OFFLINE, atau MAINTENANCE' })
   @IsOptional()
   status?: string;
+
+  /** IOT (default) atau MANUAL (tanpa IoT: scan QR langsung menandai mesin dipakai). */
+  @ApiProperty({ required: false, enum: CONTROL_MODES, example: 'MANUAL' })
+  @IsIn(CONTROL_MODES as unknown as string[], { message: 'controlMode harus IOT atau MANUAL' })
+  @IsOptional()
+  controlMode?: (typeof CONTROL_MODES)[number];
 
   /** Batch 6 (S3): kapasitas mesin dalam kg. */
   @ApiProperty({ required: false, example: 10 })
