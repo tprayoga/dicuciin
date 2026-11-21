@@ -155,7 +155,9 @@ async function saveKiosk() {
 
 async function generateEnrollment(kiosk: Kiosk) {
   try {
-    editKiosk.value = kiosk
+    // Isi form dengan kiosk yang sama — kalau hanya `editKiosk` yang diganti,
+    // form masih memuat data kiosk lain dan "Simpan" akan menimpa kiosk ini.
+    openKioskEdit(kiosk)
     enrollmentCode.value = await api.post<{ code: string; expiresAt: string }>(
       `/kiosks/${kiosk.id}/enrollment-code`,
       {},

@@ -89,12 +89,12 @@ const filteredPromos = computed(() => {
 })
 
 function toInputDate(iso: string) {
-  return iso ? iso.slice(0, 10) : ''
+  return toWibInputDate(iso)
 }
 
 function promoPeriod(promo: Promo) {
-  const start = new Date(promo.startDate).toLocaleDateString('id-ID')
-  const end = new Date(promo.endDate).toLocaleDateString('id-ID')
+  const start = formatWibDate(promo.startDate)
+  const end = formatWibDate(promo.endDate)
   return `Periode ${start} s.d. ${end}`
 }
 
@@ -154,8 +154,8 @@ async function save() {
         bannerUrl: form.bannerUrl || undefined,
         promoType: form.promoType,
         value: Number(form.value),
-        startDate: new Date(form.startDate).toISOString(),
-        endDate: new Date(form.endDate).toISOString(),
+        startDate: wibStartOfDay(form.startDate),
+        endDate: wibEndOfDay(form.endDate),
         quota: form.quota,
         isActive: form.isActive,
       })
@@ -168,8 +168,8 @@ async function save() {
         bannerUrl: form.bannerUrl || undefined,
         promoType: form.promoType,
         value: form.value,
-        startDate: new Date(form.startDate).toISOString(),
-        endDate: new Date(form.endDate).toISOString(),
+        startDate: wibStartOfDay(form.startDate),
+        endDate: wibEndOfDay(form.endDate),
         quota: form.quota,
         isActive: form.isActive,
       })

@@ -9,6 +9,10 @@ const authStore = useAuthStore()
 const canRefund = computed(() =>
   ['SUPER_ADMIN', 'OWNER', 'ADMIN_OUTLET'].includes(authStore.user?.role || ''),
 )
+// Saldo awal = kredit saldo tanpa pembayaran → hanya Owner/Super Admin (sama dengan top-up manual).
+const canSetInitialBalance = computed(() =>
+  ['SUPER_ADMIN', 'OWNER'].includes(authStore.user?.role || ''),
+)
 
 interface CustomerItem {
   id: string
@@ -186,7 +190,9 @@ async function saveCreate() {
       password: createForm.password,
       gender: createForm.gender || undefined,
       birthDate: createForm.birthDate || undefined,
-      initialBalance: createForm.initialBalance ? Number(createForm.initialBalance) : 0,
+      ...(canSetInitialBalance.value && Number(createForm.initialBalance) > 0
+        ? { initialBalance: Math.round(Number(createForm.initialBalance)) }
+        : {}),
     })
     toast.add({ title: 'Member berhasil ditambahkan', color: 'success' })
     showCreateModal.value = false
@@ -330,8 +336,8 @@ onMounted(load)
             </UFormField>
           </div>
 
-          <UFormField label="Saldo Awal">
-            <UInput v-model="createForm.initialBalance" type="number" min="0" placeholder="0" class="w-full" />
+          <UFormField v-if="canSetInitialBalance" label="Saldo Awal" help="Dicatat sebagai top-up manual.">
+            <UInput v-model="createForm.initialBalance" type="number" min="0" step="1" placeholder="0" class="w-full" />
           </UFormField>
 
           <div class="flex justify-end pt-2">

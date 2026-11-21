@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useApi } from '~/composables/useApi'
 import type { PaginatedResponse, Outlet } from '~/types'
+import { useAuthStore } from '~/stores/auth'
 
 const api = useApi()
 const toast = useToast()
@@ -40,6 +41,12 @@ const roleItems = [
   { label: 'Teknisi', value: 'TECHNICIAN' },
   { label: 'Super Admin', value: 'SUPER_ADMIN' },
 ]
+
+// Server menolak OWNER memberi/mengubah role SUPER_ADMIN → jangan tawarkan.
+const authStore = useAuthStore()
+const assignableRoleItems = computed(() =>
+  authStore.user?.role === 'SUPER_ADMIN' ? roleItems : roleItems.filter(r => r.value !== 'SUPER_ADMIN'),
+)
 
 const form = reactive({
   name: '',
@@ -241,7 +248,7 @@ onMounted(load)
 
           <div class="grid md:grid-cols-2 gap-4">
             <UFormField label="Posisi">
-              <USelect v-model="form.role" :items="roleItems" class="w-full" />
+              <USelect v-model="form.role" :items="assignableRoleItems" class="w-full" />
             </UFormField>
             <UFormField label="Outlet/Cabang">
               <USelect v-model="form.outletId" :items="outletItems" class="w-full" />
