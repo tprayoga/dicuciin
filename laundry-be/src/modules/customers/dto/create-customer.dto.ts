@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsEmail, IsIn, IsNumber, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsDateString, IsEmail, IsIn, IsNumber, IsOptional, IsString, Min, MinLength } from 'class-validator';
 
 export class CreateCustomerDto {
   @ApiProperty({ example: 'Budi Sudarsono' })
@@ -32,8 +32,13 @@ export class CreateCustomerDto {
   @IsOptional()
   birthDate?: string;
 
-  @ApiProperty({ example: 0, required: false, description: 'Initial wallet balance' })
-  @IsNumber()
+  @ApiProperty({
+    example: 0,
+    required: false,
+    description: 'Saldo awal (hanya SUPER_ADMIN/OWNER). Dicatat di ledger sebagai top-up manual.',
+  })
+  @IsNumber({ maxDecimalPlaces: 0 })
+  @Min(0)
   @IsOptional()
   initialBalance?: number;
 }

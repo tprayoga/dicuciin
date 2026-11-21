@@ -10,10 +10,14 @@ import { UserRole, OrderStatus } from "@prisma/client";
 import { CreateCustomerDto } from "./dto/create-customer.dto";
 import { toNum } from "../../common/utils/money.util";
 import { normalizePhone, phoneCandidates } from "../../common/utils/phone.util";
+import { WalletLedgerService } from "../wallets/wallet-ledger.service";
 
 @Injectable()
 export class CustomersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private walletLedger: WalletLedgerService,
+  ) {}
 
   async create(createCustomerDto: CreateCustomerDto) {
     const {
@@ -57,43 +61,59 @@ export class CustomersService {
     const passwordHash = await bcrypt.hash(password, 10);
     const memberCode = await this.generateMemberCode();
 
-    const customer = await this.prisma.customer.create({
-      data: {
-        memberCode,
-        gender,
-        birthDate: birthDate ? new Date(birthDate) : undefined,
-        user: {
-          create: {
-            name,
-            email,
-            phone,
-            passwordHash,
-            passwordChangedAt: new Date(),
-            role: UserRole.CUSTOMER,
+    // Member + wallet + saldo awal dalam SATU transaksi. Saldo awal TIDAK lagi
+    // ditulis langsung ke wallet.balance: dicatat lewat ledger (SSoT) sebagai
+    // top-up manual agar saldo & wallet_ledgers selalu cocok.
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.customer.create({
+        data: {
+          memberCode,
+          gender,
+          birthDate: birthDate ? new Date(birthDate) : undefined,
+          user: {
+            create: {
+              name,
+              email,
+              phone,
+              passwordHash,
+              passwordChangedAt: new Date(),
+              role: UserRole.CUSTOMER,
+            },
+          },
+          wallet: {
+            create: {},
           },
         },
-        wallet: {
-          create: {
-            balance: initialBalance,
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              role: true,
+              isActive: true,
+            },
           },
+          wallet: true,
         },
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
-            role: true,
-            isActive: true,
-          },
-        },
-        wallet: true,
-      },
-    });
+      });
 
-    return customer;
+      if (initialBalance > 0 && created.wallet) {
+        const ledger = await this.walletLedger.topUp({
+          tx,
+          walletId: created.wallet.id,
+          amount: initialBalance,
+          referenceType: "TOPUP",
+          description: "Saldo awal member (admin)",
+        });
+        return {
+          ...created,
+          wallet: { ...created.wallet, balance: ledger.balanceAfter },
+        };
+      }
+      return created;
+    });
   }
 
   async findAll(page: number = 1, limit: number = 10) {

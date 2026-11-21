@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CustomersService } from './customers.service';
@@ -23,7 +23,16 @@ export class CustomersController {
   @Post()
   @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER, UserRole.ADMIN_OUTLET, UserRole.CASHIER, UserRole.OPERATOR)
   @ApiOperation({ summary: 'Create new customer/member' })
-  async create(@Body() createCustomerDto: CreateCustomerDto) {
+  async create(@Body() createCustomerDto: CreateCustomerDto, @Request() req: any) {
+    // K1: saldo awal = kredit saldo tanpa pembayaran → aturan sama dengan
+    // top-up manual (POST /wallets/customer/:id/topup): hanya SUPER_ADMIN/OWNER.
+    if (
+      (createCustomerDto.initialBalance ?? 0) > 0 &&
+      req.user?.role !== UserRole.SUPER_ADMIN &&
+      req.user?.role !== UserRole.OWNER
+    ) {
+      throw new ForbiddenException('Hanya Owner yang boleh mengisi saldo awal member');
+    }
     return this.customersService.create(createCustomerDto);
   }
 
