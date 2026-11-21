@@ -1,5 +1,15 @@
 part of '../home_screen.dart';
 
+/// Tampilkan halaman sukses dan BUANG seluruh alur bayar di bawahnya
+/// (pilih mesin → checkout → QRIS/VA, atau detail order) — sehingga tombol
+/// kembali tidak lagi membuka checkout untuk order yang sudah lunas.
+void _showOrderSuccess(NavigatorState navigator, _OrderSuccessPage page) {
+  navigator.pushAndRemoveUntil(
+    MaterialPageRoute(builder: (_) => page),
+    (route) => route.isFirst,
+  );
+}
+
 class _OrderSuccessPage extends StatelessWidget {
   const _OrderSuccessPage({
     required this.data,
@@ -232,7 +242,18 @@ class _OrderSuccessPage extends StatelessWidget {
               Expanded(
                 child: AppOutlineButton(
                   label: 'Lihat Order',
-                  onTap: () => Navigator.of(context).pop(),
+                  onTap: () {
+                    final id = orderId;
+                    if (id == null || id.isEmpty) {
+                      Navigator.of(context).popUntil((route) => route.isFirst);
+                      return;
+                    }
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => _OrderDetailPage(orderId: id),
+                      ),
+                    );
+                  },
                 ),
               ),
               const SizedBox(width: 12),

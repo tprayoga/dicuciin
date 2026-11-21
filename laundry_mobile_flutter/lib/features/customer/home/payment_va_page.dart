@@ -77,14 +77,13 @@ class _PaymentVaPageState extends State<_PaymentVaPage>
       Navigator.of(context).pop(true);
       return;
     }
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => _OrderSuccessPage(
-          data: widget.data,
-          methodLabel: 'Virtual Account ${widget.bank}',
-          total: widget.total,
-          orderId: widget.orderId,
-        ),
+    _showOrderSuccess(
+      Navigator.of(context),
+      _OrderSuccessPage(
+        data: widget.data,
+        methodLabel: 'Virtual Account ${widget.bank}',
+        total: widget.total,
+        orderId: widget.orderId,
       ),
     );
   }

@@ -171,14 +171,13 @@ class _OrderDetailPageState extends State<_OrderDetailPage> {
     }
     await wallet.loadBalance();
     if (!mounted) return;
-    navigator.pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => _OrderSuccessPage(
-          data: data,
-          methodLabel: 'Saldo',
-          total: total,
-          orderId: d.id,
-        ),
+    _showOrderSuccess(
+      navigator,
+      _OrderSuccessPage(
+        data: data,
+        methodLabel: 'Saldo',
+        total: total,
+        orderId: d.id,
       ),
     );
   }

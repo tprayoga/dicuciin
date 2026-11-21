@@ -66,14 +66,13 @@ class _PaymentQrisPageState extends State<_PaymentQrisPage>
       Navigator.of(context).pop(true);
       return;
     }
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => _OrderSuccessPage(
-          data: widget.data,
-          methodLabel: 'QRIS',
-          total: widget.total,
-          orderId: widget.orderId,
-        ),
+    _showOrderSuccess(
+      Navigator.of(context),
+      _OrderSuccessPage(
+        data: widget.data,
+        methodLabel: 'QRIS',
+        total: widget.total,
+        orderId: widget.orderId,
       ),
     );
   }

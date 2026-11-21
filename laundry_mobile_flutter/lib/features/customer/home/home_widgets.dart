@@ -466,7 +466,9 @@ class _BlueHeader extends StatelessWidget {
             children: [
               if (showBack)
                 IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  // maybePop: hormati PopScope halaman (mis. checkout dengan
+                  // order yang belum dibayar).
+                  onPressed: () => Navigator.of(context).maybePop(),
                   icon: const Icon(Icons.arrow_back, color: Colors.white),
                 )
               else

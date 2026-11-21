@@ -161,8 +161,134 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
 
   int get _total => (_quote?.finalAmount ?? widget.data.price).round();
 
+  /// Order di server yang masih menahan mesin & voucher (belum dibayar).
+  bool get _hasPendingOrder => _createdOrder != null || _staleOrder != null;
+
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_hasPendingOrder,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmLeave();
+      },
+      child: _buildScaffold(context),
+    );
+  }
+
+  /// Keluar dari checkout saat order sudah dibuat: tanyakan dulu. Tanpa ini
+  /// order WAITING_PAYMENT tetap menahan mesin (HOLD) & voucher, dan memesan
+  /// mesin yang sama lagi ditolak "Mesin sudah dibooking" oleh order sendiri.
+  Future<void> _confirmLeave() async {
+    if (_processing) return;
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Tinggalkan pesanan?'),
+        content: const Text(
+          'Pesanan ini sedang menahan mesin dan voucher sambil menunggu pembayaran. '
+          'Batalkan agar mesin bisa dipesan lagi, atau simpan untuk dibayar nanti '
+          'dari Riwayat Order.\n\nJika kamu SUDAH membayar, pilih "Tetap di sini" '
+          'dan tunggu status diperbarui.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop('stay'),
+            child: const Text('Tetap di sini'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop('keep'),
+            child: const Text('Bayar nanti'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop('cancel'),
+            child: const Text(
+              'Batalkan pesanan',
+              style: TextStyle(color: AppColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || choice == null || choice == 'stay') return;
+    if (choice == 'keep') {
+      _leave();
+      return;
+    }
+    setState(() => _processing = true);
+    final released = await _releasePendingOrders();
+    if (!mounted) return;
+    setState(() => _processing = false);
+    if (released) _leave();
+  }
+
+  /// Lepas PopScope lalu kembali ke halaman sebelumnya.
+  void _leave() {
+    setState(() {
+      _createdOrder = null;
+      _staleOrder = null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop();
+    });
+  }
+
+  /// Batalkan order yang belum dibayar (lama & aktif). true bila tidak ada lagi
+  /// order yang menahan mesin. Pesan error sudah ditampilkan bila gagal.
+  Future<bool> _releasePendingOrders() async {
+    for (final order in [_staleOrder, _createdOrder]) {
+      if (order == null) continue;
+      final ok = await _releaseOrder(
+        order,
+        'Dibatalkan pelanggan dari checkout',
+      );
+      if (!mounted) return false;
+      if (!ok) return false;
+      setState(() {
+        if (identical(order, _staleOrder)) _staleOrder = null;
+        if (identical(order, _createdOrder)) _createdOrder = null;
+      });
+    }
+    return true;
+  }
+
+  /// Batalkan satu order belum-bayar. Bila pembatalan ditolak, periksa status:
+  /// sudah tidak aktif (dibatalkan/kedaluwarsa) = berhasil dilepas.
+  Future<bool> _releaseOrder(CreatedOrder order, String reason) async {
+    final token = context.read<AuthController>().accessToken;
+    final messenger = ScaffoldMessenger.of(context);
+    final controller = context.read<CustomerController>();
+    if (token == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Sesi berakhir. Silakan masuk lagi.')),
+      );
+      return false;
+    }
+    final cancelled = await controller.cancelOrder(
+      accessToken: token,
+      orderId: order.id,
+      cancelReason: reason,
+    );
+    if (cancelled != null) return true;
+    final cancelError = controller.errorMessage;
+    final detail = await controller.getOrderDetail(
+      accessToken: token,
+      orderId: order.id,
+    );
+    final status = detail?.status;
+    if (status == 'CANCELLED') return true;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          status != null && status != 'DRAFT' && status != 'WAITING_PAYMENT'
+              ? 'Pesanan sebelumnya sudah dibayar. Cek di Riwayat Order.'
+              : (cancelError ?? 'Gagal melepas pesanan sebelumnya. Coba lagi.'),
+        ),
+      ),
+    );
+    return false;
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
@@ -229,14 +355,19 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
                             controller: _voucherController,
                             textCapitalization: TextCapitalization.characters,
                             onChanged: (value) {
+                              final dropped =
+                                  _voucherApplied &&
+                                  value.trim().toUpperCase() !=
+                                      _appliedVoucherCode;
                               setState(() {
-                                if (_voucherApplied &&
-                                    value.trim().toUpperCase() !=
-                                        _appliedVoucherCode) {
+                                if (dropped) {
                                   _voucherApplied = false;
                                   _appliedVoucherCode = '';
+                                  // Order & harga lama masih memuat voucher.
+                                  _invalidateOrder();
                                 }
                               });
+                              if (dropped) _refreshQuote();
                             },
                             decoration: const InputDecoration(
                               hintText: 'Atau masukkan kode voucher',
@@ -925,13 +1056,14 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
     // yang dipegangnya dilepas — tidak ada order/booking ganda.
     final stale = _staleOrder;
     if (stale != null) {
-      await controller.cancelOrder(
-        accessToken: token,
-        orderId: stale.id,
-        cancelReason: 'Diganti pesanan baru (pilihan berubah)',
+      // Gagal melepas = jangan lanjut: order lama masih menahan mesin, jadi
+      // order baru pasti ditolak "Mesin sudah dibooking".
+      final released = await _releaseOrder(
+        stale,
+        'Diganti pesanan baru (pilihan berubah)',
       );
+      if (!mounted || !released) return null;
       _staleOrder = null;
-      if (!mounted) return null;
     }
     final created = await controller.createOrder(
       user: user,
@@ -1039,14 +1171,13 @@ class _OrderCheckoutPageState extends State<_OrderCheckoutPage> {
     messenger.showSnackBar(
       const SnackBar(content: Text('Pembayaran saldo berhasil.')),
     );
-    navigator.pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => _OrderSuccessPage(
-          data: widget.data,
-          methodLabel: 'Saldo',
-          total: order.totalAmount.round(),
-          orderId: order.id,
-        ),
+    _showOrderSuccess(
+      navigator,
+      _OrderSuccessPage(
+        data: widget.data,
+        methodLabel: 'Saldo',
+        total: order.totalAmount.round(),
+        orderId: order.id,
       ),
     );
   }
