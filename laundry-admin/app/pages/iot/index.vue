@@ -22,7 +22,20 @@ const form = reactive({
   // Batch 6 (S3): sumber kebenaran kapasitas & harga mesin di aplikasi.
   capacityKg: '' as string,
   serviceId: '' as string,
+  // Mode MANUAL: mesin belum terhubung IoT — kondisi dipilih admin, scan QR di
+  // aplikasi langsung menandai mesin dipakai, selesai sesuai estimasi durasi.
+  controlMode: 'IOT' as 'IOT' | 'MANUAL',
+  manualStatus: 'ONLINE' as 'ONLINE' | 'MAINTENANCE',
 })
+
+const controlModeItems = [
+  { label: 'IoT — otomatis dari perangkat', value: 'IOT' },
+  { label: 'Manual — tanpa IoT', value: 'MANUAL' },
+]
+const manualStatusItems = [
+  { label: 'Tersedia — bisa dipesan di aplikasi', value: 'ONLINE' },
+  { label: 'Maintenance — tidak bisa dipesan', value: 'MAINTENANCE' },
+]
 
 const NO_SERVICE = '__none__'
 const isMachine = computed(() => form.deviceType === 'WASHING_MACHINE' || form.deviceType === 'DRYER_MACHINE')
@@ -41,9 +54,15 @@ const serviceOptions = computed(() => {
 
 function machinePayload() {
   const cap = Number(form.capacityKg)
+  const wasManual = editTarget.value?.controlMode === 'MANUAL'
   return {
     capacityKg: form.capacityKg === '' || !Number.isFinite(cap) ? null : cap,
     serviceId: !form.serviceId || form.serviceId === NO_SERVICE ? null : form.serviceId,
+    controlMode: form.controlMode,
+    // Manual: kondisi dari admin. Kembali ke IoT: OFFLINE sampai perangkat lapor.
+    ...(form.controlMode === 'MANUAL'
+      ? { status: form.manualStatus }
+      : wasManual ? { status: 'OFFLINE' } : {}),
   }
 }
 
@@ -62,7 +81,12 @@ const filteredDevices = computed(() => {
   return devices.value.filter(d => `${d.name} ${d.deviceCode} ${d.outlet?.name || ''}`.toLowerCase().includes(keyword))
 })
 
-function machineCondition(device: { status: string; lastHeartbeatAt?: string | null }) {
+function machineCondition(device: { status: string; lastHeartbeatAt?: string | null; controlMode?: string }) {
+  if (device.controlMode === 'MANUAL') {
+    return device.status === 'MAINTENANCE'
+      ? { label: 'Manual · Maintenance', className: 'bg-[#e28a05] text-white' }
+      : { label: 'Manual · Tersedia', className: 'bg-[#1fa150] text-white' }
+  }
   if (device.status === 'ONLINE') return { label: 'Normal', className: 'bg-[#1fa150] text-white' }
   if (device.status === 'MAINTENANCE') return { label: 'Maintenance', className: 'bg-[#e28a05] text-white' }
   // Mesin baru yang belum pernah mengirim heartbeat bukan "perlu servis".
@@ -70,8 +94,9 @@ function machineCondition(device: { status: string; lastHeartbeatAt?: string | n
   return { label: 'Offline', className: 'bg-[#d6280b] text-white' }
 }
 
-function machineActive(status: string) {
-  return status !== 'OFFLINE'
+function machineActive(device: { status: string; controlMode?: string }) {
+  if (device.controlMode === 'MANUAL') return device.status !== 'MAINTENANCE'
+  return device.status !== 'OFFLINE'
 }
 
 async function load() {
@@ -101,6 +126,8 @@ function openCreate() {
     name: '',
     capacityKg: '',
     serviceId: NO_SERVICE,
+    controlMode: 'IOT',
+    manualStatus: 'ONLINE',
   })
   showModal.value = true
 }
@@ -114,6 +141,8 @@ function openEdit(device: IotDevice) {
     name: device.name,
     capacityKg: device.capacityKg != null ? String(device.capacityKg) : '',
     serviceId: device.serviceId || NO_SERVICE,
+    controlMode: device.controlMode === 'MANUAL' ? 'MANUAL' : 'IOT',
+    manualStatus: device.status === 'MAINTENANCE' ? 'MAINTENANCE' : 'ONLINE',
   })
   showModal.value = true
 }
@@ -206,7 +235,7 @@ onMounted(load)
               <span class="rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap" :class="machineCondition(device).className">{{ machineCondition(device).label }}</span>
             </td>
             <td class="px-3 py-3">
-              <span class="dc-pill-success" :class="!machineActive(device.status) ? '!bg-[#f2f4f8] !text-[#6f809f]' : ''">{{ machineActive(device.status) ? 'Aktif' : 'Nonaktif' }}</span>
+              <span class="dc-pill-success" :class="!machineActive(device) ? '!bg-[#f2f4f8] !text-[#6f809f]' : ''">{{ machineActive(device) ? 'Aktif' : 'Nonaktif' }}</span>
             </td>
             <td class="px-3 py-3">{{ device.lastHeartbeatAt ? new Date(device.lastHeartbeatAt).toLocaleDateString('id-ID') : '-' }}</td>
             <td class="px-3 py-3">
@@ -245,6 +274,22 @@ onMounted(load)
           >
             <USelect v-model="form.serviceId" :items="serviceOptions" class="w-full" />
           </UFormField>
+
+          <div v-if="isMachine" class="grid md:grid-cols-2 gap-4">
+            <UFormField
+              label="Mode Kontrol"
+              help="Pilih Manual selama mesin belum terhubung IoT agar tetap bisa dipakai pelanggan."
+            >
+              <USelect v-model="form.controlMode" :items="controlModeItems" class="w-full" />
+            </UFormField>
+            <UFormField
+              v-if="form.controlMode === 'MANUAL'"
+              label="Kondisi Manual"
+              help="Scan QR di aplikasi langsung menandai mesin dipakai; pelanggan menyalakan mesin sendiri. Selesai otomatis sesuai estimasi durasi layanan."
+            >
+              <USelect v-model="form.manualStatus" :items="manualStatusItems" class="w-full" />
+            </UFormField>
+          </div>
 
           <UFormField label="Kode Mesin" v-if="!editTarget">
             <UInput v-model="form.deviceCode" placeholder="DEV-001" class="w-full" required />

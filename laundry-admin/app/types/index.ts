@@ -196,6 +196,8 @@ export interface Kiosk {
 
 export interface IotDevice {
   id: string
+  /** IOT = status dari perangkat; MANUAL = kondisi diatur admin (tanpa IoT). */
+  controlMode?: 'IOT' | 'MANUAL'
   outletId: string
   kioskId: string | null
   deviceCode: string
