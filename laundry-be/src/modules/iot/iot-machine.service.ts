@@ -8,7 +8,7 @@ import {
 import { BookingStatus, OrderStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { IncomingDeviceEvent, IotMqttService } from "./iot-mqtt.service";
-import { bookingConfig, completeBookingForOrder } from "../bookings/booking-lifecycle";
+import { bookingConfig, completeBookingForOrder, isManualDevice } from "../bookings/booking-lifecycle";
 
 /** Lifecycle status command mesin (disimpan di IotCommand.status). */
 export const IotCommandStatus = {
@@ -243,6 +243,13 @@ export class IotMachineService implements OnModuleInit {
       attempt === 1
         ? `start-machine-${orderId}`
         : `start-machine-${orderId}-${attempt}`;
+    const device = await this.prisma.iotDevice.findUnique({
+      where: { id: deviceId },
+      select: { controlMode: true },
+    });
+    if (isManualDevice(device)) {
+      return this.startManualMachine(orderId, deviceId, idempotencyKey);
+    }
     try {
       return await this.createStartMachineCommand(
         { orderId, deviceId },
@@ -257,6 +264,57 @@ export class IotMachineService implements OnModuleInit {
         const winner = await this.prisma.iotCommand.findUnique({
           where: { idempotencyKey },
         });
+        if (winner) return winner;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Mesin mode MANUAL (belum terintegrasi IoT): tidak ada perintah MQTT dan tidak
+   * menunggu event mesin. Pelanggan/petugas menyalakan mesin sendiri; booking
+   * langsung IN_USE dan selesai otomatis sesuai estimasi durasi (scheduler).
+   * Perintah dicatat RUNNING (payload.manual) agar penjaga yang ada tetap
+   * berlaku: anti-START ganda, booking tidak di-EXPIRED, audit per order.
+   */
+  private async startManualMachine(orderId: string, deviceId: string, idempotencyKey: string) {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const now = new Date();
+        const order = await tx.order.findUnique({
+          where: { id: orderId },
+          select: { id: true, orderNumber: true, status: true },
+        });
+        if (!order) throw new NotFoundException("Order tidak ditemukan");
+        if (order.status !== OrderStatus.PAID) {
+          throw new BadRequestException("Mesin hanya bisa start untuk order PAID");
+        }
+        const command = await tx.iotCommand.create({
+          data: {
+            deviceId,
+            orderId,
+            command: START_MACHINE,
+            status: IotCommandStatus.RUNNING,
+            idempotencyKey,
+            sentAt: now,
+            payload: {
+              orderId,
+              orderNumber: order.orderNumber,
+              action: START_MACHINE,
+              manual: true,
+              requestedAt: now.toISOString(),
+            } as Prisma.InputJsonValue,
+          },
+        });
+        await tx.machineBooking.updateMany({
+          where: { orderId, status: BookingStatus.RESERVED },
+          data: { status: BookingStatus.IN_USE, startedAt: now },
+        });
+        return command;
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        const winner = await this.prisma.iotCommand.findUnique({ where: { idempotencyKey } });
         if (winner) return winner;
       }
       throw err;
@@ -478,10 +536,14 @@ export class IotMachineService implements OnModuleInit {
       orderBy: { createdAt: "desc" },
       select: { eventType: true, createdAt: true },
     });
+    const manual = isManualDevice(command.device);
     return {
       orderId,
       bound: true,
-      commandStatus: command.status,
+      // Mesin manual: kiosk menampilkan "nyalakan mesin secara manual".
+      commandStatus:
+        manual && command.status === IotCommandStatus.RUNNING ? "MANUAL" : command.status,
+      controlMode: command.device.controlMode,
       deviceCode: command.device.deviceCode,
       lastEvent,
       updatedAt: command.updatedAt,

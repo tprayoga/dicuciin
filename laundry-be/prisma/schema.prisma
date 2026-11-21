@@ -685,6 +685,10 @@ model IotDevice {
   model           String?
   firmwareVersion String?
   status          String     @default("OFFLINE")
+  /// IOT = dikendalikan perangkat (status dari heartbeat/event MQTT, START via MQTT).
+  /// MANUAL = belum terintegrasi IoT: kondisi diatur admin (ONLINE/MAINTENANCE),
+  /// scan QR langsung menandai booking dipakai, selesai sesuai estimasi durasi.
+  controlMode     String     @default("IOT")
   lastHeartbeatAt DateTime?
   metadata        Json?
   /// Batch 6 (S3): kapasitas mesin (kg) — sumber kebenaran untuk aplikasi.

@@ -52,6 +52,8 @@ export function maintenanceConfig() {
       60,
     ),
     paymentGraceSeconds: num(process.env.PAYMENT_EXPIRY_GRACE_SECONDS, 60),
+    /** Mesin mode MANUAL: selesai = mulai + estimasi durasi + tenggang ini. */
+    manualGraceMinutes: num(process.env.MANUAL_COMPLETE_GRACE_MINUTES, 5),
     batch: num(process.env.OPS_SCHEDULER_BATCH, 100),
   };
 }
@@ -256,10 +258,44 @@ export class BookingMaintenanceService {
     let stuck = 0;
     let noShow = 0;
 
+    // Mesin mode MANUAL tidak pernah mengirim event → selesai sesuai estimasi
+    // durasi layanan (bukan batas umum runTimeoutMinutes).
+    const manualInUse = await this.prisma.machineBooking.findMany({
+      where: {
+        status: BookingStatus.IN_USE,
+        startedAt: { not: null },
+        device: { controlMode: "MANUAL" },
+      },
+      select: { id: true, orderId: true, startedAt: true, durationMinutes: true },
+      take: cfg.batch,
+    });
+    for (const b of manualInUse) {
+      const minutes = (b.durationMinutes ?? cfg.runTimeoutMinutes) + cfg.manualGraceMinutes;
+      if (b.startedAt!.getTime() + minutes * 60_000 > now.getTime()) continue;
+      const done = b.orderId
+        ? await completeBookingForOrder(this.prisma, b.orderId, "MANUAL_DURATION")
+        : (
+            await this.prisma.machineBooking.updateMany({
+              where: { id: b.id, status: BookingStatus.IN_USE },
+              data: { status: BookingStatus.DONE, endedAt: now },
+            })
+          ).count === 1;
+      if (done) {
+        completed++;
+        if (b.orderId) {
+          await this.prisma.iotCommand.updateMany({
+            where: { orderId: b.orderId, command: START_MACHINE, status: IotCommandStatus.RUNNING },
+            data: { status: IotCommandStatus.COMPLETED, executedAt: now },
+          });
+        }
+      }
+    }
+
     const inUse = await this.prisma.machineBooking.findMany({
       where: {
         status: BookingStatus.IN_USE,
         startedAt: { lt: ago(now, cfg.runTimeoutMinutes * 60_000) },
+        device: { controlMode: { not: "MANUAL" } },
       },
       select: { id: true, orderId: true, deviceId: true, startedAt: true },
       take: cfg.batch,
