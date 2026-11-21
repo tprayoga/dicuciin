@@ -36,7 +36,8 @@
     "reconcile:legacy-bookings": "ts-node scripts/reconcile-legacy-bookings.ts",
     "audit:staff-outlets": "ts-node scripts/audit-staff-outlets.ts",
     "normalize:user-phones": "ts-node scripts/normalize-user-phones.ts",
-    "audit:privileged-accounts": "ts-node scripts/audit-privileged-accounts.ts"
+    "audit:privileged-accounts": "ts-node scripts/audit-privileged-accounts.ts",
+    "backfill:service-prices": "ts-node scripts/backfill-service-prices.ts"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.4",

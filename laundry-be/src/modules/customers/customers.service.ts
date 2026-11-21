@@ -11,6 +11,8 @@ import { CreateCustomerDto } from "./dto/create-customer.dto";
 import { toNum } from "../../common/utils/money.util";
 import { normalizePhone, phoneCandidates } from "../../common/utils/phone.util";
 import { WalletLedgerService } from "../wallets/wallet-ledger.service";
+import { generateDailySequence } from "../../common/utils/sequence.util";
+import { conflictFromUniqueViolation } from "../../common/utils/unique-violation.util";
 
 @Injectable()
 export class CustomersService {
@@ -59,12 +61,16 @@ export class CustomersService {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const memberCode = await this.generateMemberCode();
+    // Satu pembuat kode member untuk semua kanal (app & loket). Dulu loket
+    // memakai "kode terakhir + 1" tanpa memajukan counter harian sehingga
+    // registrasi aplikasi berikutnya bentrok (temuan uji 2026-11-21).
+    const memberCode = await generateDailySequence(this.prisma, "MBR", "customer", "memberCode", 6);
 
     // Member + wallet + saldo awal dalam SATU transaksi. Saldo awal TIDAK lagi
     // ditulis langsung ke wallet.balance: dicatat lewat ledger (SSoT) sebagai
     // top-up manual agar saldo & wallet_ledgers selalu cocok.
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma
+      .$transaction(async (tx) => {
       const created = await tx.customer.create({
         data: {
           memberCode,
@@ -113,7 +119,11 @@ export class CustomersService {
         };
       }
       return created;
-    });
+      })
+      .catch((err) => {
+        // Dua pendaftaran paralel untuk nomor/email yang sama → 409 yang jelas.
+        throw conflictFromUniqueViolation(err) ?? err;
+      });
   }
 
   async findAll(page: number = 1, limit: number = 10) {
@@ -276,22 +286,4 @@ export class CustomersService {
     return customer.wallet;
   }
 
-  private async generateMemberCode(): Promise<string> {
-    const today = new Date();
-    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, "");
-
-    const lastCustomer = await this.prisma.customer.findFirst({
-      where: { memberCode: { startsWith: `MBR-${dateStr}` } },
-      orderBy: { createdAt: "desc" },
-    });
-
-    let sequence = 1;
-    if (lastCustomer) {
-      const parts = lastCustomer.memberCode.split("-");
-      const lastSequence = Number(parts[2] || 0);
-      sequence = Number.isFinite(lastSequence) ? lastSequence + 1 : 1;
-    }
-
-    return `MBR-${dateStr}-${sequence.toString().padStart(6, "0")}`;
-  }
 }
