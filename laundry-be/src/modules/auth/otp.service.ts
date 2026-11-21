@@ -30,6 +30,8 @@ export interface VerificationTokenPayload {
   purpose: OtpPurpose;
   scope: typeof OTP_VERIFIED_SCOPE;
   iat?: number;
+  /** Waktu terbit presisi milidetik (`iat` JWT hanya presisi detik). */
+  issuedAtMs?: number;
 }
 
 @Injectable()
@@ -174,7 +176,15 @@ export class OtpService {
         throw new UnauthorizedException('Kode OTP salah');
     }
 
-    const payload: VerificationTokenPayload = { phone, purpose, scope: OTP_VERIFIED_SCOPE };
+    // issuedAtMs: dibandingkan dengan passwordChangedAt (ms) saat reset sandi —
+    // `iat` presisi detik membuat token yang sah ditolak bila terbit pada detik
+    // yang sama setelah ganti sandi (temuan uji 2026-11-21).
+    const payload: VerificationTokenPayload = {
+      phone,
+      purpose,
+      scope: OTP_VERIFIED_SCOPE,
+      issuedAtMs: Date.now(),
+    };
     const verificationToken = await this.jwtService.signAsync(payload, {
       secret: this.otpSecret(),
       expiresIn: OTP_VERIFICATION_TTL,
@@ -211,7 +221,13 @@ export class OtpService {
     ) {
       throw new BadRequestException('Token verifikasi tidak cocok dengan nomor ini');
     }
-    return { issuedAt: typeof payload.iat === 'number' ? new Date(payload.iat * 1000) : null };
+    const issuedAt =
+      typeof payload.issuedAtMs === 'number'
+        ? new Date(payload.issuedAtMs)
+        : typeof payload.iat === 'number'
+          ? new Date(payload.iat * 1000)
+          : null;
+    return { issuedAt };
   }
 
   private generateCode(): string {

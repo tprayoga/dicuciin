@@ -294,7 +294,8 @@ export class ReconciliationService {
             where: { customerId: row.customerId },
           })) ??
           (await tx.wallet.create({ data: { customerId: row.customerId } }));
-        const ledger = await this.walletLedger.credit(WalletType.MAIN_BALANCE, {
+        // Sesuai asal dana: bagian yang dibayar dari saldo bonus kembali ke bonus.
+        const ledger = await this.walletLedger.refundToOrigin({
           tx,
           walletId: wallet.id,
           amount: row.refundAmount,

@@ -13,7 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import { Prisma, UserRole, OtpPurpose } from '@prisma/client';
+import { UserRole, OtpPurpose } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -32,6 +32,9 @@ import {
   revokeUserSessions,
 } from '../../common/auth/sessions';
 import type { AuthUser } from '../../common/auth/access-policy';
+import { conflictFromUniqueViolation } from '../../common/utils/unique-violation.util';
+
+const INVALID_CREDENTIALS = 'Email/nomor HP atau kata sandi salah';
 
 /** Info perangkat untuk daftar sesi (bukan untuk keputusan keamanan). */
 export interface ClientInfo {
@@ -104,12 +107,12 @@ export class AuthService {
       throw new ForbiddenException('Registrasi publik hanya untuk pelanggan');
     }
     if (!registerDto.phone) {
-      throw new BadRequestException('Phone is required for customer registration');
+      throw new BadRequestException('Nomor HP wajib diisi');
     }
     const phone = normalizePhone(registerDto.phone);
     if (!phone) throw new BadRequestException('Nomor HP tidak valid');
     if (!verificationToken) {
-      throw new BadRequestException('Verification token is required');
+      throw new BadRequestException('Verifikasi OTP diperlukan. Minta kode OTP terlebih dahulu.');
     }
     await this.otpService.assertVerifiedPhone(verificationToken, phone, OtpPurpose.REGISTER);
 
@@ -119,13 +122,13 @@ export class AuthService {
         where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
         select: { id: true },
       });
-      if (existingEmail) throw new ConflictException('Email already exists');
+      if (existingEmail) throw new ConflictException('Email sudah terdaftar');
     }
     const existingPhone = await this.prisma.user.findFirst({
       where: { phone: { in: phoneCandidates(phone) } },
       select: { id: true },
     });
-    if (existingPhone) throw new ConflictException('Phone already exists');
+    if (existingPhone) throw new ConflictException('Nomor HP sudah terdaftar');
 
     const passwordHash = await bcrypt.hash(password, this.saltRounds);
     const memberCode = await generateDailySequence(this.prisma, 'MBR', 'customer', 'memberCode', 6);
@@ -158,10 +161,8 @@ export class AuthService {
       });
     } catch (err) {
       // Dua registrasi paralel untuk nomor/email yang sama → satu menang.
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw new ConflictException('Phone or email already exists');
-      }
-      throw err;
+      // Pesan mengikuti kolom yang bentrok (bukan selalu "nomor/email").
+      throw conflictFromUniqueViolation(err) ?? err;
     }
   }
 
@@ -174,7 +175,7 @@ export class AuthService {
     const candidates = await this.findLoginCandidates(identifier);
     if (candidates.length === 0) {
       await bcrypt.compare(password, DUMMY_HASH);
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
 
     // Normalnya satu kandidat. Lebih dari satu hanya bila data lama menyimpan
@@ -191,7 +192,7 @@ export class AuthService {
         this.logger.warn(`Login ambigu: ${matched.length} akun cocok untuk satu nomor`);
       }
       if (lockedUntil && matched.length === 0) throw this.lockedError(lockedUntil);
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
 
     const user = await this.prisma.user.findUniqueOrThrow({
@@ -202,7 +203,7 @@ export class AuthService {
         },
       },
     });
-    if (!user.isActive) throw new UnauthorizedException('Account is inactive');
+    if (!user.isActive) throw new UnauthorizedException('Akun tidak aktif. Hubungi admin.');
 
     const tokens = await this.startSession(this.prisma, user, client);
     return { user: this.publicUser(user), ...tokens };
@@ -304,7 +305,7 @@ export class AuthService {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       });
     } catch {
-      throw new UnauthorizedException('Invalid or expired refresh token');
+      throw new UnauthorizedException('Sesi berakhir. Silakan masuk lagi.');
     }
     const tokenHash = this.hashToken(token);
     const graceMs = this.reuseGraceSeconds * 1000;
@@ -544,7 +545,7 @@ export class AuthService {
       },
     });
 
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) throw new NotFoundException('User tidak ditemukan');
 
     const { customer, b2bPartner, ...rest } = this.publicUser(user) as typeof user;
 
