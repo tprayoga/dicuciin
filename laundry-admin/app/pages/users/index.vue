@@ -44,6 +44,9 @@ const roleItems = [
 
 // Server menolak OWNER memberi/mengubah role SUPER_ADMIN → jangan tawarkan.
 const authStore = useAuthStore()
+// Opsi USelect tidak boleh bernilai '' (Reka UI melempar error) → pakai sentinel.
+const NONE = '__none__'
+const fromNone = (v: string | null | undefined) => (v && v !== NONE ? v : undefined)
 const assignableRoleItems = computed(() =>
   authStore.user?.role === 'SUPER_ADMIN' ? roleItems : roleItems.filter(r => r.value !== 'SUPER_ADMIN'),
 )
@@ -55,12 +58,12 @@ const form = reactive({
   password: '',
   role: 'CASHIER',
   status: true,
-  outletId: '',
+  outletId: NONE,
   shiftName: '',
 })
 
 const outletItems = computed(() => [
-  { label: 'Pilih outlet', value: '' },
+  { label: 'Tanpa outlet', value: NONE },
   ...outlets.value.map(outlet => ({ label: outlet.name, value: outlet.id })),
 ])
 
@@ -116,7 +119,7 @@ function openCreate() {
     password: '',
     role: 'CASHIER',
     status: true,
-    outletId: outlets.value[0]?.id || '',
+    outletId: outlets.value[0]?.id || NONE,
     shiftName: '',
   })
   showModal.value = true
@@ -131,7 +134,7 @@ function openEdit(user: UserItem) {
     password: '',
     role: user.role,
     status: user.isActive,
-    outletId: user.outletUsers?.[0]?.outletId || '',
+    outletId: user.outletUsers?.[0]?.outletId || NONE,
     shiftName: user.outletUsers?.[0]?.shiftName || '',
   })
   showModal.value = true
@@ -147,7 +150,7 @@ async function save() {
         role: form.role,
         isActive: form.status,
         password: form.password || undefined,
-        outletId: form.outletId || undefined,
+        outletId: fromNone(form.outletId),
         shiftName: form.shiftName || undefined,
       })
       toast.add({ title: 'Data staff diperbarui', color: 'success' })
@@ -158,7 +161,7 @@ async function save() {
         phone: form.phone || undefined,
         password: form.password,
         role: form.role,
-        outletId: form.outletId || undefined,
+        outletId: fromNone(form.outletId),
         shiftName: form.shiftName || undefined,
       })
       toast.add({ title: 'Staff ditambahkan', color: 'success' })

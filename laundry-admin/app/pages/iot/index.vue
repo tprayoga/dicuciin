@@ -62,10 +62,12 @@ const filteredDevices = computed(() => {
   return devices.value.filter(d => `${d.name} ${d.deviceCode} ${d.outlet?.name || ''}`.toLowerCase().includes(keyword))
 })
 
-function machineCondition(status: string) {
-  if (status === 'ONLINE') return { label: 'Normal', className: 'bg-[#1fa150] text-white' }
-  if (status === 'MAINTENANCE') return { label: 'Maintenance', className: 'bg-[#e28a05] text-white' }
-  return { label: 'Need Service', className: 'bg-[#d6280b] text-white' }
+function machineCondition(device: { status: string; lastHeartbeatAt?: string | null }) {
+  if (device.status === 'ONLINE') return { label: 'Normal', className: 'bg-[#1fa150] text-white' }
+  if (device.status === 'MAINTENANCE') return { label: 'Maintenance', className: 'bg-[#e28a05] text-white' }
+  // Mesin baru yang belum pernah mengirim heartbeat bukan "perlu servis".
+  if (!device.lastHeartbeatAt) return { label: 'Belum terhubung', className: 'bg-[#eef1f5] text-[#5d6b82]' }
+  return { label: 'Offline', className: 'bg-[#d6280b] text-white' }
 }
 
 function machineActive(status: string) {
@@ -192,7 +194,7 @@ onMounted(load)
           >
             <td class="px-3 py-3">
               <p class="font-semibold">{{ device.deviceCode }}</p>
-              <p class="text-[#6f809f]">{{ device.manufacturer || '-' }}</p>
+              <p class="text-[#6f809f]">{{ device.name || device.manufacturer || '-' }}</p>
             </td>
             <td class="px-3 py-3">{{ deviceTypeItems.find(i => i.value === device.deviceType)?.label || device.deviceType }}</td>
             <td class="px-3 py-3">
@@ -201,7 +203,7 @@ onMounted(load)
             </td>
             <td class="px-3 py-3">{{ device.outlet?.name || '-' }}</td>
             <td class="px-3 py-3">
-              <span class="rounded-full px-3 py-1 text-xs font-semibold" :class="machineCondition(device.status).className">{{ machineCondition(device.status).label }}</span>
+              <span class="rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap" :class="machineCondition(device).className">{{ machineCondition(device).label }}</span>
             </td>
             <td class="px-3 py-3">
               <span class="dc-pill-success" :class="!machineActive(device.status) ? '!bg-[#f2f4f8] !text-[#6f809f]' : ''">{{ machineActive(device.status) ? 'Aktif' : 'Nonaktif' }}</span>

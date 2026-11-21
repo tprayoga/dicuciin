@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { useApi } from '~/composables/useApi'
 import type { PaginatedResponse, Outlet, Kiosk } from '~/types'
+import { useAuthStore } from '~/stores/auth'
 
 const api = useApi()
 const toast = useToast()
+const authStore = useAuthStore()
+// Hapus outlet/kiosk hanya diizinkan server untuk SUPER_ADMIN.
+const canDelete = computed(() => authStore.user?.role === 'SUPER_ADMIN')
 
 const outlets = ref<Outlet[]>([])
 const meta = ref({ total: 0, page: 1, limit: 10, totalPages: 1 })
@@ -305,7 +309,7 @@ onMounted(() => load())
           </div>
           <div class="flex gap-1">
             <UButton icon="i-heroicons-pencil" variant="ghost" class="dc-btn-outline" size="xs" @click="openEdit(outlet)">Edit</UButton>
-            <UButton icon="i-heroicons-trash" variant="ghost" color="error" size="xs" @click="confirmDelete(outlet)" />
+            <UButton v-if="canDelete" icon="i-heroicons-trash" variant="ghost" color="error" size="xs" @click="confirmDelete(outlet)" />
           </div>
         </div>
 
@@ -351,10 +355,10 @@ onMounted(() => load())
           </div>
           <div class="grid md:grid-cols-2 gap-4">
             <UFormField label="Jam Buka">
-              <UInput v-model="form.openTime" placeholder="07:00" class="w-full" />
+              <UInput v-model="form.openTime" type="time" class="w-full" />
             </UFormField>
             <UFormField label="Jam Tutup">
-              <UInput v-model="form.closeTime" placeholder="22:00" class="w-full" />
+              <UInput v-model="form.closeTime" type="time" class="w-full" />
             </UFormField>
           </div>
           <UFormField label="Alamat Outlet">
@@ -541,7 +545,7 @@ onMounted(() => load())
                   @click="revokeEnrollment(kiosk)"
                 />
                 <UButton icon="i-heroicons-pencil" variant="ghost" size="xs" @click="openKioskEdit(kiosk)" />
-                <UButton icon="i-heroicons-trash" variant="ghost" color="error" size="xs" @click="deleteKiosk(kiosk)" />
+                <UButton v-if="canDelete" icon="i-heroicons-trash" variant="ghost" color="error" size="xs" @click="deleteKiosk(kiosk)" />
               </div>
             </div>
           </div>

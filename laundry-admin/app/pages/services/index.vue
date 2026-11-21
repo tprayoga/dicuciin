@@ -213,7 +213,7 @@ onMounted(() => load())
           </UFormField>
           <div class="grid md:grid-cols-2 gap-4">
             <UFormField label="Harga (Rp)">
-              <UInput v-model="form.price" placeholder="Masukkan harga" class="w-full" />
+              <UInput v-model="form.price" type="number" min="0" placeholder="Masukkan harga" class="w-full" />
             </UFormField>
             <UFormField label="Estimasi (menit)">
               <UInput v-model="form.duration" placeholder="Masukkan estimasi" class="w-full" />
