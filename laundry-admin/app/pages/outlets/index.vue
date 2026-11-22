@@ -23,6 +23,24 @@ const showKioskModal = ref(false)
 const kioskOutlet = ref<Outlet | null>(null)
 const editKiosk = ref<Kiosk | null>(null)
 const savingKiosk = ref(false)
+const uploadingImage = ref(false)
+
+/** Foto outlet diunggah (dulu harus menempel URL). */
+async function onOutletImagePick(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  uploadingImage.value = true
+  try {
+    const res = await api.upload<{ url: string }>('/uploads/image', file)
+    form.imageUrl = res.url
+  } catch (err: any) {
+    toast.add({ title: 'Gagal mengunggah foto', description: err.message, color: 'error' })
+  } finally {
+    uploadingImage.value = false
+    input.value = ''
+  }
+}
 const enrollmentCode = ref<{ code: string; expiresAt: string } | null>(null)
 
 const form = reactive({
@@ -232,7 +250,7 @@ async function save() {
         phone: form.phone,
         openTime: form.openTime || undefined,
         closeTime: form.closeTime || undefined,
-        imageUrl: form.imageUrl || undefined,
+        imageUrl: form.imageUrl || null,
       })
       toast.add({ title: 'Outlet diperbarui', color: 'success' })
     } else {
@@ -364,14 +382,25 @@ onMounted(() => load())
           <UFormField label="Alamat Outlet">
             <UInput v-model="form.address" placeholder="Masukkan alamat lengkap" class="w-full" required />
           </UFormField>
-          <UFormField label="URL Foto Outlet/Cabang">
-            <UInput v-model="form.imageUrl" placeholder="https://..." class="w-full" />
+          <UFormField label="Foto Outlet/Cabang">
+            <div class="flex items-center gap-3">
+              <div
+                class="h-16 w-24 shrink-0 rounded-lg border border-[#d7e0ee] bg-[#f2f5fa] bg-center bg-cover"
+                :style="form.imageUrl ? { backgroundImage: `url(${form.imageUrl})` } : undefined"
+              />
+              <label class="dc-btn-outline px-4 py-2 rounded-lg cursor-pointer text-sm whitespace-nowrap">
+                <input type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="onOutletImagePick">
+                {{ uploadingImage ? 'Mengunggah...' : (form.imageUrl ? 'Ganti Foto' : 'Pilih Foto') }}
+              </label>
+              <UButton v-if="form.imageUrl" variant="ghost" color="error" size="xs" @click="form.imageUrl = ''">Hapus</UButton>
+            </div>
+            <p class="mt-1 text-xs text-[#6f809f]">JPG/PNG/WebP maks. 10 MB</p>
           </UFormField>
           <UFormField label="No Telepon">
             <UInput v-model="form.phone" placeholder="Masukkan nomor telepon" class="w-full" required />
           </UFormField>
           <div class="flex justify-end pt-2">
-            <UButton type="submit" class="dc-btn-primary px-4 py-2 justify-center">{{ editTarget ? 'Simpan' : 'Tambah Cabang' }}</UButton>
+            <UButton type="submit" :disabled="uploadingImage" class="dc-btn-primary px-4 py-2 justify-center">{{ editTarget ? 'Simpan' : 'Tambah Cabang' }}</UButton>
           </div>
         </form>
       </template>

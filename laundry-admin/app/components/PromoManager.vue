@@ -296,7 +296,6 @@ onMounted(load)
             </UFormField>
           </div>
 
-          <p class="text-xs text-[#6f809f]">Isi URL gambar agar banner tampil di halaman promo</p>
 
           <div class="flex justify-end pt-2">
             <UButton type="submit" :disabled="uploading" class="dc-btn-primary px-4 py-2 justify-center">Simpan</UButton>

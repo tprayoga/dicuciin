@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsEnum, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { B2BPartnerTier } from '@prisma/client';
 
@@ -29,6 +29,17 @@ export class CreatePartnerDto {
   @IsString()
   @IsOptional()
   userId?: string;
+
+  /** Form admin mengirim tier & status saat membuat partner (dulu ditolak 400). */
+  @ApiProperty({ required: false, enum: B2BPartnerTier })
+  @IsEnum(B2BPartnerTier)
+  @IsOptional()
+  tier?: B2BPartnerTier;
+
+  @ApiProperty({ required: false, enum: ['ACTIVE', 'SUSPENDED'] })
+  @IsIn(['ACTIVE', 'SUSPENDED'])
+  @IsOptional()
+  status?: string;
 }
 
 export class UpdatePartnerDto {

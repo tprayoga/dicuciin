@@ -21,6 +21,8 @@ export class B2BPartnerService {
     email?: string;
     address?: string;
     userId?: string;
+    tier?: B2BPartnerTier;
+    status?: string;
   }) {
     const partnerCode = `B2B-${randomUUID().slice(0, 8).toUpperCase()}`;
 
@@ -34,7 +36,8 @@ export class B2BPartnerService {
         data: {
           partnerId: partner.id,
           segment: UserSegment.B2B,
-          currentB2BTier: B2BPartnerTier.BUSINESS_PARTNER,
+          // Tier yang dipilih admin saat membuat partner (dulu selalu Business Partner).
+          currentB2BTier: partner.tier ?? B2BPartnerTier.BUSINESS_PARTNER,
         },
       });
       return partner;

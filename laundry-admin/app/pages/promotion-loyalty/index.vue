@@ -38,6 +38,9 @@ const dashboard = ref<any>({
   b2bPricingImpact: [],
 })
 const templates = ref<any[]>([])
+// Data referensi untuk pilihan (ganti isian ID/CSV yang dulu diketik manual).
+const outletList = ref<any[]>([])
+const serviceList = ref<any[]>([])
 const issuedVouchers = ref<any[]>([])
 const redemptions = ref<any[]>([])
 const campaigns = ref<any[]>([])
@@ -79,6 +82,56 @@ const retailTierItems = ['SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'].map(value => (
 const b2bTierItems = ['BUSINESS_PARTNER', 'GOLD_PARTNER', 'PLATINUM_PARTNER', 'DIAMOND_PARTNER'].map(value => ({ label: value, value }))
 const segmentItems = ['RETAIL', 'B2B'].map(value => ({ label: value, value }))
 const campaignTypeItems = ['CASHBACK_TOPUP', 'LONG_TIME_NO_SEE', 'REFERRAL', 'BIRTHDAY_REWARD', 'ANNIVERSARY_REWARD', 'MONTHLY_TIER_BENEFIT'].map(value => ({ label: value, value }))
+
+const outletOptions = computed(() => outletList.value.map(o => ({ label: o.name, value: o.id })))
+const serviceOptions = computed(() =>
+  serviceList.value.map(sv => ({ label: sv.machineType ? `${sv.name} · ${sv.machineType}` : sv.name, value: sv.id })),
+)
+const partnerOptions = computed(() => partners.value.map(pt => ({ label: pt.companyName, value: pt.id })))
+const machineTypeOptions = [
+  { label: 'Mesin cuci (WASHER)', value: 'WASHER' },
+  { label: 'Pengering (DRYER)', value: 'DRYER' },
+  { label: 'Cuci + kering (WASHER_DRYER)', value: 'WASHER_DRYER' },
+]
+const withAll = (label: string, items: { label: string; value: string }[]) => [{ label, value: NONE }, ...items]
+const dayOptions = [
+  { label: 'Sen', value: '1' }, { label: 'Sel', value: '2' }, { label: 'Rab', value: '3' },
+  { label: 'Kam', value: '4' }, { label: 'Jum', value: '5' }, { label: 'Sab', value: '6' }, { label: 'Min', value: '7' },
+]
+
+/** Isian CSV id ⇄ pilihan banyak (state form tetap string CSV seperti format backend). */
+function csvModel(form: Record<string, any>, key: string) {
+  return computed<string[]>({
+    get: () => String(form[key] || '').split(',').map(v => v.trim()).filter(Boolean),
+    set: (vals) => { form[key] = vals.join(',') },
+  })
+}
+/** Isian id tunggal opsional ⇄ USelect dengan opsi "semua" (sentinel NONE). */
+function optionalModel(form: Record<string, any>, key: string) {
+  return computed<string>({
+    get: () => form[key] || NONE,
+    set: (v) => { form[key] = v === NONE ? '' : v },
+  })
+}
+/** Hapus isian kosong → null agar batasan lama benar-benar terhapus saat edit. */
+const orNull = (v: string | null | undefined) => (v ? v : null)
+
+// Aturan campaign per jenis (dulu "Rule Key"/"Rule Value" diketik bebas).
+const campaignRuleFields: Record<string, { key: string; label: string; help?: string; type: 'number' | 'tier' }[]> = {
+  CASHBACK_TOPUP: [
+    { key: 'minTopup', label: 'Minimal top-up (Rp)', type: 'number' },
+    { key: 'cashbackPercent', label: 'Cashback (%)', type: 'number' },
+    { key: 'maxCashback', label: 'Maksimal cashback (Rp)', help: 'Kosongkan bila tanpa batas', type: 'number' },
+  ],
+  LONG_TIME_NO_SEE: [
+    { key: 'inactiveDays', label: 'Tidak bertransaksi selama (hari)', help: 'Bawaan 30', type: 'number' },
+    { key: 'cooldownDays', label: 'Jeda sebelum dikirim lagi (hari)', help: 'Bawaan 30', type: 'number' },
+  ],
+  MONTHLY_TIER_BENEFIT: [{ key: 'tier', label: 'Tier penerima', type: 'tier' }],
+}
+const campaignRuleValues = reactive<Record<string, string>>({})
+const activeCampaignRuleFields = computed(() => campaignRuleFields[campaignForm.type] ?? [])
+
 const adjustmentItems = ['PERCENTAGE_OFF', 'FIXED_OFF', 'FIXED_PRICE'].map(value => ({ label: value, value }))
 const b2bPriceTypeItems = ['DISCOUNT_PERCENT', 'FIXED_DISCOUNT', 'FIXED_PRICE'].map(value => ({ label: value, value }))
 
@@ -125,8 +178,6 @@ const campaignForm = reactive({
   segment: 'RETAIL',
   startDate: '',
   endDate: '',
-  ruleKey: '',
-  ruleValue: '',
   rewardType: 'VOUCHER',
   voucherTemplateId: '',
   rewardCashback: 0,
@@ -214,6 +265,23 @@ const ruleForm = reactive({
   isActive: true,
 })
 
+const voucherOutlets = csvModel(voucherForm, 'applicableOutlets')
+const voucherServices = csvModel(voucherForm, 'applicableServices')
+const ruleOutlets = csvModel(ruleForm, 'applicableOutlets')
+const ruleServices = csvModel(ruleForm, 'applicableServices')
+const happyHourDays = csvModel(happyHourForm, 'daysOfWeek')
+const hhOutlet = optionalModel(happyHourForm, 'outletId')
+const hhService = optionalModel(happyHourForm, 'serviceId')
+const hhMachineType = optionalModel(happyHourForm, 'machineType')
+const b2bPartner = optionalModel(b2bSpecialPriceForm, 'partnerId')
+const b2bOutlet = optionalModel(b2bSpecialPriceForm, 'outletId')
+const b2bService = optionalModel(b2bSpecialPriceForm, 'serviceId')
+const b2bMachineType = optionalModel(b2bSpecialPriceForm, 'machineType')
+function toggleHappyHourDay(d: string) {
+  const cur = happyHourDays.value
+  happyHourDays.value = (cur.includes(d) ? cur.filter(x => x !== d) : [...cur, d]).sort()
+}
+
 const filteredTemplates = computed(() => filterRows(templates.value, ['code', 'name', 'description', 'segment']))
 const filteredIssued = computed(() => applyStatus(filterRows(issuedVouchers.value, ['code', 'sourceType', 'segment']), 'status'))
 const filteredRedemptions = computed(() => filterRows(redemptions.value, ['status']))
@@ -279,6 +347,8 @@ async function loadData() {
       pr,
       ref,
       sp,
+      ol,
+      sl,
     ] = await Promise.all([
       safeLoad(() => loyaltyApi.dashboard(month.value), dashboard.value),
       safeLoad(() => loyaltyApi.voucherTemplates(), []),
@@ -292,6 +362,8 @@ async function loadData() {
       safeLoad(() => loyaltyApi.promotionRules(), []),
       safeLoad(() => loyaltyApi.referrals(), []),
       safeLoad(() => loyaltyApi.b2bSpecialPrices(), []),
+      safeLoad(() => api.get<any>('/outlets?page=1&limit=200'), { data: [] }),
+      safeLoad(() => api.get<any>('/services?page=1&limit=200'), { data: [] }),
     ])
     dashboard.value = d
     templates.value = vt as any[]
@@ -305,6 +377,8 @@ async function loadData() {
     promotionRules.value = pr as any[]
     referrals.value = ref as any[]
     b2bSpecialPrices.value = sp as any[]
+    outletList.value = Array.isArray(ol) ? ol : ((ol as any)?.data ?? [])
+    serviceList.value = (Array.isArray(sl) ? sl : ((sl as any)?.data ?? [])).filter((sv: any) => sv.isActive !== false)
   } finally {
     loading.value = false
   }
@@ -374,10 +448,11 @@ function voucherPayload() {
     endDate: voucherForm.endDate ? wibEndOfDay(voucherForm.endDate) : undefined,
     minTransaction: voucherForm.minTransaction ? Number(voucherForm.minTransaction) : undefined,
     // Biaya poin > 0 → voucher muncul di katalog Tukar Poin aplikasi.
-    pointCost: voucherForm.pointCost ? Number(voucherForm.pointCost) : undefined,
+    // 0 = tidak bisa ditukar poin (null menghapus biaya poin lama saat edit).
+    pointCost: Number(voucherForm.pointCost) > 0 ? Number(voucherForm.pointCost) : null,
     maxDiscount: voucherForm.maxDiscount ? Number(voucherForm.maxDiscount) : undefined,
-    applicableOutlets: voucherForm.applicableOutlets || undefined,
-    applicableServices: voucherForm.applicableServices || undefined,
+    applicableOutlets: orNull(voucherForm.applicableOutlets),
+    applicableServices: orNull(voucherForm.applicableServices),
     tierRestriction: fromNone(voucherForm.tierRestriction),
     b2bTierRestriction: fromNone(voucherForm.b2bTierRestriction),
   }
@@ -407,7 +482,9 @@ async function saveCampaign() {
     toast.add({ title: 'Nama campaign wajib diisi', color: 'error' })
     return
   }
-  const rules = campaignForm.ruleKey ? [{ ruleKey: campaignForm.ruleKey, ruleValue: campaignForm.ruleValue }] : []
+  const rules = activeCampaignRuleFields.value
+    .map(f => ({ ruleKey: f.key, ruleValue: String(campaignRuleValues[f.key] ?? '').trim() }))
+    .filter(r => r.ruleValue !== '')
   const rewards = campaignForm.rewardType
     ? [{
         rewardType: campaignForm.rewardType,
@@ -429,6 +506,7 @@ async function saveCampaign() {
     })
     toast.add({ title: 'Campaign dibuat', color: 'success' })
     showCampaignModal.value = false
+    for (const k of Object.keys(campaignRuleValues)) delete campaignRuleValues[k]
     await loadData()
   } catch (e: any) {
     toast.add({ title: 'Gagal menyimpan campaign', description: e.message, color: 'error' })
@@ -501,11 +579,11 @@ function openB2BSpecialPrice(item?: any) {
 function b2bSpecialPricePayload() {
   return {
     ...b2bSpecialPriceForm,
-    partnerId: b2bSpecialPriceForm.partnerId || undefined,
+    partnerId: orNull(b2bSpecialPriceForm.partnerId),
     tier: fromNone(b2bSpecialPriceForm.tier),
-    outletId: b2bSpecialPriceForm.outletId || undefined,
-    serviceId: b2bSpecialPriceForm.serviceId || undefined,
-    machineType: b2bSpecialPriceForm.machineType || undefined,
+    outletId: orNull(b2bSpecialPriceForm.outletId),
+    serviceId: orNull(b2bSpecialPriceForm.serviceId),
+    machineType: orNull(b2bSpecialPriceForm.machineType),
     value: Number(b2bSpecialPriceForm.value),
     priority: Number(b2bSpecialPriceForm.priority),
     startDate: b2bSpecialPriceForm.startDate ? wibStartOfDay(b2bSpecialPriceForm.startDate) : undefined,
@@ -563,11 +641,15 @@ async function savePartner() {
     toast.add({ title: 'Form partner belum valid', description: 'Perusahaan, PIC, dan nomor telepon wajib diisi.', color: 'error' })
     return
   }
+  // Email/alamat opsional: string kosong ditolak validasi email server → jangan
+  // dikirim saat membuat; null saat edit agar bisa dikosongkan.
+  const optional = (v: string) => (v?.trim() ? v.trim() : editingPartner.value ? null : undefined)
+  const payload = { ...partnerForm, email: optional(partnerForm.email), address: optional(partnerForm.address) }
   try {
     if (editingPartner.value) {
-      await api.patch(`/partners/${editingPartner.value.id}`, partnerForm)
+      await api.patch(`/partners/${editingPartner.value.id}`, payload)
     } else {
-      await api.post('/partners', partnerForm)
+      await api.post('/partners', payload)
     }
     toast.add({ title: 'Partner tersimpan', color: 'success' })
     showPartnerModal.value = false
@@ -631,9 +713,9 @@ async function saveHappyHour() {
   }
   const payload = {
     ...happyHourForm,
-    outletId: happyHourForm.outletId || undefined,
-    serviceId: happyHourForm.serviceId || undefined,
-    machineType: happyHourForm.machineType || undefined,
+    outletId: orNull(happyHourForm.outletId),
+    serviceId: orNull(happyHourForm.serviceId),
+    machineType: orNull(happyHourForm.machineType),
     startDate: happyHourForm.startDate ? wibStartOfDay(happyHourForm.startDate) : undefined,
     endDate: happyHourForm.endDate ? wibEndOfDay(happyHourForm.endDate) : undefined,
     value: Number(happyHourForm.value),
@@ -690,8 +772,8 @@ async function saveRule() {
     ...ruleForm,
     minTransaction: ruleForm.minTransaction ? Number(ruleForm.minTransaction) : undefined,
     maxDiscount: ruleForm.maxDiscount ? Number(ruleForm.maxDiscount) : undefined,
-    applicableServices: ruleForm.applicableServices || undefined,
-    applicableOutlets: ruleForm.applicableOutlets || undefined,
+    applicableServices: orNull(ruleForm.applicableServices),
+    applicableOutlets: orNull(ruleForm.applicableOutlets),
     tierRestriction: fromNone(ruleForm.tierRestriction),
   }
   try {
@@ -1023,14 +1105,14 @@ onMounted(loadData)
             <UFormField label="Quota"><UInput v-model.number="voucherForm.quota" type="number" min="1" class="w-full" /></UFormField>
             <UFormField label="Expiry Days"><UInput v-model.number="voucherForm.validityDays" type="number" min="1" class="w-full" /></UFormField>
             <UFormField label="Min Transaction"><UInput v-model.number="voucherForm.minTransaction" type="number" min="0" class="w-full" /></UFormField>
-            <UFormField label="Biaya Poin (Tukar Poin)" help="Isi agar voucher bisa ditukar dengan poin di aplikasi. Kosongkan bila tidak."><UInput v-model.number="voucherForm.pointCost" type="number" min="1" class="w-full" /></UFormField>
+            <UFormField label="Biaya Poin (Tukar Poin)" help="Isi agar voucher bisa ditukar dengan poin di aplikasi. 0 = tidak bisa ditukar."><UInput v-model.number="voucherForm.pointCost" type="number" min="0" class="w-full" /></UFormField>
             <UFormField label="Start Date"><UInput v-model="voucherForm.startDate" type="date" class="w-full" /></UFormField>
             <UFormField label="End Date"><UInput v-model="voucherForm.endDate" type="date" class="w-full" /></UFormField>
             <UFormField label="Tier Restriction"><USelect v-model="voucherForm.tierRestriction" :items="[{ label: 'Tidak ada', value: NONE }, ...retailTierItems]" class="w-full" /></UFormField>
             <UFormField label="B2B Tier Restriction"><USelect v-model="voucherForm.b2bTierRestriction" :items="[{ label: 'Tidak ada', value: NONE }, ...b2bTierItems]" class="w-full" /></UFormField>
           </div>
-          <UFormField label="Outlet Restriction CSV"><UInput v-model="voucherForm.applicableOutlets" class="w-full" /></UFormField>
-          <UFormField label="Machine/Service Restriction CSV"><UInput v-model="voucherForm.applicableServices" class="w-full" /></UFormField>
+          <UFormField label="Hanya berlaku di outlet" help="Kosongkan = semua outlet"><USelectMenu v-model="voucherOutlets" :items="outletOptions" placeholder="Semua outlet" class="w-full" multiple value-key="value" :search-input="{ placeholder: 'Cari…' }" /></UFormField>
+          <UFormField label="Hanya berlaku untuk layanan" help="Kosongkan = semua layanan"><USelectMenu v-model="voucherServices" :items="serviceOptions" placeholder="Semua layanan" class="w-full" multiple value-key="value" :search-input="{ placeholder: 'Cari…' }" /></UFormField>
           <UFormField label="Deskripsi"><UTextarea v-model="voucherForm.description" class="w-full" :rows="2" /></UFormField>
           <div class="flex justify-end"><UButton type="submit" class="dc-btn-primary">Simpan</UButton></div>
         </form>
@@ -1045,10 +1127,12 @@ onMounted(loadData)
             <UFormField label="Trigger"><USelect v-model="campaignForm.type" :items="campaignTypeItems" class="w-full" /></UFormField>
             <UFormField label="Segment"><USelect v-model="campaignForm.segment" :items="segmentItems" class="w-full" /></UFormField>
             <UFormField label="Reward"><USelect v-model="campaignForm.rewardType" :items="['VOUCHER', 'CASHBACK'].map(value => ({ label: value, value }))" class="w-full" /></UFormField>
-            <UFormField label="Voucher Reward"><USelect v-model="campaignForm.voucherTemplateId" :items="templates.map(v => ({ label: `${v.code} - ${v.name}`, value: v.id }))" class="w-full" /></UFormField>
-            <UFormField label="Cashback Reward"><UInput v-model.number="campaignForm.rewardCashback" type="number" min="0" class="w-full" /></UFormField>
-            <UFormField label="Rule Key"><UInput v-model="campaignForm.ruleKey" placeholder="inactiveDays, minTopup, tier" class="w-full" /></UFormField>
-            <UFormField label="Rule Value"><UInput v-model="campaignForm.ruleValue" class="w-full" /></UFormField>
+            <UFormField v-if="campaignForm.rewardType === 'VOUCHER'" label="Voucher Reward"><USelect v-model="campaignForm.voucherTemplateId" :items="templates.map(v => ({ label: `${v.code} - ${v.name}`, value: v.id }))" class="w-full" /></UFormField>
+            <UFormField v-if="campaignForm.rewardType === 'CASHBACK'" label="Cashback Reward (Rp)"><UInput v-model.number="campaignForm.rewardCashback" type="number" min="0" class="w-full" /></UFormField>
+            <UFormField v-for="f in activeCampaignRuleFields" :key="f.key" :label="f.label" :help="f.help">
+              <USelect v-if="f.type === 'tier'" v-model="campaignRuleValues[f.key]" :items="retailTierItems" placeholder="Pilih tier" class="w-full" />
+              <UInput v-else v-model="campaignRuleValues[f.key]" type="number" min="0" class="w-full" />
+            </UFormField>
           </div>
           <UFormField label="Deskripsi"><UTextarea v-model="campaignForm.description" class="w-full" :rows="2" /></UFormField>
           <div class="flex justify-end"><UButton type="submit" class="dc-btn-primary">Simpan</UButton></div>
@@ -1065,7 +1149,7 @@ onMounted(loadData)
             <UFormField label="Spending Threshold"><UInput v-model.number="retailTierForm.thresholdSpending" type="number" class="w-full" /></UFormField>
             <UFormField label="Transaction Threshold"><UInput v-model.number="retailTierForm.thresholdTxnCount" type="number" class="w-full" /></UFormField>
             <UFormField label="Point Multiplier"><UInput v-model.number="retailTierForm.pointMultiplier" type="number" step="0.1" class="w-full" /></UFormField>
-            <UFormField label="Monthly Voucher Benefit"><UInput v-model="retailTierForm.benefitDescription" placeholder="TODO: link voucher benefit API" class="w-full" /></UFormField>
+            <UFormField label="Deskripsi Benefit" help="Teks benefit yang ditampilkan. Voucher bulanan otomatis diatur lewat Campaign &quot;MONTHLY_TIER_BENEFIT&quot;."><UInput v-model="retailTierForm.benefitDescription" placeholder="mis. Poin 2× dan voucher Rp15.000 tiap bulan" class="w-full" /></UFormField>
           </div>
           <div class="flex justify-end"><UButton type="submit" class="dc-btn-primary">Simpan</UButton></div>
         </form>
@@ -1081,7 +1165,6 @@ onMounted(loadData)
             <UFormField label="Discount by Tier (%)"><UInput v-model.number="b2bTierForm.discountRate" type="number" class="w-full" /></UFormField>
             <UFormField label="Spending Threshold"><UInput v-model.number="b2bTierForm.thresholdSpending" type="number" class="w-full" /></UFormField>
             <UFormField label="Transaction Threshold"><UInput v-model.number="b2bTierForm.thresholdTxnCount" type="number" class="w-full" /></UFormField>
-            <UFormField label="Active Period"><UInput placeholder="TODO: active period API" disabled class="w-full" /></UFormField>
           </div>
           <div class="flex justify-end"><UButton type="submit" class="dc-btn-primary">Simpan</UButton></div>
         </form>
@@ -1093,11 +1176,11 @@ onMounted(loadData)
         <form class="space-y-4" @submit.prevent="saveB2BSpecialPrice">
           <div class="grid md:grid-cols-2 gap-4">
             <UFormField label="Nama"><UInput v-model="b2bSpecialPriceForm.name" class="w-full" required /></UFormField>
-            <UFormField label="Partner ID"><UInput v-model="b2bSpecialPriceForm.partnerId" placeholder="Kosong jika target tier" class="w-full" /></UFormField>
+            <UFormField label="Partner" help="Pilih partner, atau biarkan untuk menarget tier"><USelect v-model="b2bPartner" :items="withAll('Tidak ada (target tier)', partnerOptions)" class="w-full" /></UFormField>
             <UFormField label="Tier"><USelect v-model="b2bSpecialPriceForm.tier" :items="[{ label: 'Tidak ada', value: NONE }, ...b2bTierItems]" class="w-full" /></UFormField>
-            <UFormField label="Outlet ID"><UInput v-model="b2bSpecialPriceForm.outletId" placeholder="Kosong = semua outlet" class="w-full" /></UFormField>
-            <UFormField label="Service ID"><UInput v-model="b2bSpecialPriceForm.serviceId" placeholder="Kosong = semua layanan" class="w-full" /></UFormField>
-            <UFormField label="Machine Type"><UInput v-model="b2bSpecialPriceForm.machineType" placeholder="WASHER / DRYER" class="w-full" /></UFormField>
+            <UFormField label="Outlet"><USelect v-model="b2bOutlet" :items="withAll('Semua outlet', outletOptions)" class="w-full" /></UFormField>
+            <UFormField label="Layanan"><USelect v-model="b2bService" :items="withAll('Semua layanan', serviceOptions)" class="w-full" /></UFormField>
+            <UFormField label="Tipe Mesin"><USelect v-model="b2bMachineType" :items="withAll('Semua tipe mesin', machineTypeOptions)" class="w-full" /></UFormField>
             <UFormField label="Price Type"><USelect v-model="b2bSpecialPriceForm.priceType" :items="b2bPriceTypeItems" class="w-full" /></UFormField>
             <UFormField label="Value"><UInput v-model.number="b2bSpecialPriceForm.value" type="number" min="0" class="w-full" /></UFormField>
             <UFormField label="Start Date"><UInput v-model="b2bSpecialPriceForm.startDate" type="date" class="w-full" /></UFormField>
@@ -1132,9 +1215,21 @@ onMounted(loadData)
         <form class="space-y-4" @submit.prevent="saveHappyHour">
           <UFormField label="Nama"><UInput v-model="happyHourForm.name" class="w-full" required /></UFormField>
           <div class="grid md:grid-cols-2 gap-4">
-            <UFormField label="Outlet ID"><UInput v-model="happyHourForm.outletId" placeholder="Kosong = semua outlet" class="w-full" /></UFormField>
-            <UFormField label="Machine / Service ID"><UInput v-model="happyHourForm.serviceId" placeholder="Kosong = semua layanan" class="w-full" /></UFormField>
-            <UFormField label="Hari"><UInput v-model="happyHourForm.daysOfWeek" class="w-full" /></UFormField>
+            <UFormField label="Outlet"><USelect v-model="hhOutlet" :items="withAll('Semua outlet', outletOptions)" class="w-full" /></UFormField>
+            <UFormField label="Layanan"><USelect v-model="hhService" :items="withAll('Semua layanan', serviceOptions)" class="w-full" /></UFormField>
+            <UFormField label="Tipe Mesin"><USelect v-model="hhMachineType" :items="withAll('Semua tipe mesin', machineTypeOptions)" class="w-full" /></UFormField>
+            <UFormField label="Hari" class="md:col-span-2">
+              <div class="flex flex-wrap gap-2">
+                <UButton
+                  v-for="d in dayOptions"
+                  :key="d.value"
+                  type="button"
+                  size="xs"
+                  :variant="happyHourDays.includes(d.value) ? 'solid' : 'outline'"
+                  @click="toggleHappyHourDay(d.value)"
+                >{{ d.label }}</UButton>
+              </div>
+            </UFormField>
             <UFormField label="Discount"><USelect v-model="happyHourForm.adjustmentType" :items="adjustmentItems" class="w-full" /></UFormField>
             <UFormField label="Start Time"><UInput v-model="happyHourForm.startTime" type="time" class="w-full" /></UFormField>
             <UFormField label="End Time"><UInput v-model="happyHourForm.endTime" type="time" class="w-full" /></UFormField>
@@ -1158,8 +1253,8 @@ onMounted(loadData)
             <UFormField label="Max Discount"><UInput v-model.number="ruleForm.maxDiscount" type="number" class="w-full" /></UFormField>
             <UFormField label="Max Usage"><UInput v-model.number="ruleForm.maxUsagePerUser" type="number" class="w-full" /></UFormField>
           </div>
-          <UFormField label="Outlet Restriction CSV"><UInput v-model="ruleForm.applicableOutlets" class="w-full" /></UFormField>
-          <UFormField label="Service Restriction CSV"><UInput v-model="ruleForm.applicableServices" class="w-full" /></UFormField>
+          <UFormField label="Hanya berlaku di outlet" help="Kosongkan = semua outlet"><USelectMenu v-model="ruleOutlets" :items="outletOptions" placeholder="Semua outlet" class="w-full" multiple value-key="value" :search-input="{ placeholder: 'Cari…' }" /></UFormField>
+          <UFormField label="Hanya berlaku untuk layanan" help="Kosongkan = semua layanan"><USelectMenu v-model="ruleServices" :items="serviceOptions" placeholder="Semua layanan" class="w-full" multiple value-key="value" :search-input="{ placeholder: 'Cari…' }" /></UFormField>
           <div class="flex justify-end"><UButton type="submit" class="dc-btn-primary">Simpan</UButton></div>
         </form>
       </template>
