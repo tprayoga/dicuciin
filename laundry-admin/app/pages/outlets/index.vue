@@ -214,11 +214,18 @@ async function deleteKiosk(kiosk: Kiosk) {
   }
 }
 
+const statusFilter = ref<'all' | 'active' | 'inactive'>('all')
+const statusFilterItems = [
+  { label: 'Semua status', value: 'all' },
+  { label: 'Aktif', value: 'active' },
+  { label: 'Nonaktif', value: 'inactive' },
+]
+
 const filteredOutlets = computed(() => {
   const keyword = search.value.trim().toLowerCase()
-  if (!keyword) return outlets.value
   return outlets.value.filter(o =>
-    `${o.name} ${o.address} ${o.code}`.toLowerCase().includes(keyword),
+    (statusFilter.value === 'all' || (statusFilter.value === 'active') === (o.isActive !== false))
+    && (!keyword || `${o.name} ${o.address} ${o.code}`.toLowerCase().includes(keyword)),
   )
 })
 
@@ -312,7 +319,13 @@ onMounted(() => load())
 
     <div class="flex flex-wrap items-center justify-between gap-3">
       <p class="text-lg">Total: <span class="text-[#0360da] font-semibold">{{ filteredOutlets.length }} Outlet/ Cabang</span></p>
-      <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari nama outlet" class="w-full sm:max-w-xs dc-input-like" />
+      <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari nama outlet" class="w-full sm:w-[280px] dc-input-like" />
+        <USelect v-model="statusFilter" :items="statusFilterItems" aria-label="Filter status outlet" class="w-full sm:w-[160px] dc-input-like" />
+      </div>
+    </div>
+    <div v-if="!loading && !filteredOutlets.length" class="dc-page-card p-6 text-center text-sm text-[#6f809f]">
+      Tidak ada outlet yang cocok dengan pencarian/filter.
     </div>
 
     <div v-if="loading" class="text-sm text-[#6f809f]">Memuat data outlet...</div>
@@ -345,8 +358,12 @@ onMounted(() => load())
             <p class="font-semibold text-[#272526]">{{ outlet._count?.outletUsers ?? '-' }}</p>
           </div>
           <div>
-            <p class="text-sm text-[#6f809f]">Total Mesin</p>
-            <p class="font-semibold text-[#272526]">{{ outlet._count?.iotDevices ?? '-' }}</p>
+            <p class="text-sm text-[#6f809f]">Mesin Tersedia</p>
+            <p class="font-semibold text-[#272526]" data-testid="outlet-machine-stats">
+              <template v-if="outlet.machineStats">{{ outlet.machineStats.available }} dari {{ outlet.machineStats.total }}</template>
+              <template v-else>-</template>
+            </p>
+            <p v-if="outlet.machineStats?.offline" class="text-xs text-[#6f809f]">{{ outlet.machineStats.offline }} nonaktif</p>
           </div>
           <div>
             <p class="text-sm text-[#6f809f]">Kiosk</p>

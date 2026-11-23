@@ -19,8 +19,16 @@ interface CustomerItem {
   memberCode: string
   gender?: string | null
   createdAt: string
-  user?: { name: string; email: string; phone: string }
+  user?: { name: string; email: string; phone: string; isActive?: boolean }
   wallet?: { balance: number }
+  _count?: { orders?: number }
+}
+
+interface CustomerSummary {
+  totalMembers: number
+  newThisMonth: number
+  active30d: number
+  totalBalance: number
 }
 
 interface CustomerDetail extends CustomerItem {
@@ -71,13 +79,19 @@ const createForm = reactive({
   initialBalance: '0',
 })
 
-const filteredCustomers = computed(() => {
-  const keyword = search.value.trim().toLowerCase()
-  if (!keyword) return customers.value
-  return customers.value.filter(c => `${c.memberCode} ${c.user?.name || ''} ${c.user?.phone || ''}`.toLowerCase().includes(keyword))
-})
-
-const totalBalance = computed(() => filteredCustomers.value.reduce((sum, c) => sum + (c.wallet?.balance || 0), 0))
+// Pencarian & segmen dikerjakan server (dulu hanya menyaring 100 member pertama
+// di browser, dan dropdown "Semua member" tidak berfungsi).
+const segment = ref<'all' | 'new' | 'active' | 'balance' | 'inactive'>('all')
+const segmentItems = [
+  { label: 'Semua member', value: 'all' },
+  { label: 'Baru bulan ini', value: 'new' },
+  { label: 'Aktif 30 hari', value: 'active' },
+  { label: 'Punya saldo', value: 'balance' },
+  { label: 'Akun nonaktif', value: 'inactive' },
+]
+const meta = ref({ total: 0, page: 1, limit: 20, totalPages: 1 })
+const summary = ref<CustomerSummary>({ totalMembers: 0, newThisMonth: 0, active30d: 0, totalBalance: 0 })
+const filteredCustomers = computed(() => customers.value)
 
 // Hapus member = anonimisasi (data pribadi dihapus, riwayat order & laporan tetap).
 // Ditolak server bila masih ada saldo, order/booking aktif, atau refund terbuka.
@@ -91,11 +105,18 @@ function deleteCustomer(item: CustomerItem) {
   })
 }
 
-async function load() {
+async function load(page = 1) {
   loading.value = true
   try {
-    const res = await api.get<PaginatedResponse<CustomerItem>>('/customers?page=1&limit=100')
+    const params = new URLSearchParams({ page: String(page), limit: String(meta.value.limit) })
+    const keyword = search.value.trim()
+    if (keyword) params.set('search', keyword)
+    if (segment.value !== 'all') params.set('segment', segment.value)
+    const res = await api.get<{ data: CustomerItem[]; meta: PaginatedResponse<CustomerItem>['meta'] & { summary?: CustomerSummary } }>(`/customers?${params}`)
     customers.value = res.data
+    const { summary: s, ...pageMeta } = res.meta
+    meta.value = pageMeta
+    if (s) summary.value = s
   } catch (e: any) {
     toast.add({ title: 'Gagal memuat pelanggan', description: e.message, color: 'error' })
   } finally {
@@ -216,7 +237,13 @@ async function saveCreate() {
   }
 }
 
-onMounted(load)
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+watch(search, () => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => load(1), 350)
+})
+watch(segment, () => load(1))
+onMounted(() => load())
 </script>
 
 <template>
@@ -237,29 +264,29 @@ onMounted(load)
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
       <div class="dc-page-card p-4">
         <p class="text-xs font-semibold">TOTAL MEMBER</p>
-        <p class="text-3xl sm:text-4xl font-bold break-words mt-2">{{ filteredCustomers.length }}</p>
+        <p class="text-3xl sm:text-4xl font-bold break-words mt-2" data-testid="stat-total">{{ summary.totalMembers }}</p>
         <p class="text-sm text-[#6f809f] mt-2">Total seluruh member yang terdaftar di aplikasi</p>
       </div>
       <div class="dc-page-card p-4">
         <p class="text-xs font-semibold">MEMBER BARU BULAN INI</p>
-        <p class="text-3xl sm:text-4xl font-bold break-words mt-2">{{ filteredCustomers.length }}</p>
+        <p class="text-3xl sm:text-4xl font-bold break-words mt-2" data-testid="stat-new">{{ summary.newThisMonth }}</p>
         <p class="text-sm text-[#6f809f] mt-2">Total jumlah member baru bulan ini</p>
       </div>
       <div class="dc-page-card p-4">
         <p class="text-xs font-semibold">MEMBER AKTIF</p>
-        <p class="text-3xl sm:text-4xl font-bold break-words mt-2">{{ filteredCustomers.length }}</p>
-        <p class="text-sm text-[#6f809f] mt-2">Member yang aktif dalam 30 hari terakhir</p>
+        <p class="text-3xl sm:text-4xl font-bold break-words mt-2" data-testid="stat-active">{{ summary.active30d }}</p>
+        <p class="text-sm text-[#6f809f] mt-2">Member yang bertransaksi dalam 30 hari terakhir</p>
       </div>
       <div class="dc-page-card p-4">
         <p class="text-xs font-semibold">TOTAL SALDO MEMBER</p>
-        <p class="text-3xl sm:text-4xl font-bold break-words text-[#19984d] mt-2">Rp {{ totalBalance.toLocaleString('id-ID') }}</p>
+        <p class="text-3xl sm:text-4xl font-bold break-words text-[#19984d] mt-2">Rp {{ summary.totalBalance.toLocaleString('id-ID') }}</p>
         <p class="text-sm text-[#6f809f] mt-2">Total saldo seluruh member yang menggunakan aplikasi</p>
       </div>
     </div>
 
     <div class="flex flex-wrap gap-2 justify-between">
       <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari nama / nomor telepon" class="w-full sm:max-w-xl dc-input-like" />
-      <USelect :items="[{ label: 'Semua member', value: 'all' }]" model-value="all" class="w-full sm:w-[180px] dc-input-like" />
+      <USelect v-model="segment" :items="segmentItems" aria-label="Filter member" class="w-full sm:w-[180px] dc-input-like" />
     </div>
 
     <div class="dc-page-card p-4 overflow-x-auto">
@@ -285,8 +312,8 @@ onMounted(load)
             <td colspan="9" class="px-3 py-4">
               <CommonMascotEmptyState
                 image="/mascot/09_error_kiosk_pack/03_empty_page_sweeping.png"
-                title="Belum ada member"
-                description="Data member akan muncul di sini setelah pelanggan mendaftar."
+                :title="search.trim() || segment !== 'all' ? 'Tidak ada member yang cocok' : 'Belum ada member'"
+                :description="search.trim() || segment !== 'all' ? 'Ubah kata kunci atau pilihan filter.' : 'Data member akan muncul di sini setelah pelanggan mendaftar.'"
               />
             </td>
           </tr>
@@ -299,10 +326,13 @@ onMounted(load)
             <td class="px-3 py-3">{{ item.user?.name || '-' }}</td>
             <td class="px-3 py-3">{{ item.user?.phone || '-' }}</td>
             <td class="px-3 py-3">{{ displayGender(item.gender) }}</td>
-            <td class="px-3 py-3">-</td>
+            <td class="px-3 py-3">{{ item._count?.orders ?? 0 }}</td>
             <td class="px-3 py-3">{{ new Date(item.createdAt).toLocaleDateString('id-ID') }}</td>
             <td class="px-3 py-3">Rp {{ (item.wallet?.balance || 0).toLocaleString('id-ID') }}</td>
-            <td class="px-3 py-3"><span class="dc-pill-success">Aktif</span></td>
+            <td class="px-3 py-3">
+              <span v-if="item.user?.isActive !== false" class="dc-pill-success">Aktif</span>
+              <span v-else class="dc-pill-success !bg-[#f2f4f8] !text-[#6f809f]">Nonaktif</span>
+            </td>
             <td class="px-3 py-3">
               <UButton variant="ghost" class="dc-btn-outline" size="xs" @click="openDetail(item)">Detail</UButton>
               <UButton v-if="canDelete" icon="i-heroicons-trash" variant="ghost" color="error" size="xs" aria-label="Hapus member" @click="deleteCustomer(item)" />
@@ -310,6 +340,10 @@ onMounted(load)
           </tr>
         </tbody>
       </table>
+      <div class="flex flex-wrap items-center justify-between gap-2 pt-4 text-sm text-[#6f809f]">
+        <span data-testid="member-count">{{ meta.total }} member sesuai filter</span>
+        <UPagination v-if="meta.totalPages > 1" v-model:page="meta.page" :total="meta.total" :items-per-page="meta.limit" @update:page="load" />
+      </div>
     </div>
 
     <UModal v-model:open="showCreateModal" title="Tambah Member">

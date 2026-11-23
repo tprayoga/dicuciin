@@ -2,6 +2,8 @@ import { Injectable, NotFoundException, ConflictException, BadRequestException }
 import { BookingStatus, DeviceType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateIotDeviceDto, UpdateIotDeviceDto } from './dto/iot.dto';
+import { MACHINE_TYPES } from '../bookings/booking-lifecycle';
+import { activeBookingStatusByDevice, effectiveMachineStatus } from '../bookings/machine-availability';
 
 @Injectable()
 export class IotService {
@@ -96,8 +98,18 @@ export class IotService {
       this.prisma.iotDevice.count({ where }),
     ]);
 
+    // Status yang sama dengan yang dilihat pelanggan di aplikasi (lihat machine-availability).
+    const machineIds = devices.filter((d) => MACHINE_TYPES.includes(d.deviceType)).map((d) => d.id);
+    const bookingByDevice = await activeBookingStatusByDevice(this.prisma, machineIds);
+    const data = devices.map((d) => ({
+      ...d,
+      availability: MACHINE_TYPES.includes(d.deviceType)
+        ? effectiveMachineStatus(d, bookingByDevice.get(d.id))
+        : null,
+    }));
+
     return {
-      data: devices,
+      data,
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }

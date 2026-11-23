@@ -6,7 +6,18 @@ import {
 } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
 import { PrismaService } from "../../common/prisma/prisma.service";
-import { UserRole, OrderStatus } from "@prisma/client";
+import { UserRole, OrderStatus, Prisma } from "@prisma/client";
+import { tzOffsetMinutes } from "../../common/utils/operating-hours";
+
+export const CUSTOMER_SEGMENTS = ["all", "new", "active", "balance", "inactive"] as const;
+export type CustomerSegment = (typeof CUSTOMER_SEGMENTS)[number];
+
+/** Awal bulan berjalan menurut zona waktu bisnis (WIB), dalam UTC. */
+function startOfMonthLocal(now: Date): Date {
+  const off = tzOffsetMinutes() * 60_000;
+  const local = new Date(now.getTime() + off);
+  return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), 1) - off);
+}
 import { CreateCustomerDto } from "./dto/create-customer.dto";
 import { toNum } from "../../common/utils/money.util";
 import { normalizePhone, phoneCandidates } from "../../common/utils/phone.util";
@@ -126,32 +137,91 @@ export class CustomersService {
       });
   }
 
-  async findAll(page: number = 1, limit: number = 10) {
+  /**
+   * Daftar member untuk Kelola Member: pencarian & segmen di server (dulu filter
+   * hanya di 100 baris pertama di browser, dan dropdown segmen tidak berfungsi),
+   * plus ringkasan yang benar untuk kartu statistik.
+   */
+  async findAll(
+    page: number = 1,
+    limit: number = 10,
+    opts: { search?: string; segment?: CustomerSegment } = {},
+  ) {
     const skip = (page - 1) * limit;
+    const now = new Date();
+    const monthStart = startOfMonthLocal(now);
+    const activeSince = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const activeOrder = {
+      orderDate: { gte: activeSince },
+      status: { notIn: [OrderStatus.DRAFT, OrderStatus.CANCELLED] },
+    };
 
     // Member yang sudah dihapus (dianonimkan) tidak tampil di Kelola Member.
-    const where = { user: { deletedAt: null } };
-    const [customers, total] = await Promise.all([
-      this.prisma.customer.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              phone: true,
-              isActive: true,
+    const base: Prisma.CustomerWhereInput = { user: { deletedAt: null } };
+    const segmentWhere: Record<CustomerSegment, Prisma.CustomerWhereInput> = {
+      all: {},
+      new: { createdAt: { gte: monthStart } },
+      active: { orders: { some: activeOrder } },
+      balance: { wallet: { balance: { gt: 0 } } },
+      inactive: { user: { deletedAt: null, isActive: false } },
+    };
+    const keyword = opts.search?.trim();
+    // Nomor HP disimpan 62xxx — "0812…" juga harus ketemu.
+    const digits = keyword?.replace(/\D/g, "") ?? "";
+    const phoneTerms =
+      digits.length >= 3
+        ? [digits, ...(digits.startsWith("0") ? [`62${digits.slice(1)}`] : [])]
+        : [];
+    const searchWhere: Prisma.CustomerWhereInput = keyword
+      ? {
+          OR: [
+            { memberCode: { contains: keyword, mode: "insensitive" } },
+            { user: { name: { contains: keyword, mode: "insensitive" } } },
+            ...phoneTerms.map((t) => ({ user: { phone: { contains: t } } })),
+            { user: { email: { contains: keyword, mode: "insensitive" } } },
+          ],
+        }
+      : {};
+    const where: Prisma.CustomerWhereInput = {
+      AND: [base, segmentWhere[opts.segment ?? "all"] ?? {}, searchWhere],
+    };
+
+    const [customers, total, totalAll, newThisMonth, active30d, balanceSum] =
+      await Promise.all([
+        this.prisma.customer.findMany({
+          where,
+          skip,
+          take: limit,
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+                isActive: true,
+              },
+            },
+            wallet: true,
+            _count: {
+              select: {
+                orders: {
+                  where: { status: { notIn: [OrderStatus.DRAFT, OrderStatus.CANCELLED] } },
+                },
+              },
             },
           },
-          wallet: true,
-        },
-        orderBy: { createdAt: "desc" },
-      }),
-      this.prisma.customer.count({ where }),
-    ]);
+          orderBy: { createdAt: "desc" },
+        }),
+        this.prisma.customer.count({ where }),
+        this.prisma.customer.count({ where: base }),
+        this.prisma.customer.count({ where: { ...base, createdAt: { gte: monthStart } } }),
+        this.prisma.customer.count({ where: { ...base, orders: { some: activeOrder } } }),
+        this.prisma.wallet.aggregate({
+          where: { customer: base },
+          _sum: { balance: true },
+        }),
+      ]);
 
     return {
       data: customers,
@@ -160,6 +230,13 @@ export class CustomersService {
         page,
         limit,
         totalPages: Math.ceil(total / limit),
+        // Di dalam meta: interceptor respons hanya meneruskan data + meta.
+        summary: {
+          totalMembers: totalAll,
+          newThisMonth,
+          active30d,
+          totalBalance: toNum(balanceSum._sum.balance ?? 0),
+        },
       },
     };
   }

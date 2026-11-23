@@ -37,6 +37,8 @@ export interface Outlet {
   updatedAt: string
   /** Jumlah staf aktif & mesin (dari GET /outlets). */
   _count?: { iotDevices?: number; outletUsers?: number }
+  /** Ringkasan mesin cuci & pengering — dihitung server dengan aturan yang sama dengan aplikasi pelanggan. */
+  machineStats?: MachineStats
 }
 
 export interface Service {
@@ -196,6 +198,17 @@ export interface Kiosk {
   timezone?: string
 }
 
+export type MachineAvailability = 'AVAILABLE' | 'RESERVED' | 'IN_USE' | 'MAINTENANCE' | 'OFFLINE'
+
+export interface MachineStats {
+  total: number
+  available: number
+  busy: number
+  offline: number
+  level: string
+  remark: string
+}
+
 export interface IotDevice {
   id: string
   /** IOT = status dari perangkat; MANUAL = kondisi diatur admin (tanpa IoT). */
@@ -208,7 +221,9 @@ export interface IotDevice {
   manufacturer: string | null
   model: string | null
   firmwareVersion: string | null
-  status: 'ONLINE' | 'OFFLINE' | 'ERROR' | 'MAINTENANCE'
+  status: 'ONLINE' | 'AVAILABLE' | 'IN_USE' | 'OFFLINE' | 'ERROR' | 'MAINTENANCE'
+  /** Status mesin seperti yang dilihat pelanggan (null untuk perangkat non-mesin). */
+  availability?: MachineAvailability | null
   lastHeartbeatAt: string | null
   /** Batch 6 (S3): kapasitas (kg) & layanan yang dijalankan mesin. */
   capacityKg?: number | null
