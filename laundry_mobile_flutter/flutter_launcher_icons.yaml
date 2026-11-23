@@ -1,0 +1,17 @@
+# Ikon aplikasi Di.Cuciin — logo resmi (brand book) di atas biru #0360DA.
+# Sumber gambar dibuat dari DiCuciin_assets/01_logo/logo_full_color_transparent.png.
+# Regenerasi: dart run flutter_launcher_icons
+flutter_launcher_icons:
+  image_path: "assets/launcher/icon.png"
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  adaptive_icon_background: "#0360DA"
+  adaptive_icon_foreground: "assets/launcher/icon_foreground.png"
+  # Logo di gambar depan sudah diberi jarak zona aman → tanpa inset tambahan.
+  adaptive_icon_foreground_inset: 0
+  web:
+    generate: true
+    image_path: "assets/launcher/icon.png"
+    background_color: "#0360DA"
+    theme_color: "#0360DA"

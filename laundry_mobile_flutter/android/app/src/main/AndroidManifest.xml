@@ -4,7 +4,7 @@
     <!-- Batch 6 (R5): simpan QRIS ke galeri (hanya Android 9 ke bawah butuh izin ini). -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
     <application
-        android:label="laundry_mobile_flutter"
+        android:label="Di.Cuciin"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
