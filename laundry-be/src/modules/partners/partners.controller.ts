@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -39,6 +39,13 @@ export class PartnersController {
   @ApiOperation({ summary: 'Ubah partner B2B' })
   async update(@Param('id') id: string, @Body() dto: UpdatePartnerDto) {
     return this.partnerService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER)
+  @ApiOperation({ summary: 'Hapus partner B2B (hanya bila belum bertransaksi)' })
+  async remove(@Param('id') id: string) {
+    return this.partnerService.remove(id);
   }
 
   @Get(':id/wallet')

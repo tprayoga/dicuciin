@@ -3,6 +3,7 @@ import {
   BadRequestException,
   NotFoundException,
   ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -90,6 +91,28 @@ export class VoucherService {
     });
     if (existing) throw new BadRequestException('Kode template voucher sudah ada');
     return this.prisma.voucherTemplate.create({ data });
+  }
+
+  /** Hapus template yang belum pernah diterbitkan; yang sudah dipakai → nonaktifkan saja. */
+  async removeTemplate(id: string) {
+    const template = await this.prisma.voucherTemplate.findUnique({ where: { id } });
+    if (!template) throw new NotFoundException('Template voucher tidak ditemukan');
+    const [issued, rewards] = await Promise.all([
+      this.prisma.userVoucher.count({ where: { templateId: id } }),
+      this.prisma.campaignReward.count({ where: { voucherTemplateId: id } }),
+    ]);
+    if (issued > 0) {
+      throw new ConflictException(
+        `Template voucher sudah diterbitkan ${issued} kali sehingga tidak bisa dihapus. Nonaktifkan template sebagai gantinya.`,
+      );
+    }
+    if (rewards > 0) {
+      throw new ConflictException(
+        `Template voucher masih dipakai sebagai hadiah di ${rewards} campaign. Ubah hadiah campaign itu dulu.`,
+      );
+    }
+    await this.prisma.voucherTemplate.delete({ where: { id } });
+    return { message: 'Template voucher dihapus' };
   }
 
   async updateTemplate(id: string, data: Prisma.VoucherTemplateUpdateInput) {

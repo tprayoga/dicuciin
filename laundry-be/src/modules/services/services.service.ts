@@ -52,6 +52,39 @@ export class ServicesService {
     });
   }
 
+  /**
+   * Hapus permanen hanya untuk layanan yang belum pernah dipakai. Layanan yang sudah
+   * ada di order (riwayat & laporan) atau masih dipasang di mesin/aturan → 409, nonaktifkan saja.
+   */
+  async removeService(id: string) {
+    const service = await this.prisma.service.findUnique({ where: { id } });
+    if (!service) throw new NotFoundException('Service not found');
+    const [orders, devices, happyHours, b2bRules] = await Promise.all([
+      this.prisma.orderItem.count({ where: { serviceId: id } }),
+      this.prisma.iotDevice.count({ where: { serviceId: id } }),
+      this.prisma.happyHourRule.count({ where: { serviceId: id } }),
+      this.prisma.b2BPricingRule.count({ where: { serviceId: id } }),
+    ]);
+    if (orders > 0) {
+      throw new ConflictException(
+        `Layanan tidak bisa dihapus karena sudah dipakai di ${orders} transaksi. Nonaktifkan layanan sebagai gantinya.`,
+      );
+    }
+    const inUse = [
+      devices && `${devices} mesin`,
+      happyHours && `${happyHours} aturan Happy Hour`,
+      b2bRules && `${b2bRules} harga B2B`,
+    ].filter(Boolean);
+    if (inUse.length) {
+      throw new ConflictException(
+        `Layanan masih dipakai oleh ${inUse.join(', ')}. Ganti atau hapus pemakaian itu dulu, atau nonaktifkan layanan.`,
+      );
+    }
+    // Harga per-outlet ikut terhapus (cascade).
+    await this.prisma.service.delete({ where: { id } });
+    return { message: 'Layanan dihapus' };
+  }
+
   async createServicePrice(createServicePriceDto: CreateServicePriceDto) {
     const service = await this.prisma.service.findUnique({
       where: { id: createServicePriceDto.serviceId },

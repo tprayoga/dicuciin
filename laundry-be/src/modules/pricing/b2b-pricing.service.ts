@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { B2BPartnerTier, Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
@@ -33,6 +33,20 @@ export class B2BPricingService {
     return (this.prisma as any).b2BPricingRule.create({
       data: this.mapDto(dto),
     });
+  }
+
+  /** Harga khusus yang sudah dipakai order tidak dihapus (riwayat pemakaian ikut terhapus) — nonaktifkan. */
+  async remove(id: string) {
+    const rule = await this.prisma.b2BPricingRule.findUnique({ where: { id } });
+    if (!rule) throw new NotFoundException('Harga khusus B2B tidak ditemukan');
+    const used = await this.prisma.b2BPricingRuleUsage.count({ where: { ruleId: id } });
+    if (used > 0) {
+      throw new ConflictException(
+        `Harga khusus ini sudah dipakai di ${used} transaksi sehingga tidak bisa dihapus. Nonaktifkan sebagai gantinya.`,
+      );
+    }
+    await this.prisma.b2BPricingRule.delete({ where: { id } });
+    return { message: 'Harga khusus B2B dihapus' };
   }
 
   async update(id: string, dto: UpdateB2BPricingRuleDto) {

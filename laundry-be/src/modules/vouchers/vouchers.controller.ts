@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -57,6 +58,13 @@ export class VouchersController {
     @Body() dto: UpdateVoucherTemplateDto,
   ) {
     return this.voucherService.updateTemplate(id, this.voucherService.mapTemplateDto(dto));
+  }
+
+  @Delete('templates/:id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER)
+  @ApiOperation({ summary: 'Hapus template voucher (hanya bila belum pernah diterbitkan)' })
+  async removeTemplate(@Param('id') id: string) {
+    return this.voucherService.removeTemplate(id);
   }
 
   @Get('issued')

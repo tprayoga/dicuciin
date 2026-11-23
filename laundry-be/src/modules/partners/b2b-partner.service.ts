@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { Prisma, UserSegment, B2BPartnerTier } from '@prisma/client';
@@ -70,6 +70,30 @@ export class B2BPartnerService {
       data,
       include: { wallet: true, membershipStatus: true },
     });
+  }
+
+  /**
+   * Hapus partner yang belum bertransaksi. Wallet, ledger, & membership ikut terhapus
+   * (cascade), jadi partner dengan order/saldo/riwayat dompet ditolak — suspend saja.
+   */
+  async remove(id: string) {
+    const partner = await this.prisma.b2BPartner.findUnique({ where: { id }, include: { wallet: true } });
+    if (!partner) throw new NotFoundException('Partner tidak ditemukan');
+    const walletId = partner.wallet?.id;
+    const [orders, ledger, txns, topups] = await Promise.all([
+      this.prisma.order.count({ where: { partnerId: id } }),
+      walletId ? this.prisma.walletLedger.count({ where: { walletId } }) : 0,
+      walletId ? this.prisma.walletTransaction.count({ where: { walletId } }) : 0,
+      walletId ? this.prisma.walletTopup.count({ where: { walletId } }) : 0,
+    ]);
+    const balance = Number(partner.wallet?.balance ?? 0) + Number(partner.wallet?.bonusBalance ?? 0);
+    if (orders + ledger + txns + topups > 0 || balance > 0) {
+      throw new ConflictException(
+        'Partner sudah punya transaksi atau saldo deposit sehingga tidak bisa dihapus. Ubah statusnya menjadi SUSPENDED.',
+      );
+    }
+    await this.prisma.b2BPartner.delete({ where: { id } });
+    return { message: 'Partner dihapus' };
   }
 
   async getWallet(partnerId: string) {

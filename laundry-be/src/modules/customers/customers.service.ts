@@ -129,8 +129,11 @@ export class CustomersService {
   async findAll(page: number = 1, limit: number = 10) {
     const skip = (page - 1) * limit;
 
+    // Member yang sudah dihapus (dianonimkan) tidak tampil di Kelola Member.
+    const where = { user: { deletedAt: null } };
     const [customers, total] = await Promise.all([
       this.prisma.customer.findMany({
+        where,
         skip,
         take: limit,
         include: {
@@ -147,7 +150,7 @@ export class CustomersService {
         },
         orderBy: { createdAt: "desc" },
       }),
-      this.prisma.customer.count(),
+      this.prisma.customer.count({ where }),
     ]);
 
     return {

@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   Post,
   Patch,
@@ -88,6 +89,13 @@ export class CampaignsController {
       startDate: dto.startDate ? new Date(dto.startDate) : undefined,
       endDate: dto.endDate ? new Date(dto.endDate) : undefined,
     });
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER)
+  @ApiOperation({ summary: 'Hapus campaign (hanya bila belum pernah memberi hadiah)' })
+  async remove(@Param('id') id: string) {
+    return this.campaignService.remove(id);
   }
 
   @Post(':id/activate')

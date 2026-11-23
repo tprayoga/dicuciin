@@ -155,6 +155,14 @@ export class ReviewsService {
     };
   }
 
+  /** Moderasi: hapus ulasan (mis. spam/kasar). Order & pelanggan tidak terpengaruh. */
+  async remove(id: string) {
+    const review = await this.prisma.review.findUnique({ where: { id } });
+    if (!review) throw new NotFoundException('Review not found');
+    await this.prisma.review.delete({ where: { id } });
+    return { message: 'Ulasan dihapus' };
+  }
+
   async setFocus(id: string, isFocused: boolean) {
     const review = await this.prisma.review.findUnique({ where: { id } });
     if (!review) throw new NotFoundException('Review not found');

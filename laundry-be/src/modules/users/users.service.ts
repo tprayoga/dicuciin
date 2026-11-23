@@ -439,10 +439,38 @@ export class UsersService {
     return userWithOutlet ?? updatedUser;
   }
 
-  async remove(id: string) {
+  async remove(id: string, actor?: AuthUser) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) {
       throw new NotFoundException("User not found");
+    }
+    // Menu Kelola Staff hanya untuk staf. Pelanggan dihapus lewat Kelola Member
+    // (anonimisasi, riwayat transaksi & saldo tetap terjaga).
+    if (user.role === UserRole.CUSTOMER) {
+      throw new BadRequestException(
+        "Akun pelanggan dihapus lewat menu Kelola Member, bukan Kelola Staff.",
+      );
+    }
+    if (actor && actor.userId === id) {
+      throw new BadRequestException("Tidak bisa menghapus akun sendiri.");
+    }
+    this.assertCanManage(actor, user.role);
+    if (actor?.role === UserRole.OWNER && user.role === UserRole.OWNER) {
+      throw new ForbiddenException("Owner tidak boleh menghapus akun Owner lain");
+    }
+    // Relasi ke staf bersifat SetNull: menghapus staf berjejak akan menghilangkan
+    // "diproses oleh" di order, ulasan, sesi kiosk, dan jejak audit keputusan
+    // (refund/rekonsiliasi). Staf seperti itu dinonaktifkan, bukan dihapus.
+    const [orders, reviews, kioskSessions, audits] = await Promise.all([
+      this.prisma.order.count({ where: { staffUserId: id } }),
+      this.prisma.review.count({ where: { staffUserId: id } }),
+      this.prisma.kioskSession.count({ where: { staffUserId: id } }),
+      this.prisma.auditLog.count({ where: { userId: id, NOT: { action: { startsWith: "AUTH_" } } } }),
+    ]);
+    if (orders + reviews + kioskSessions + audits > 0) {
+      throw new ConflictException(
+        "Staf ini sudah punya riwayat (transaksi, ulasan, sesi kiosk, atau keputusan tercatat) sehingga tidak bisa dihapus. Nonaktifkan akunnya.",
+      );
     }
 
     try {
