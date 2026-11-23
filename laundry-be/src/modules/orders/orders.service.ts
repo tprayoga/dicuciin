@@ -84,11 +84,22 @@ export class OrdersService {
     /** Batch 3 (S4): estimasi durasi mesin (menit) dari server; null bila tak ada layanan mesin. */
     estimatedMinutes: number | null;
   }> {
+    // Jalur harga tunggal (order, checkout loyalty, /pricing/calculate): outlet
+    // nonaktif dan layanan nonaktif tidak bisa dipesan/dihitung lagi.
+    const outlet = await this.prisma.outlet.findUnique({
+      where: { id: outletId },
+      select: { isActive: true },
+    });
+    if (!outlet) throw new NotFoundException("Outlet not found");
+    if (!outlet.isActive) {
+      throw new BadRequestException("Outlet sedang tidak beroperasi. Pilih outlet lain.");
+    }
     const servicePrices = await this.prisma.servicePrice.findMany({
       where: {
         serviceId: { in: items.map((i) => i.serviceId) },
         outletId,
         isActive: true,
+        service: { isActive: true },
       },
       include: { service: true },
     });
@@ -103,7 +114,7 @@ export class OrdersService {
       const servicePrice = priceMap.get(item.serviceId);
       if (!servicePrice) {
         throw new BadRequestException(
-          `Service price not found for service ${item.serviceId}`,
+          "Layanan tidak tersedia di outlet ini. Muat ulang daftar layanan.",
         );
       }
       // Batch 3: jumlah divalidasi server (dulu hanya @IsNumber → 0/negatif lolos).
@@ -194,6 +205,9 @@ export class OrdersService {
     });
     if (!outlet) {
       throw new NotFoundException("Outlet not found");
+    }
+    if (!outlet.isActive) {
+      throw new BadRequestException("Outlet sedang tidak beroperasi. Pilih outlet lain.");
     }
     // Batch 6 (T8): jadwal booking harus di dalam jam operasional outlet.
     if (scheduledAt) assertWithinOperatingHours(outlet, scheduledAt);
