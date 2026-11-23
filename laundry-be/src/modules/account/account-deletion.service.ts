@@ -39,7 +39,7 @@ import { revokeUserSessions } from '../../common/auth/sessions';
  *    tertaut ke identitas.
  *  - Setiap langkah tercatat di AuditLog (tanpa data pribadi).
  */
-export type DeletionChannel = 'APP' | 'WEB';
+export type DeletionChannel = 'APP' | 'WEB' | 'ADMIN';
 
 export type DeletionBlockerCode =
   | 'WALLET_BALANCE'
@@ -230,6 +230,43 @@ export class AccountDeletionService {
           });
       await this.anonymizeInTx(tx, userId, customerId, req.id, channel, null);
       return { status: req.status, requestId: req.id, blockers: [] as DeletionBlocker[] };
+    });
+  }
+
+  /**
+   * Hapus member dari admin (menu Kelola Member). Memakai anonimisasi yang sama dengan
+   * hapus akun mandiri: data pribadi dihapus, order/laporan/ledger tetap utuh.
+   * Ditolak (409 + daftar penghalang) bila masih ada saldo, order/booking aktif, dsb.
+   * Tidak bergantung pada ACCOUNT_DELETION_ENABLED (itu untuk hapus akun mandiri).
+   */
+  async deleteByAdmin(customerId: string, adminUserId: string, note?: string | null) {
+    return this.prisma.$transaction(async (tx) => {
+      const customer = await tx.customer.findUnique({
+        where: { id: customerId },
+        select: { id: true, userId: true, user: { select: { deletedAt: true } } },
+      });
+      if (!customer) throw new NotFoundException('Member tidak ditemukan');
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${customer.userId} FOR UPDATE`;
+      const fresh = await tx.user.findUniqueOrThrow({ where: { id: customer.userId }, select: { deletedAt: true } });
+      if (fresh.deletedAt) throw new ConflictException('Member sudah dihapus');
+      const r = await this.blockersFor(tx, customer.id);
+      if (r.blockers.length) {
+        throw new ConflictException({
+          message: `Member belum bisa dihapus: ${r.blockers.map((b) => b.message).join(' ')}`,
+          blockers: r.blockers,
+        });
+      }
+      const existing = await tx.accountDeletionRequest.findFirst({
+        where: { userId: customer.userId, status: AccountDeletionStatus.PENDING_REVIEW },
+      });
+      const done = { status: AccountDeletionStatus.COMPLETED, completedAt: new Date(), processedBy: adminUserId, note: note ?? 'Dihapus admin dari Kelola Member' };
+      const req = existing
+        ? await tx.accountDeletionRequest.update({ where: { id: existing.id }, data: { ...done, blockers: Prisma.DbNull } })
+        : await tx.accountDeletionRequest.create({
+            data: { userId: customer.userId, channel: 'ADMIN', balanceSnapshot: new Prisma.Decimal(r.balance), ...done },
+          });
+      await this.anonymizeInTx(tx, customer.userId, customer.id, req.id, 'ADMIN', adminUserId);
+      return { status: AccountDeletionStatus.COMPLETED, requestId: req.id };
     });
   }
 

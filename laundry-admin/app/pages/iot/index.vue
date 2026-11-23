@@ -99,6 +99,17 @@ function machineActive(device: { status: string; controlMode?: string }) {
   return device.status !== 'OFFLINE'
 }
 
+// Hapus mesin hanya SUPER_ADMIN (server menolak bila masih ada booking aktif).
+const { remove: removeItem, isSuperAdmin } = useDeleteAction()
+function deleteDevice(device: { id: string; name?: string | null; deviceCode: string }) {
+  return removeItem({
+    path: `/iot/devices/${device.id}`,
+    label: `mesin ${device.name || device.deviceCode}`,
+    note: 'Mesin yang masih punya booking aktif tidak bisa dihapus — ubah kondisinya menjadi Maintenance agar tidak bisa dipesan.',
+    onDone: load,
+  })
+}
+
 async function load() {
   loading.value = true
   try {
@@ -240,6 +251,7 @@ onMounted(load)
             <td class="px-3 py-3">{{ device.lastHeartbeatAt ? new Date(device.lastHeartbeatAt).toLocaleDateString('id-ID') : '-' }}</td>
             <td class="px-3 py-3">
               <UButton icon="i-heroicons-pencil" variant="ghost" class="dc-btn-outline" size="xs" @click="openEdit(device)">Edit</UButton>
+              <UButton v-if="isSuperAdmin" icon="i-heroicons-trash" variant="ghost" color="error" size="xs" aria-label="Hapus mesin" @click="deleteDevice(device)" />
             </td>
           </tr>
         </tbody>

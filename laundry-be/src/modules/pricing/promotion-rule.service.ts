@@ -20,6 +20,13 @@ export class PromotionRuleService {
     return this.prisma.promotionRule.create({ data });
   }
 
+  async remove(id: string) {
+    const rule = await this.prisma.promotionRule.findUnique({ where: { id } });
+    if (!rule) throw new NotFoundException('Aturan tidak ditemukan');
+    await this.prisma.promotionRule.delete({ where: { id } });
+    return { message: 'Aturan dihapus' };
+  }
+
   async update(id: string, data: Prisma.PromotionRuleUpdateInput) {
     const rule = await this.prisma.promotionRule.findUnique({ where: { id } });
     if (!rule) throw new NotFoundException('Promotion rule tidak ditemukan');

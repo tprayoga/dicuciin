@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -28,6 +28,12 @@ export class B2BPricingController {
   @ApiOperation({ summary: 'Buat special pricing B2B' })
   async create(@Body() dto: CreateB2BPricingRuleDto) {
     return this.b2bPricingService.create(dto);
+  }
+
+  @Delete('rules/:id')
+  @ApiOperation({ summary: 'Hapus special pricing B2B (hanya bila belum dipakai)' })
+  async remove(@Param('id') id: string) {
+    return this.b2bPricingService.remove(id);
   }
 
   @Patch('rules/:id')

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -25,6 +25,12 @@ export class PromotionRulesController {
   @ApiOperation({ summary: 'Buat loyalty/promotion rule' })
   async create(@Body() dto: CreatePromotionRuleDto) {
     return this.promotionRuleService.create(dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Hapus loyalty/promotion rule' })
+  async remove(@Param('id') id: string) {
+    return this.promotionRuleService.remove(id);
   }
 
   @Patch(':id')

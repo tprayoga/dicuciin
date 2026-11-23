@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   Post,
   Patch,
@@ -80,6 +81,13 @@ export class ReviewsController {
   async findByOrder(@Param('orderId') orderId: string, @Request() req: any) {
     await assertOrderAccess(this.prisma, req.user, orderId);
     return this.reviewsService.findByOrder(orderId);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER)
+  @ApiOperation({ summary: 'Hapus ulasan (moderasi)' })
+  async remove(@Param('id') id: string) {
+    return this.reviewsService.remove(id);
   }
 
   @Patch(':id/focus')

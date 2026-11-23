@@ -112,6 +112,27 @@ export class CampaignService {
     return campaign;
   }
 
+  /**
+   * Hapus campaign yang belum pernah memberi hadiah. Riwayat penerbitan menyimpan kunci
+   * idempoten — bila ikut terhapus (cascade), hadiah bisa terbit dua kali. Yang sudah
+   * berjalan → nonaktifkan saja.
+   */
+  async remove(id: string) {
+    const campaign = await this.prisma.campaign.findUnique({ where: { id } });
+    if (!campaign) throw new NotFoundException('Campaign tidak ditemukan');
+    const [issued, referrals] = await Promise.all([
+      this.prisma.campaignIssuance.count({ where: { campaignId: id } }),
+      this.prisma.referral.count({ where: { campaignId: id } }),
+    ]);
+    if (issued + referrals > 0) {
+      throw new ConflictException(
+        'Campaign sudah memberi hadiah ke pelanggan sehingga tidak bisa dihapus. Nonaktifkan campaign sebagai gantinya.',
+      );
+    }
+    await this.prisma.campaign.delete({ where: { id } });
+    return { message: 'Campaign dihapus' };
+  }
+
   async update(id: string, data: Prisma.CampaignUpdateInput) {
     await this.findOne(id);
     return this.prisma.campaign.update({ where: { id }, data, include: { rules: true, rewards: true } });
@@ -614,6 +635,14 @@ export class CampaignService {
       include: { outlet: true, service: true },
       orderBy: { priority: 'desc' },
     });
+  }
+
+  /** Order lama menyimpan snapshot diskonnya sendiri, jadi aturan aman dihapus. */
+  async removeHappyHourRule(id: string) {
+    const rule = await this.prisma.happyHourRule.findUnique({ where: { id } });
+    if (!rule) throw new NotFoundException('Aturan happy hour tidak ditemukan');
+    await this.prisma.happyHourRule.delete({ where: { id } });
+    return { message: 'Aturan happy hour dihapus' };
   }
 
   async updateHappyHourRule(id: string, data: Prisma.HappyHourRuleUpdateInput) {

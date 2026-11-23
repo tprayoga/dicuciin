@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Request, BadRequestException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Request, BadRequestException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { OtpPurpose, UserRole } from '@prisma/client';
@@ -86,6 +86,14 @@ export class AccountDeletionController {
   @ApiOperation({ summary: 'Selesaikan hapus akun setelah penghalang dituntaskan (admin)' })
   complete(@Request() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminDeletionDecisionDto) {
     return this.deletion.completeByAdmin(id, req.user.userId, dto.note);
+  }
+
+  @Delete('admin/customers/:customerId')
+  @ApiBearerAuth()
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER)
+  @ApiOperation({ summary: 'Hapus member dari admin (anonimisasi; ditolak bila masih ada saldo/order aktif)' })
+  deleteCustomer(@Request() req: any, @Param('customerId', ParseUUIDPipe) customerId: string) {
+    return this.deletion.deleteByAdmin(customerId, req.user.userId);
   }
 
   @Post('admin/deletion-requests/:id/cancel')

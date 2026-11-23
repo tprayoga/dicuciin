@@ -47,6 +47,16 @@ async function load() {
   }
 }
 
+const { remove: removeItem, canDelete } = useDeleteAction()
+function deleteReview(r: Review) {
+  return removeItem({
+    path: `/reviews/${r.id}`,
+    label: 'ulasan ini',
+    note: 'Gunakan untuk ulasan spam atau tidak pantas. Order pelanggan tidak terpengaruh.',
+    onDone: load,
+  })
+}
+
 async function toggleFocus(r: Review) {
   try {
     await api.patch(`/reviews/${r.id}/focus`, { isFocused: !r.isFocused })
@@ -140,6 +150,7 @@ onMounted(load)
           >
             {{ r.isFocused ? 'Difokuskan' : 'Fokuskan' }}
           </UButton>
+          <UButton v-if="canDelete" icon="i-heroicons-trash" variant="ghost" color="error" size="xs" aria-label="Hapus ulasan" @click="deleteReview(r)" />
         </div>
       </div>
     </div>

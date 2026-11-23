@@ -83,9 +83,9 @@ export class UsersController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Delete user' })
-  async remove(@Param('id') id: string) {
-    return this.usersService.remove(id);
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER)
+  @ApiOperation({ summary: 'Hapus staf (staf dengan riwayat transaksi → 409, nonaktifkan saja)' })
+  async remove(@Param('id') id: string, @Request() req: any) {
+    return this.usersService.remove(id, req.user);
   }
 }

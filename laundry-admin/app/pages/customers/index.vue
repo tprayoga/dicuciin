@@ -79,6 +79,18 @@ const filteredCustomers = computed(() => {
 
 const totalBalance = computed(() => filteredCustomers.value.reduce((sum, c) => sum + (c.wallet?.balance || 0), 0))
 
+// Hapus member = anonimisasi (data pribadi dihapus, riwayat order & laporan tetap).
+// Ditolak server bila masih ada saldo, order/booking aktif, atau refund terbuka.
+const { remove: removeItem, canDelete } = useDeleteAction()
+function deleteCustomer(item: CustomerItem) {
+  return removeItem({
+    path: `/account/admin/customers/${item.id}`,
+    label: `member ${item.user?.name || item.memberCode}`,
+    note: 'Data pribadi member (nama, nomor HP, email, alamat) akan dihapus permanen dan akunnya tidak bisa login lagi. Riwayat transaksi tetap tersimpan untuk laporan. Member yang masih punya saldo atau order aktif tidak bisa dihapus.',
+    onDone: load,
+  })
+}
+
 async function load() {
   loading.value = true
   try {
@@ -293,6 +305,7 @@ onMounted(load)
             <td class="px-3 py-3"><span class="dc-pill-success">Aktif</span></td>
             <td class="px-3 py-3">
               <UButton variant="ghost" class="dc-btn-outline" size="xs" @click="openDetail(item)">Detail</UButton>
+              <UButton v-if="canDelete" icon="i-heroicons-trash" variant="ghost" color="error" size="xs" aria-label="Hapus member" @click="deleteCustomer(item)" />
             </td>
           </tr>
         </tbody>

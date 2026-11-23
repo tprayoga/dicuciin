@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ServicesService } from './services.service';
@@ -38,6 +38,13 @@ export class ServicesController {
   @ApiOperation({ summary: 'Update service' })
   async updateService(@Param('id') id: string, @Body() updateServiceDto: UpdateServiceDto) {
     return this.servicesService.updateService(id, updateServiceDto);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OWNER)
+  @ApiOperation({ summary: 'Hapus layanan (hanya bila belum pernah dipakai)' })
+  async removeService(@Param('id') id: string) {
+    return this.servicesService.removeService(id);
   }
 
   @Post('prices')
