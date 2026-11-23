@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
-import { DeviceType } from '@prisma/client';
+import { BookingStatus, DeviceType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateIotDeviceDto, UpdateIotDeviceDto } from './dto/iot.dto';
 
@@ -62,6 +62,20 @@ export class IotService {
   async removeDevice(id: string) {
     const device = await this.prisma.iotDevice.findUnique({ where: { id } });
     if (!device) throw new NotFoundException('Device not found');
+
+    // Booking pelanggan ikut terhapus bila mesin dihapus (cascade) — padahal order
+    // sudah dibayar. Tolak selama masih ada booking yang berjalan.
+    const activeBookings = await this.prisma.machineBooking.count({
+      where: {
+        deviceId: id,
+        status: { in: [BookingStatus.HOLD, BookingStatus.RESERVED, BookingStatus.IN_USE] },
+      },
+    });
+    if (activeBookings > 0) {
+      throw new ConflictException(
+        `Mesin tidak bisa dihapus karena masih punya ${activeBookings} booking aktif. Ubah kondisinya menjadi Maintenance agar tidak bisa dipesan, lalu hapus setelah booking selesai.`,
+      );
+    }
 
     await this.prisma.iotDevice.delete({ where: { id } });
     return { message: 'Device deleted successfully' };

@@ -288,7 +288,7 @@ export class KiosksService {
   async deviceServices(deviceToken: string) {
     const kiosk = await this.authenticateDevice(deviceToken);
     return this.prisma.servicePrice.findMany({
-      where: { outletId: kiosk.outletId, isActive: true },
+      where: { outletId: kiosk.outletId, isActive: true, service: { isActive: true } },
       include: { service: true, outlet: true },
       orderBy: { service: { name: 'asc' } },
     });

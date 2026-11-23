@@ -51,6 +51,7 @@ const form = reactive({
   openTime: '',
   closeTime: '',
   imageUrl: '',
+  isActive: true,
 })
 
 const kioskForm = reactive({
@@ -223,7 +224,7 @@ const filteredOutlets = computed(() => {
 
 function openCreate() {
   editTarget.value = null
-  Object.assign(form, { name: '', code: '', address: '', phone: '', openTime: '', closeTime: '', imageUrl: '' })
+  Object.assign(form, { name: '', code: '', address: '', phone: '', openTime: '', closeTime: '', imageUrl: '', isActive: true })
   showModal.value = true
 }
 
@@ -237,6 +238,7 @@ function openEdit(outlet: Outlet) {
     openTime: outlet.openTime || '',
     closeTime: outlet.closeTime || '',
     imageUrl: outlet.imageUrl || '',
+    isActive: outlet.isActive !== false,
   })
   showModal.value = true
 }
@@ -251,6 +253,7 @@ async function save() {
         openTime: form.openTime || undefined,
         closeTime: form.closeTime || undefined,
         imageUrl: form.imageUrl || null,
+        isActive: form.isActive,
       })
       toast.add({ title: 'Outlet diperbarui', color: 'success' })
     } else {
@@ -332,17 +335,18 @@ onMounted(() => load())
         </div>
 
         <h3 class="text-xl sm:text-2xl font-semibold text-[#111d35] break-words">{{ outlet.name }}</h3>
+        <span v-if="outlet.isActive === false" class="dc-pill-success !bg-[#f2f4f8] !text-[#6f809f] inline-block mt-1">Nonaktif — tidak menerima order</span>
         <p class="text-[#6f809f] text-sm mt-1">{{ outlet.address }}</p>
         <p class="text-xs text-[#6f809f] mt-1">Jam operasional: {{ outlet.openTime || '-' }} - {{ outlet.closeTime || '-' }}</p>
 
         <div class="mt-3 pt-3 border-t border-[#d7e0ee] grid grid-cols-3 gap-2 text-xs sm:text-sm">
           <div>
             <p class="text-sm text-[#6f809f]">Staff Cabang</p>
-            <p class="font-semibold text-[#272526]">-</p>
+            <p class="font-semibold text-[#272526]">{{ outlet._count?.outletUsers ?? '-' }}</p>
           </div>
           <div>
             <p class="text-sm text-[#6f809f]">Total Mesin</p>
-            <p class="font-semibold text-[#272526]">-</p>
+            <p class="font-semibold text-[#272526]">{{ outlet._count?.iotDevices ?? '-' }}</p>
           </div>
           <div>
             <p class="text-sm text-[#6f809f]">Kiosk</p>
@@ -398,6 +402,13 @@ onMounted(() => load())
           </UFormField>
           <UFormField label="No Telepon">
             <UInput v-model="form.phone" placeholder="Masukkan nomor telepon" class="w-full" required />
+          </UFormField>
+          <UFormField v-if="editTarget" label="Status Outlet" help="Outlet nonaktif tidak tampil di aplikasi dan tidak menerima order baru. Booking yang sudah dibayar tetap dilayani.">
+            <USelect
+              v-model="form.isActive"
+              :items="[{ label: 'Aktif', value: true }, { label: 'Nonaktif', value: false }]"
+              class="w-full"
+            />
           </UFormField>
           <div class="flex justify-end pt-2">
             <UButton type="submit" :disabled="uploadingImage" class="dc-btn-primary px-4 py-2 justify-center">{{ editTarget ? 'Simpan' : 'Tambah Cabang' }}</UButton>
@@ -585,6 +596,7 @@ onMounted(() => load())
     <UModal v-model:open="showDeleteModal" title="Hapus Outlet">
       <template #body>
         <p class="text-sm text-[#4f607f]">Yakin ingin menghapus outlet <strong>{{ deleteTarget?.name }}</strong>?</p>
+        <p class="text-xs text-[#6f809f] mt-2">Outlet yang sudah punya transaksi tidak bisa dihapus. Untuk menutupnya, buka Edit dan ubah Status Outlet menjadi Nonaktif.</p>
         <div class="flex justify-end gap-2 pt-4">
           <UButton variant="ghost" @click="showDeleteModal = false">Batal</UButton>
           <UButton color="error" @click="doDelete">Hapus</UButton>

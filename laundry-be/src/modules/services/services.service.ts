@@ -89,8 +89,13 @@ export class ServicesService {
     });
   }
 
+  /** Daftar harga untuk aplikasi: hanya layanan & harga yang aktif (layanan nonaktif tidak ditawarkan). */
   async findAllServicePrices(outletId?: string) {
-    const where = outletId ? { outletId } : {};
+    const where = {
+      ...(outletId ? { outletId } : {}),
+      isActive: true,
+      service: { isActive: true },
+    };
 
     return this.prisma.servicePrice.findMany({
       where,

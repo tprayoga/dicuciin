@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Req } from '@nestjs/common';
 import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { OutletsService } from './outlets.service';
@@ -27,10 +27,12 @@ export class OutletsController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async findAll(
+    @Req() req: any,
     @Query('page', new ParseOptionalIntPipe(1)) page?: number,
     @Query('limit', new ParseOptionalIntPipe(10)) limit?: number,
   ) {
-    return this.outletsService.findAll(page, limit);
+    // Pelanggan hanya melihat outlet aktif (outlet nonaktif tidak bisa dipesan).
+    return this.outletsService.findAll(page, limit, req.user?.role === UserRole.CUSTOMER);
   }
 
   @Get(':id')

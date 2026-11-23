@@ -35,6 +35,8 @@ export interface Outlet {
   isActive: boolean
   createdAt: string
   updatedAt: string
+  /** Jumlah staf aktif & mesin (dari GET /outlets). */
+  _count?: { iotDevices?: number; outletUsers?: number }
 }
 
 export interface Service {

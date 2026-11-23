@@ -16,7 +16,7 @@ describe('OrdersService.create', () => {
 
   beforeEach(async () => {
     prisma = {
-      outlet: { findUnique: jest.fn().mockResolvedValue({ id: 'out-1' }) },
+      outlet: { findUnique: jest.fn().mockResolvedValue({ id: 'out-1', isActive: true }) },
       customer: { findUnique: jest.fn().mockResolvedValue({ id: 'cust-1' }) },
       servicePrice: {
         findMany: jest.fn().mockResolvedValue([
@@ -114,5 +114,23 @@ describe('OrdersService.create', () => {
   it('outlet tidak ada → NotFound', async () => {
     prisma.outlet.findUnique.mockResolvedValue(null);
     await expect(service.create(baseDto)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('outlet nonaktif → order ditolak (BadRequest), tidak ada order dibuat', async () => {
+    prisma.outlet.findUnique.mockResolvedValue({ id: 'out-1', isActive: false });
+    await expect(service.create(baseDto)).rejects.toThrow('Outlet sedang tidak beroperasi');
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it('harga hanya diambil dari layanan & harga yang aktif', async () => {
+    await service.create(baseDto);
+    const where = prisma.servicePrice.findMany.mock.calls[0][0].where;
+    expect(where.isActive).toBe(true);
+    expect(where.service).toEqual({ isActive: true });
+  });
+
+  it('layanan nonaktif (tidak ada harga aktif) → ditolak dengan pesan jelas', async () => {
+    prisma.servicePrice.findMany.mockResolvedValue([]);
+    await expect(service.create(baseDto)).rejects.toThrow('Layanan tidak tersedia di outlet ini');
   });
 });
