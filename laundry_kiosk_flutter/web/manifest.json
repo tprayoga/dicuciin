@@ -1,11 +1,11 @@
 {
-    "name": "laundry_kiosk_flutter",
-    "short_name": "laundry_kiosk_flutter",
+    "name": "Di.Cuciin Kiosk",
+    "short_name": "Di.Cuciin Kiosk",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0360DA",
+    "theme_color": "#0360DA",
+    "description": "Kiosk self-service laundry Di.Cuciin",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -51,7 +51,7 @@ class KioskApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Dicuciin Kiosk',
+      title: 'Di.Cuciin Kiosk',
       theme: AppTheme.light,
       home: const PortraitFrame(child: KioskRouter()),
     );

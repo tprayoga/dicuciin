@@ -1,0 +1,19 @@
+# Ikon aplikasi kiosk Di.Cuciin — sama dengan aplikasi pelanggan: logo resmi
+# (brand book) di atas biru #0360DA. Regenerasi: dart run flutter_launcher_icons
+flutter_launcher_icons:
+  image_path: "assets/launcher/icon.png"
+  android: true
+  ios: false
+  adaptive_icon_background: "#0360DA"
+  adaptive_icon_foreground: "assets/launcher/icon_foreground.png"
+  # Logo di gambar depan sudah diberi jarak zona aman → tanpa inset tambahan.
+  adaptive_icon_foreground_inset: 0
+  web:
+    generate: true
+    image_path: "assets/launcher/icon.png"
+    background_color: "#0360DA"
+    theme_color: "#0360DA"
+  windows:
+    generate: true
+    image_path: "assets/launcher/icon.png"
+    icon_size: 256
