@@ -58,7 +58,7 @@ class CustomerApp extends StatelessWidget {
     final auth = context.watch<AuthController>();
 
     return MaterialApp(
-      title: 'Dicuciin Customer',
+      title: 'Di.Cuciin',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       home: switch (auth.status) {
