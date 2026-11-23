@@ -110,6 +110,16 @@ async function save() {
   }
 }
 
+const { remove: removeItem, canDelete } = useDeleteAction()
+function deleteService(service: ServiceItem) {
+  return removeItem({
+    path: `/services/${service.id}`,
+    label: `layanan ${service.name}`,
+    note: 'Layanan yang sudah pernah dipesan tidak bisa dihapus agar riwayat transaksi tetap utuh — gunakan Nonaktifkan.',
+    onDone: () => load(meta.value.page),
+  })
+}
+
 async function deactivateService(service: ServiceItem) {
   if (!service.isActive) return
 
@@ -169,6 +179,7 @@ onMounted(() => load())
               :disabled="!service.isActive"
               @click="deactivateService(service)"
             />
+            <UButton v-if="canDelete" icon="i-heroicons-trash" variant="ghost" color="error" size="xs" aria-label="Hapus layanan" @click="deleteService(service)" />
           </div>
         </div>
 

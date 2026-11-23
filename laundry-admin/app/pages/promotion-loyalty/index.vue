@@ -513,6 +513,13 @@ async function saveCampaign() {
   }
 }
 
+// Hapus di tab Promotion & Loyalty: data yang sudah dipakai pelanggan ditolak server
+// dengan pesan yang menyarankan menonaktifkan saja.
+const { remove: removeItem, canDelete } = useDeleteAction()
+function deleteRow(path: string, label: string, note?: string) {
+  return removeItem({ path, label, note, onDone: loadData })
+}
+
 async function toggleCampaign(campaign: any) {
   try {
     await api.post(`/campaigns/${campaign.id}/${campaign.isActive ? 'deactivate' : 'activate'}`, {})
@@ -907,7 +914,7 @@ onMounted(loadData)
                 <td class="p-2">{{ item.validityDays ? `${item.validityDays} hari` : formatDate(item.endDate) }}</td>
                 <td class="p-2">{{ item.tierRestriction || item.b2bTierRestriction || item.applicableOutlets || '-' }}</td>
                 <td class="p-2"><UBadge :color="badgeColor(item.isActive) as any" variant="soft" size="xs">{{ item.isActive ? 'ACTIVE' : 'INACTIVE' }}</UBadge></td>
-                <td class="p-2"><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="openVoucher(item)">Edit</UButton></td>
+                <td class="p-2 flex gap-2"><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="openVoucher(item)">Edit</UButton><UButton v-if="canDelete" size="xs" variant="ghost" color="error" icon="i-heroicons-trash" aria-label="Hapus" @click="deleteRow(`/vouchers/templates/${item.id}`, `voucher ${item.name}`, 'Voucher yang sudah pernah diberikan ke pelanggan tidak bisa dihapus — nonaktifkan saja.')" /></td>
               </tr>
             </tbody>
           </table>
@@ -946,7 +953,7 @@ onMounted(loadData)
                 <td class="p-2">{{ item.rewards?.map((r: any) => r.rewardType).join(', ') || '-' }}</td>
                 <td class="p-2">{{ formatDate(item.startDate) }} - {{ formatDate(item.endDate) }}</td>
                 <td class="p-2"><UBadge :color="badgeColor(item.status) as any" variant="soft" size="xs">{{ item.status }}</UBadge></td>
-                <td class="p-2 flex gap-2"><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="toggleCampaign(item)">{{ item.isActive ? 'Disable' : 'Enable' }}</UButton><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="loadCampaignLogs(item)">Log</UButton></td>
+                <td class="p-2 flex gap-2"><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="toggleCampaign(item)">{{ item.isActive ? 'Disable' : 'Enable' }}</UButton><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="loadCampaignLogs(item)">Log</UButton><UButton v-if="canDelete" size="xs" variant="ghost" color="error" icon="i-heroicons-trash" aria-label="Hapus" @click="deleteRow(`/campaigns/${item.id}`, `campaign ${item.name}`, 'Campaign yang sudah memberi hadiah ke pelanggan tidak bisa dihapus — gunakan Disable.')" /></td>
               </tr>
             </tbody>
           </table>
@@ -983,7 +990,7 @@ onMounted(loadData)
             <thead class="bg-[#0349a8] text-white text-left"><tr><th class="p-2">Partner</th><th class="p-2">PIC</th><th class="p-2">Tier</th><th class="p-2">Wallet</th><th class="p-2">Txn</th><th class="p-2">Status</th><th class="p-2">Aksi</th></tr></thead>
             <tbody>
               <tr v-if="filteredPartners.length === 0"><td colspan="7" class="p-4 text-center text-[#6f809f]">Belum ada partner B2B.</td></tr>
-              <tr v-for="item in filteredPartners" :key="item.id" class="border-b border-[#e1e8f2]"><td class="p-2"><p class="font-semibold">{{ item.companyName }}</p><p class="text-xs text-[#6f809f]">{{ item.partnerCode }}</p></td><td class="p-2">{{ item.picName }}<br><span class="text-xs text-[#6f809f]">{{ item.phone }}</span></td><td class="p-2">{{ item.tier }}</td><td class="p-2">{{ formatMoney(item.wallet?.balance) }}</td><td class="p-2">{{ item.membershipStatus?.successfulTxnCount ?? 0 }}</td><td class="p-2"><UBadge :color="badgeColor(item.status) as any" variant="soft" size="xs">{{ item.status }}</UBadge></td><td class="p-2 flex gap-2"><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="openPartner(item)">Edit</UButton><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="setPartnerStatus(item, item.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE')">{{ item.status === 'ACTIVE' ? 'Reject' : 'Approve' }}</UButton></td></tr>
+              <tr v-for="item in filteredPartners" :key="item.id" class="border-b border-[#e1e8f2]"><td class="p-2"><p class="font-semibold">{{ item.companyName }}</p><p class="text-xs text-[#6f809f]">{{ item.partnerCode }}</p></td><td class="p-2">{{ item.picName }}<br><span class="text-xs text-[#6f809f]">{{ item.phone }}</span></td><td class="p-2">{{ item.tier }}</td><td class="p-2">{{ formatMoney(item.wallet?.balance) }}</td><td class="p-2">{{ item.membershipStatus?.successfulTxnCount ?? 0 }}</td><td class="p-2"><UBadge :color="badgeColor(item.status) as any" variant="soft" size="xs">{{ item.status }}</UBadge></td><td class="p-2 flex gap-2"><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="openPartner(item)">Edit</UButton><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="setPartnerStatus(item, item.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE')">{{ item.status === 'ACTIVE' ? 'Reject' : 'Approve' }}</UButton><UButton v-if="canDelete" size="xs" variant="ghost" color="error" icon="i-heroicons-trash" aria-label="Hapus" @click="deleteRow(`/partners/${item.id}`, `partner ${item.companyName}`, 'Partner yang sudah bertransaksi atau masih punya saldo deposit tidak bisa dihapus — gunakan Reject (SUSPENDED).')" /></td></tr>
             </tbody>
           </table>
         </div>
@@ -1009,7 +1016,7 @@ onMounted(loadData)
             <thead class="bg-[#0349a8] text-white text-left"><tr><th class="p-2">Nama</th><th class="p-2">Target</th><th class="p-2">Outlet/Service</th><th class="p-2">Machine</th><th class="p-2">Type</th><th class="p-2">Value</th><th class="p-2">Periode</th><th class="p-2">Priority</th><th class="p-2">Status</th><th class="p-2">Aksi</th></tr></thead>
             <tbody>
               <tr v-if="filteredB2BSpecialPrices.length === 0"><td colspan="10" class="p-4 text-center text-[#6f809f]">Belum ada data special price machine/outlet.</td></tr>
-              <tr v-for="item in filteredB2BSpecialPrices" :key="item.id" class="border-b border-[#e1e8f2]"><td class="p-2 font-semibold">{{ item.name }}</td><td class="p-2">{{ item.partner?.companyName || item.partnerId || item.tier || '-' }}</td><td class="p-2">{{ item.outlet?.name || item.outletId || 'Semua outlet' }}<br><span class="text-xs text-[#6f809f]">{{ item.service?.name || item.serviceId || 'Semua layanan' }}</span></td><td class="p-2">{{ item.machineType || 'Semua mesin' }}</td><td class="p-2">{{ item.priceType }}</td><td class="p-2">{{ item.priceType === 'DISCOUNT_PERCENT' ? `${item.value}%` : formatMoney(item.value) }}</td><td class="p-2">{{ formatDate(item.startDate) }} - {{ formatDate(item.endDate) }}</td><td class="p-2">{{ item.priority ?? 0 }}</td><td class="p-2"><UBadge :color="badgeColor(item.isActive) as any" variant="soft" size="xs">{{ item.isActive ? 'ACTIVE' : 'INACTIVE' }}</UBadge></td><td class="p-2"><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="openB2BSpecialPrice(item)">Edit</UButton></td></tr>
+              <tr v-for="item in filteredB2BSpecialPrices" :key="item.id" class="border-b border-[#e1e8f2]"><td class="p-2 font-semibold">{{ item.name }}</td><td class="p-2">{{ item.partner?.companyName || item.partnerId || item.tier || '-' }}</td><td class="p-2">{{ item.outlet?.name || item.outletId || 'Semua outlet' }}<br><span class="text-xs text-[#6f809f]">{{ item.service?.name || item.serviceId || 'Semua layanan' }}</span></td><td class="p-2">{{ item.machineType || 'Semua mesin' }}</td><td class="p-2">{{ item.priceType }}</td><td class="p-2">{{ item.priceType === 'DISCOUNT_PERCENT' ? `${item.value}%` : formatMoney(item.value) }}</td><td class="p-2">{{ formatDate(item.startDate) }} - {{ formatDate(item.endDate) }}</td><td class="p-2">{{ item.priority ?? 0 }}</td><td class="p-2"><UBadge :color="badgeColor(item.isActive) as any" variant="soft" size="xs">{{ item.isActive ? 'ACTIVE' : 'INACTIVE' }}</UBadge></td><td class="p-2 flex gap-2"><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="openB2BSpecialPrice(item)">Edit</UButton><UButton v-if="canDelete" size="xs" variant="ghost" color="error" icon="i-heroicons-trash" aria-label="Hapus" @click="deleteRow(`/b2b-pricing/rules/${item.id}`, `harga khusus ${item.name}`, 'Harga khusus yang sudah dipakai transaksi tidak bisa dihapus — nonaktifkan saja.')" /></td></tr>
             </tbody>
           </table>
         </div>
@@ -1022,7 +1029,7 @@ onMounted(loadData)
             <thead class="bg-[#0349a8] text-white text-left"><tr><th class="p-2">Nama</th><th class="p-2">Segment</th><th class="p-2">Min Txn</th><th class="p-2">Max Discount</th><th class="p-2">Tier</th><th class="p-2">Usage</th><th class="p-2">Status</th><th class="p-2">Aksi</th></tr></thead>
             <tbody>
               <tr v-if="filteredRules.length === 0"><td colspan="8" class="p-4 text-center text-[#6f809f]">Belum ada loyalty point rule.</td></tr>
-              <tr v-for="item in filteredRules" :key="item.id" class="border-b border-[#e1e8f2]"><td class="p-2 font-semibold">{{ item.name }}</td><td class="p-2">{{ item.segment || 'ALL' }}</td><td class="p-2">{{ formatMoney(item.minTransaction) }}</td><td class="p-2">{{ formatMoney(item.maxDiscount) }}</td><td class="p-2">{{ item.tierRestriction || '-' }}</td><td class="p-2">{{ item.maxUsagePerUser || '-' }}</td><td class="p-2"><UBadge :color="badgeColor(item.isActive) as any" variant="soft" size="xs">{{ item.isActive ? 'ACTIVE' : 'INACTIVE' }}</UBadge></td><td class="p-2"><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="openRule(item)">Edit</UButton></td></tr>
+              <tr v-for="item in filteredRules" :key="item.id" class="border-b border-[#e1e8f2]"><td class="p-2 font-semibold">{{ item.name }}</td><td class="p-2">{{ item.segment || 'ALL' }}</td><td class="p-2">{{ formatMoney(item.minTransaction) }}</td><td class="p-2">{{ formatMoney(item.maxDiscount) }}</td><td class="p-2">{{ item.tierRestriction || '-' }}</td><td class="p-2">{{ item.maxUsagePerUser || '-' }}</td><td class="p-2"><UBadge :color="badgeColor(item.isActive) as any" variant="soft" size="xs">{{ item.isActive ? 'ACTIVE' : 'INACTIVE' }}</UBadge></td><td class="p-2 flex gap-2"><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="openRule(item)">Edit</UButton><UButton v-if="canDelete" size="xs" variant="ghost" color="error" icon="i-heroicons-trash" aria-label="Hapus" @click="deleteRow(`/promotion-rules/${item.id}`, `aturan ${item.name}`)" /></td></tr>
             </tbody>
           </table>
         </div>
@@ -1035,7 +1042,7 @@ onMounted(loadData)
             <thead class="bg-[#0349a8] text-white text-left"><tr><th class="p-2">Nama</th><th class="p-2">Outlet</th><th class="p-2">Machine/Service</th><th class="p-2">Hari</th><th class="p-2">Jam</th><th class="p-2">Discount</th><th class="p-2">Quota</th><th class="p-2">Status</th><th class="p-2">Aksi</th></tr></thead>
             <tbody>
               <tr v-if="filteredHappyHour.length === 0"><td colspan="9" class="p-4 text-center text-[#6f809f]">Belum ada happy hour.</td></tr>
-              <tr v-for="item in filteredHappyHour" :key="item.id" class="border-b border-[#e1e8f2]"><td class="p-2 font-semibold">{{ item.name }}</td><td class="p-2">{{ item.outlet?.name || 'Semua outlet' }}</td><td class="p-2">{{ item.service?.name || item.machineType || 'Semua mesin' }}</td><td class="p-2">{{ item.daysOfWeek }}</td><td class="p-2">{{ item.startTime }} - {{ item.endTime }}</td><td class="p-2">{{ item.adjustmentType }} {{ item.value }}</td><td class="p-2">{{ item.quota ? `${item.usedQuota ?? 0}/${item.quota}` : 'Unlimited' }}</td><td class="p-2"><UBadge :color="badgeColor(item.isActive) as any" variant="soft" size="xs">{{ item.isActive ? 'ACTIVE' : 'INACTIVE' }}</UBadge></td><td class="p-2"><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="openHappyHour(item)">Edit</UButton></td></tr>
+              <tr v-for="item in filteredHappyHour" :key="item.id" class="border-b border-[#e1e8f2]"><td class="p-2 font-semibold">{{ item.name }}</td><td class="p-2">{{ item.outlet?.name || 'Semua outlet' }}</td><td class="p-2">{{ item.service?.name || item.machineType || 'Semua mesin' }}</td><td class="p-2">{{ item.daysOfWeek }}</td><td class="p-2">{{ item.startTime }} - {{ item.endTime }}</td><td class="p-2">{{ item.adjustmentType }} {{ item.value }}</td><td class="p-2">{{ item.quota ? `${item.usedQuota ?? 0}/${item.quota}` : 'Unlimited' }}</td><td class="p-2"><UBadge :color="badgeColor(item.isActive) as any" variant="soft" size="xs">{{ item.isActive ? 'ACTIVE' : 'INACTIVE' }}</UBadge></td><td class="p-2 flex gap-2"><UButton size="xs" variant="ghost" class="dc-btn-outline" @click="openHappyHour(item)">Edit</UButton><UButton v-if="canDelete" size="xs" variant="ghost" color="error" icon="i-heroicons-trash" aria-label="Hapus" @click="deleteRow(`/happy-hour/rules/${item.id}`, `happy hour ${item.name}`, 'Order yang sudah memakai diskon ini tetap tersimpan dengan harganya.')" /></td></tr>
             </tbody>
           </table>
         </div>

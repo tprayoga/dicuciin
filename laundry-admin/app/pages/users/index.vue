@@ -94,6 +94,23 @@ function outletName(user: UserItem) {
   return user.outletUsers?.[0]?.outlet?.name || '-'
 }
 
+// Hapus staf: SUPER_ADMIN & OWNER (Owner tidak bisa menghapus Super Admin/Owner).
+// Staf yang sudah punya riwayat transaksi ditolak server → nonaktifkan saja.
+const { remove: removeItem, canDelete } = useDeleteAction()
+function canDeleteUser(user: UserItem) {
+  if (!canDelete.value || user.id === authStore.user?.id) return false
+  if (authStore.user?.role === 'OWNER') return !['SUPER_ADMIN', 'OWNER'].includes(user.role)
+  return true
+}
+function deleteUser(user: UserItem) {
+  return removeItem({
+    path: `/users/${user.id}`,
+    label: `staf ${user.name}`,
+    note: 'Staf yang sudah pernah memproses transaksi tidak bisa dihapus agar riwayat tetap utuh — nonaktifkan lewat Edit.',
+    onDone: load,
+  })
+}
+
 async function load() {
   loading.value = true
   try {
@@ -231,6 +248,7 @@ onMounted(load)
             </td>
             <td class="px-3 py-3">
               <UButton icon="i-heroicons-pencil" variant="ghost" class="dc-btn-outline" size="xs" @click="openEdit(user)">Edit</UButton>
+              <UButton v-if="canDeleteUser(user)" icon="i-heroicons-trash" variant="ghost" color="error" size="xs" aria-label="Hapus staf" @click="deleteUser(user)" />
             </td>
           </tr>
         </tbody>
