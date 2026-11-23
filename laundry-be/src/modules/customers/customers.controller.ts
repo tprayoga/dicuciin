@@ -1,7 +1,7 @@
 import { Body, Controller, ForbiddenException, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ParseOptionalIntPipe } from '../../common/pipes/parse-optional-int.pipe';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { CustomersService } from './customers.service';
+import { CustomersService, CUSTOMER_SEGMENTS, CustomerSegment } from './customers.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -41,11 +41,21 @@ export class CustomersController {
   @ApiOperation({ summary: 'Get all customers (staf)' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'segment', required: false, enum: CUSTOMER_SEGMENTS })
   async findAll(
     @Query('page', new ParseOptionalIntPipe(1)) page?: number,
     @Query('limit', new ParseOptionalIntPipe(10)) limit?: number,
+    @Query('search') search?: string,
+    @Query('segment') segment?: string,
   ) {
-    return this.customersService.findAll(page, limit);
+    const seg = (CUSTOMER_SEGMENTS as readonly string[]).includes(segment ?? '')
+      ? (segment as CustomerSegment)
+      : 'all';
+    return this.customersService.findAll(page, Math.min(limit ?? 10, 100), {
+      search: search?.slice(0, 100),
+      segment: seg,
+    });
   }
 
   @Get(':id')

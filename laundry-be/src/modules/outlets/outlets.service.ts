@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateOutletDto, UpdateOutletDto } from './dto/outlet.dto';
 import { ensurePricesForOutlet } from '../services/service-price-sync';
+import { machineStatsByOutlet } from '../bookings/machine-availability';
 
 @Injectable()
 export class OutletsService {
@@ -50,8 +51,12 @@ export class OutletsService {
       this.prisma.outlet.count({ where }),
     ]);
 
+    // Jumlah mesin dihitung dengan aturan yang sama dengan aplikasi pelanggan
+    // (hanya mesin cuci & pengering; "tersedia" = bisa dipesan sekarang).
+    const stats = await machineStatsByOutlet(this.prisma, outlets.map((o) => o.id));
+
     return {
-      data: outlets,
+      data: outlets.map((o) => ({ ...o, machineStats: stats.get(o.id) })),
       meta: {
         total,
         page,

@@ -75,28 +75,75 @@ const deviceTypeItems = [
 
 const outletOptions = computed(() => outlets.value.map(o => ({ label: o.name, value: o.id })))
 
-const filteredDevices = computed(() => {
-  const keyword = search.value.trim().toLowerCase()
-  if (!keyword) return devices.value
-  return devices.value.filter(d => `${d.name} ${d.deviceCode} ${d.outlet?.name || ''}`.toLowerCase().includes(keyword))
-})
+const ALL = 'all'
+const outletFilter = ref(ALL)
+const conditionFilter = ref(ALL)
+const outletFilterItems = computed(() => [
+  { label: 'Semua Cabang', value: ALL },
+  ...outlets.value.map(o => ({ label: o.name, value: o.id })),
+])
+const conditionFilterItems = [
+  { label: 'Semua kondisi', value: ALL },
+  { label: 'Tersedia', value: 'AVAILABLE' },
+  { label: 'Sedang dipakai / dipesan', value: 'BUSY' },
+  { label: 'Maintenance', value: 'MAINTENANCE' },
+  { label: 'Offline / belum terhubung', value: 'OFFLINE' },
+]
 
-function machineCondition(device: { status: string; lastHeartbeatAt?: string | null; controlMode?: string }) {
-  if (device.controlMode === 'MANUAL') {
-    return device.status === 'MAINTENANCE'
-      ? { label: 'Manual · Maintenance', className: 'bg-[#e28a05] text-white' }
-      : { label: 'Manual · Tersedia', className: 'bg-[#1fa150] text-white' }
-  }
-  if (device.status === 'ONLINE') return { label: 'Normal', className: 'bg-[#1fa150] text-white' }
-  if (device.status === 'MAINTENANCE') return { label: 'Maintenance', className: 'bg-[#e28a05] text-white' }
-  // Mesin baru yang belum pernah mengirim heartbeat bukan "perlu servis".
-  if (!device.lastHeartbeatAt) return { label: 'Belum terhubung', className: 'bg-[#eef1f5] text-[#5d6b82]' }
-  return { label: 'Offline', className: 'bg-[#d6280b] text-white' }
+const isMachineDevice = (d: IotDevice) => d.deviceType === 'WASHING_MACHINE' || d.deviceType === 'DRYER_MACHINE'
+
+/**
+ * Kondisi mesin = status yang dilihat pelanggan di aplikasi (dihitung server dari
+ * booking aktif + status perangkat). Perangkat non-mesin memakai status perangkat.
+ */
+function conditionKey(d: IotDevice): 'AVAILABLE' | 'BUSY' | 'MAINTENANCE' | 'OFFLINE' {
+  const s = isMachineDevice(d) ? (d.availability ?? 'OFFLINE') : d.status
+  if (s === 'AVAILABLE' || s === 'ONLINE') return 'AVAILABLE'
+  if (s === 'IN_USE' || s === 'RESERVED') return 'BUSY'
+  if (s === 'MAINTENANCE') return 'MAINTENANCE'
+  return 'OFFLINE'
 }
 
-function machineActive(device: { status: string; controlMode?: string }) {
-  if (device.controlMode === 'MANUAL') return device.status !== 'MAINTENANCE'
-  return device.status !== 'OFFLINE'
+const filteredDevices = computed(() => {
+  const keyword = search.value.trim().toLowerCase()
+  return devices.value.filter(d =>
+    (outletFilter.value === ALL || d.outletId === outletFilter.value)
+    && (conditionFilter.value === ALL || conditionKey(d) === conditionFilter.value)
+    && (!keyword || `${d.name} ${d.deviceCode} ${d.outlet?.name || ''}`.toLowerCase().includes(keyword)),
+  )
+})
+
+/** Ringkasan untuk baris "Total Mesin" — angka sama dengan "x dari y mesin tersedia" di aplikasi. */
+const machineSummary = computed(() => {
+  const machines = filteredDevices.value.filter(isMachineDevice)
+  return {
+    total: machines.length,
+    available: machines.filter(d => conditionKey(d) === 'AVAILABLE').length,
+    active: machines.filter(d => machineActive(d)).length,
+    others: filteredDevices.value.length - machines.length,
+  }
+})
+
+function machineCondition(device: IotDevice) {
+  const manual = device.controlMode === 'MANUAL' ? 'Manual · ' : ''
+  switch (conditionKey(device)) {
+    case 'AVAILABLE':
+      return { label: `${manual}${isMachineDevice(device) ? 'Tersedia' : 'Normal'}`, className: 'bg-[#1fa150] text-white' }
+    case 'BUSY':
+      return { label: device.availability === 'RESERVED' ? 'Dipesan' : 'Sedang dipakai', className: 'bg-[#0360da] text-white' }
+    case 'MAINTENANCE':
+      return { label: `${manual}Maintenance`, className: 'bg-[#e28a05] text-white' }
+    default:
+      // Mesin baru yang belum pernah mengirim heartbeat bukan "perlu servis".
+      if (!device.lastHeartbeatAt) return { label: 'Belum terhubung', className: 'bg-[#eef1f5] text-[#5d6b82]' }
+      return { label: 'Offline', className: 'bg-[#d6280b] text-white' }
+  }
+}
+
+/** Aktif = beroperasi (bisa dipakai pelanggan sekarang atau setelah pemakaian selesai). */
+function machineActive(device: IotDevice) {
+  const k = conditionKey(device)
+  return k === 'AVAILABLE' || k === 'BUSY'
 }
 
 // Hapus mesin hanya SUPER_ADMIN (server menolak bila masih ada booking aktif).
@@ -202,10 +249,16 @@ onMounted(load)
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <p class="text-lg">Total Mesin: <span class="text-[#0360da] font-semibold">{{ filteredDevices.length }} Mesin</span></p>
+      <div>
+        <p class="text-lg">Total Mesin: <span class="text-[#0360da] font-semibold">{{ machineSummary.total }} Mesin</span></p>
+        <p class="text-sm text-[#6f809f]" data-testid="machine-summary">
+          {{ machineSummary.available }} tersedia · {{ machineSummary.active }} aktif · {{ machineSummary.total - machineSummary.active }} nonaktif<span v-if="machineSummary.others"> · {{ machineSummary.others }} perangkat lain</span>
+        </p>
+      </div>
       <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
         <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Cari Mesin" class="w-full sm:w-[280px] dc-input-like" />
-        <USelect :items="[{ label: 'Semua Cabang', value: 'all' }]" model-value="all" class="w-full sm:w-[170px] dc-input-like" />
+        <USelect v-model="outletFilter" :items="outletFilterItems" aria-label="Filter cabang" class="w-full sm:w-[170px] dc-input-like" />
+        <USelect v-model="conditionFilter" :items="conditionFilterItems" aria-label="Filter kondisi" class="w-full sm:w-[200px] dc-input-like" />
       </div>
     </div>
 
@@ -226,6 +279,9 @@ onMounted(load)
         <tbody>
           <tr v-if="loading">
             <td colspan="8" class="px-3 py-4 text-[#6f809f]">Memuat data mesin...</td>
+          </tr>
+          <tr v-else-if="!filteredDevices.length">
+            <td colspan="8" class="px-3 py-6 text-center text-[#6f809f]">Tidak ada mesin yang cocok dengan filter.</td>
           </tr>
           <tr
             v-for="(device, idx) in filteredDevices"

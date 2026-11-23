@@ -2,7 +2,7 @@
 import { h, resolveComponent } from 'vue'
 import { useApi } from '~/composables/useApi'
 import { useAuthStore } from '~/stores/auth'
-import type { PaginatedResponse, Order } from '~/types'
+import type { PaginatedResponse, Order, Outlet } from '~/types'
 
 const api = useApi()
 const toast = useToast()
@@ -22,6 +22,9 @@ const refunding = ref(false)
 
 const ALL_STATUS = 'ALL'
 const statusFilter = ref(ALL_STATUS)
+const outletFilter = ref(ALL_STATUS)
+const outletOptions = ref<{ label: string; value: string }[]>([])
+const outletFilterItems = computed(() => [{ label: 'Semua Cabang', value: ALL_STATUS }, ...outletOptions.value])
 const statusItems = [
   { label: 'Semua', value: ALL_STATUS },
   { label: 'Draft', value: 'DRAFT' },
@@ -85,6 +88,7 @@ async function load(page = 1) {
   try {
     const params = new URLSearchParams({ page: String(page), limit: '10' })
     if (statusFilter.value !== ALL_STATUS) params.set('status', statusFilter.value)
+    if (outletFilter.value !== ALL_STATUS) params.set('outletId', outletFilter.value)
     const res = await api.get<PaginatedResponse<Order>>(`/orders?${params}`)
     orders.value = res.data
     meta.value = res.meta
@@ -142,8 +146,20 @@ async function submitRefund() {
   }
 }
 
-watch(statusFilter, () => load(1))
-onMounted(() => load())
+async function loadOutlets() {
+  try {
+    const res = await api.get<PaginatedResponse<Outlet>>('/outlets?page=1&limit=100')
+    outletOptions.value = res.data.map(o => ({ label: o.name, value: o.id }))
+  } catch {
+    // Filter cabang opsional — daftar order tetap tampil.
+  }
+}
+
+watch([statusFilter, outletFilter], () => load(1))
+onMounted(() => {
+  load()
+  loadOutlets()
+})
 </script>
 
 <template>
@@ -153,7 +169,10 @@ onMounted(() => load())
         <h2 class="text-lg font-semibold">Transaksi/Order</h2>
         <p class="text-sm text-[#6f809f]">Pantau transaksi pesanan laundry dari seluruh cabang.</p>
       </div>
-      <USelect v-model="statusFilter" :items="statusItems" class="w-full sm:w-56 dc-input-like" />
+      <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <USelect v-model="outletFilter" :items="outletFilterItems" aria-label="Filter cabang" class="w-full sm:w-48 dc-input-like" />
+        <USelect v-model="statusFilter" :items="statusItems" aria-label="Filter status" class="w-full sm:w-56 dc-input-like" />
+      </div>
     </div>
 
     <div class="dc-page-card p-4">

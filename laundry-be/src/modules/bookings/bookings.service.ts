@@ -19,11 +19,15 @@ import {
   isBookingActive,
   isManualDevice,
   lockDevice,
-  physicalDeviceStatus,
   parseScheduledAt,
   resolveBookableDevice,
   slotStart,
 } from "./booking-lifecycle";
+import {
+  activeBookingStatusByDevice,
+  effectiveMachineStatus,
+  occupancyOf,
+} from "./machine-availability";
 import {
   assertWithinOperatingHours,
   isWithinOperatingHours,
@@ -446,91 +450,19 @@ export class BookingsService {
     });
   }
 
-  /** Peta deviceId → status booking aktif (IN_USE diprioritaskan atas RESERVED). */
-  private async activeBookingStatusByDevice(deviceIds: string[]) {
-    const map = new Map<string, BookingStatus>();
-    if (deviceIds.length === 0) return map;
-    const now = new Date();
-    const active = await this.prisma.machineBooking.findMany({
-      where: {
-        deviceId: { in: deviceIds },
-        OR: [
-          { status: BookingStatus.IN_USE },
-          {
-            status: { in: [BookingStatus.RESERVED, BookingStatus.HOLD] },
-            expiresAt: { gt: now },
-          },
-        ],
-      },
-      select: { deviceId: true, status: true },
-    });
-    for (const b of active) {
-      if (map.get(b.deviceId) === BookingStatus.IN_USE) continue;
-      // HOLD (menunggu bayar) ditampilkan sebagai RESERVED ke pelanggan lain.
-      map.set(
-        b.deviceId,
-        b.status === BookingStatus.HOLD ? BookingStatus.RESERVED : b.status,
-      );
-    }
-    return map;
+  private activeBookingStatusByDevice(deviceIds: string[]) {
+    return activeBookingStatusByDevice(this.prisma, deviceIds);
   }
 
-  /**
-   * Status efektif sebuah mesin: booking aktif diprioritaskan (IN_USE/RESERVED),
-   * lalu fallback ke status fisik perangkat (OFFLINE/IN_USE), sisanya AVAILABLE.
-   */
   private effectiveStatus(
     device: { status: string; controlMode?: string | null },
     bs?: BookingStatus,
   ): string {
-    const deviceStatus = physicalDeviceStatus(device);
-    // Booking aktif (query sudah mengecualikan yang expired) = sumber kebenaran
-    // untuk RESERVED/IN_USE-via-reservasi.
-    if (bs === BookingStatus.IN_USE) return "IN_USE";
-    if (bs === BookingStatus.RESERVED) return "RESERVED";
-    // Status fisik perangkat: OFFLINE (mati) atau IN_USE (mesin benar2 berjalan).
-    // 'RESERVED' sengaja TIDAK dibaca dari device agar flag lama tak nyangkut.
-    if (deviceStatus === "OFFLINE") return "OFFLINE";
-    // Dulu MAINTENANCE jatuh ke AVAILABLE padahal order-nya ditolak server.
-    if (deviceStatus === "MAINTENANCE") return "MAINTENANCE";
-    if (deviceStatus === "IN_USE") return "IN_USE";
-    return "AVAILABLE";
+    return effectiveMachineStatus(device, bs);
   }
 
-  /** Hitung ringkasan keramaian dari daftar status mesin. */
   private occupancyOf(machines: { status: string }[]) {
-    const total = machines.length;
-    const offline = machines.filter(
-      (m) => m.status === "OFFLINE" || m.status === "MAINTENANCE",
-    ).length;
-    const busy = machines.filter(
-      (m) => m.status === "IN_USE" || m.status === "RESERVED",
-    ).length;
-    const available = machines.filter((m) => m.status === "AVAILABLE").length;
-    const operational = total - offline;
-
-    let level: string;
-    let remark: string;
-    if (operational === 0) {
-      level = "none";
-      remark = "Mesin tidak tersedia";
-    } else if (busy === 0) {
-      level = "low";
-      remark = "Sepi";
-    } else {
-      const ratio = busy / operational;
-      if (ratio < 0.5) {
-        level = "medium";
-        remark = "Normal";
-      } else if (ratio < 1) {
-        level = "high";
-        remark = "Ramai";
-      } else {
-        level = "full";
-        remark = "Penuh";
-      }
-    }
-    return { total, available, busy, offline, level, remark };
+    return occupancyOf(machines);
   }
 
   /** Booking aktif (RESERVED belum kadaluarsa / IN_USE) milik customer. */
