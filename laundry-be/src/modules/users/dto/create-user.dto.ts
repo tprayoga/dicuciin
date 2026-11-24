@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsOptional, IsEnum, MinLength } from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsEnum, MinLength, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 
@@ -19,7 +19,11 @@ export class CreateUserDto {
 
   @ApiProperty()
   @IsString()
-  @MinLength(8)
+  @MinLength(8, { message: 'Password minimal 8 karakter' })
+  // QA 2026-11-24 (BUG-011): wajib kombinasi huruf & angka.
+  @Matches(/^(?=.*[A-Za-z])(?=.*\d).+$/, {
+    message: 'Password harus mengandung huruf dan angka',
+  })
   password: string;
 
   @ApiProperty({ enum: UserRole, default: UserRole.CASHIER, required: false })

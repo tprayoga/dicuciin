@@ -1,13 +1,28 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateServiceDto, CreateServicePriceDto, UpdateServiceDto } from './dto/service.dto';
 import { ensurePricesForService, syncBasePriceChange } from './service-price-sync';
+
+/** QA 2026-11-24 (BUG-001): layanan aktif harus punya harga > 0. */
+function assertPriceIfActive(isActive: boolean, basePrice: number | null | undefined) {
+  if (isActive && !(Number(basePrice) > 0)) {
+    throw new BadRequestException(
+      'Layanan aktif wajib punya harga lebih dari 0. Isi harga atau simpan sebagai Nonaktif.',
+    );
+  }
+}
 
 @Injectable()
 export class ServicesService {
   constructor(private prisma: PrismaService) {}
 
   async createService(createServiceDto: CreateServiceDto) {
+    assertPriceIfActive(createServiceDto.isActive ?? true, createServiceDto.basePrice);
     // Layanan baru langsung bisa dipesan di semua outlet (harga = basePrice).
     return this.prisma.$transaction(async (tx) => {
       const service = await tx.service.create({ data: createServiceDto });
@@ -42,6 +57,14 @@ export class ServicesService {
   async updateService(id: string, updateServiceDto: UpdateServiceDto) {
     const service = await this.prisma.service.findUnique({ where: { id } });
     if (!service) throw new NotFoundException('Service not found');
+    assertPriceIfActive(
+      updateServiceDto.isActive ?? service.isActive,
+      updateServiceDto.basePrice !== undefined
+        ? updateServiceDto.basePrice
+        : service.basePrice === null
+          ? null
+          : Number(service.basePrice),
+    );
 
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.service.update({ where: { id }, data: updateServiceDto });

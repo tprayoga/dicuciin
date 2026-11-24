@@ -23,7 +23,8 @@ export class UpdateServiceDto {
   capacityKg?: number;
 
   @ApiProperty({ required: false })
-  @IsInt()
+  @IsInt({ message: 'Estimasi waktu harus berupa angka menit' })
+  @Min(1, { message: 'Estimasi waktu minimal 1 menit' })
   @IsOptional()
   estimateMinutes?: number;
 
@@ -63,16 +64,15 @@ export class CreateServiceDto {
   @IsOptional()
   capacityKg?: number;
 
-  @ApiProperty({ required: false })
-  @IsInt()
-  @IsOptional()
-  estimateMinutes?: number;
+  @ApiProperty({ example: 45 })
+  @IsInt({ message: 'Estimasi waktu harus berupa angka menit' })
+  @Min(1, { message: 'Estimasi waktu minimal 1 menit' })
+  estimateMinutes: number;
 
-  @ApiProperty({ required: false })
-  @IsNumber()
-  @Min(0, { message: 'Harga tidak boleh negatif' })
-  @IsOptional()
-  basePrice?: number;
+  @ApiProperty({ example: 15000 })
+  @IsNumber({}, { message: 'Harga wajib diisi' })
+  @Min(1, { message: 'Harga harus lebih dari 0' })
+  basePrice: number;
 
   @ApiProperty({ required: false })
   @IsString()

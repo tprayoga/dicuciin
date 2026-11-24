@@ -22,6 +22,32 @@ const navItems = [
   { label: 'Kinerja Staff', icon: 'i-heroicons-trophy', to: '/staff-performance' },
 ]
 
+// QA 2026-11-24 (BUG-051): judul tab browser per halaman.
+const pageTitle = computed(() => {
+  const match = navItems
+    .filter((n) => isActive(n.to))
+    .sort((a, b) => b.to.length - a.to.length)[0]
+  return match?.label
+})
+useHead({
+  title: pageTitle,
+  titleTemplate: (t?: string) => (t ? `${t} – Di.Cuciin Admin` : 'Di.Cuciin Admin'),
+})
+
+// QA 2026-11-24 (BUG-050): tampilkan nama & label peran, bukan enum mentah.
+const ROLE_LABELS: Record<string, string> = {
+  SUPER_ADMIN: 'Super Admin',
+  OWNER: 'Owner',
+  ADMIN_OUTLET: 'Admin Outlet',
+  CASHIER: 'Staff Laundry',
+  OPERATOR: 'Operator',
+  TECHNICIAN: 'Teknisi',
+}
+const roleLabel = computed(() => {
+  const role = authStore.user?.role || ''
+  return ROLE_LABELS[role] ?? role
+})
+
 function isActive(to: string) {
   if (to === '/dashboard') return route.path === '/dashboard'
   return route.path === to || route.path.startsWith(to + '/')
@@ -60,13 +86,15 @@ async function logout() {
         <img src="/brand/logo_full_color_transparent.png" alt="Di.Cuciin" class="h-8 sm:h-9 w-auto" />
       </div>
       <div class="flex items-center gap-2 sm:gap-5">
-        <UButton icon="i-heroicons-bell" variant="ghost" color="neutral" class="!text-[#272526]" />
         <ClientOnly>
           <div class="flex items-center gap-3">
             <div class="h-8 w-8 rounded-full bg-[#0349a8] text-white text-xs font-semibold flex items-center justify-center">
               {{ initials(authStore.user?.name) }}
             </div>
-            <p class="hidden sm:block text-sm font-medium">{{ authStore.user?.role === 'OWNER' ? 'Owner' : (authStore.user?.role || 'Owner') }}</p>
+            <div class="hidden sm:block leading-tight">
+              <p class="text-sm font-medium">{{ authStore.user?.name || roleLabel }}</p>
+              <p v-if="authStore.user?.name" class="text-xs text-[#6f809f]">{{ roleLabel }}</p>
+            </div>
           </div>
           <template #fallback>
             <div class="flex items-center gap-3">

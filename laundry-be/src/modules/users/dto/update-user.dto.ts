@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsOptional, IsBoolean, IsEnum, MinLength } from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsBoolean, IsEnum, MinLength, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 
@@ -30,7 +30,11 @@ export class UpdateUserDto {
 
   @ApiProperty({ required: false, description: 'Password baru user' })
   @IsString()
-  @MinLength(8)
+  @MinLength(8, { message: 'Password minimal 8 karakter' })
+  // QA 2026-11-24 (BUG-011): wajib kombinasi huruf & angka.
+  @Matches(/^(?=.*[A-Za-z])(?=.*\d).+$/, {
+    message: 'Password harus mengandung huruf dan angka',
+  })
   @IsOptional()
   password?: string;
 

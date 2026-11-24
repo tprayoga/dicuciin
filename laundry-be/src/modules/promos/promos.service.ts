@@ -51,6 +51,39 @@ const parseIdCsv = (csv?: string | null): Set<string> =>
       .filter((s) => s.length > 0),
   );
 
+/** Kode promo: huruf/angka/-/_ tanpa spasi (diketik customer di checkout). */
+const PROMO_CODE = /^[A-Za-z0-9_-]{3,30}$/;
+
+/**
+ * Validasi nilai promo (QA 2026-11-24 BUG-002): persentase/cashback 1–100,
+ * nominal > 0, periode selesai ≥ mulai, kode tanpa spasi. Dipakai create &
+ * update (update memakai nilai lama untuk field yang tidak dikirim).
+ */
+function assertPromoValues(p: {
+  code: string;
+  promoType: PromoType;
+  value: number;
+  startDate: Date;
+  endDate: Date;
+}) {
+  if (!PROMO_CODE.test(p.code)) {
+    throw new BadRequestException(
+      'Kode promo 3–30 karakter, hanya huruf, angka, "-" atau "_" (tanpa spasi)',
+    );
+  }
+  const isPercent =
+    p.promoType === PromoType.PERCENTAGE || p.promoType === PromoType.CASHBACK;
+  if (isPercent && (p.value <= 0 || p.value > 100)) {
+    throw new BadRequestException('Nilai persentase harus di antara 1 dan 100');
+  }
+  if (p.promoType === PromoType.FIXED_AMOUNT && p.value <= 0) {
+    throw new BadRequestException('Nilai potongan harus lebih dari 0');
+  }
+  if (p.endDate.getTime() < p.startDate.getTime()) {
+    throw new BadRequestException('Tanggal selesai tidak boleh sebelum tanggal mulai');
+  }
+}
+
 @Injectable()
 export class PromosService {
   constructor(
@@ -60,6 +93,14 @@ export class PromosService {
 
   async create(createPromoDto: CreatePromoDto) {
     const { rule, ...promoData } = createPromoDto;
+    promoData.code = promoData.code.trim();
+    assertPromoValues({
+      code: promoData.code,
+      promoType: promoData.promoType,
+      value: Number(promoData.value),
+      startDate: new Date(promoData.startDate),
+      endDate: new Date(promoData.endDate),
+    });
 
     const existing = await this.prisma.promo.findUnique({
       where: { code: promoData.code },
@@ -92,7 +133,15 @@ export class PromosService {
     });
     if (!promo) throw new NotFoundException('Promo not found');
 
-    const { rule, code, startDate, endDate, ...rest } = updatePromoDto;
+    const { rule, startDate, endDate, ...rest } = updatePromoDto;
+    const code = updatePromoDto.code?.trim();
+    assertPromoValues({
+      code: code || promo.code,
+      promoType: rest.promoType ?? promo.promoType,
+      value: Number(rest.value ?? promo.value),
+      startDate: startDate ? new Date(startDate) : promo.startDate,
+      endDate: endDate ? new Date(endDate) : promo.endDate,
+    });
 
     // Kode harus tetap unik bila diubah.
     if (code && code !== promo.code) {
@@ -234,6 +283,10 @@ export class PromosService {
     ) {
       discount = eligibleSubtotal;
     }
+    // Cashback tidak boleh melebihi yang dibayar (QA 2026-11-24).
+    if (cashback.gt(eligibleSubtotal)) {
+      cashback = eligibleSubtotal;
+    }
 
     return {
       promo,
@@ -289,6 +342,8 @@ export class PromosService {
       if (rule?.maxDiscount && cashback.gt(rule.maxDiscount)) {
         cashback = new Prisma.Decimal(rule.maxDiscount);
       }
+      // Promo lama bisa bernilai >100% — cashback tidak boleh melebihi yang dibayar.
+      if (cashback.gt(eligibleSubtotal)) cashback = eligibleSubtotal;
       cashback = toRupiah(cashback);
 
       if (cashback.gt(0)) {

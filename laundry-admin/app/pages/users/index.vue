@@ -282,7 +282,7 @@ onMounted(load)
             </UFormField>
             <UFormField label="Password">
               <UInput v-model="form.password" type="password" placeholder="Masukkan password" class="w-full" :required="!editTarget" />
-              <p class="text-xs text-[#6f809f] mt-1">Password baru (biarkan kosong jika tidak diganti)</p>
+              <p class="text-xs text-[#6f809f] mt-1">{{ editTarget ? 'Password baru (biarkan kosong jika tidak diganti)' : 'Minimal 8 karakter, kombinasi huruf dan angka' }}</p>
             </UFormField>
           </div>
 

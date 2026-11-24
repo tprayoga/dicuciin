@@ -39,6 +39,8 @@ export const useAuthStore = defineStore('auth', () => {
     if (import.meta.client) {
       // Hanya simpan refresh token — access token di memory saja
       localStorage.setItem('refreshToken', data.refreshToken)
+      // Sisa versi lama yang menyimpan access token di storage (QA 2026-11-24 BUG-033).
+      localStorage.removeItem('accessToken')
     }
   }
 

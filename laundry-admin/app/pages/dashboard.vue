@@ -318,7 +318,7 @@ onMounted(loadDashboard)
     </div>
 
     <div class="dc-page-card p-4">
-      <h3 class="text-lg sm:text-[22px] font-semibold text-[#272526] mb-4">Riwayat Transaksi hari ini</h3>
+      <h3 class="text-lg sm:text-[22px] font-semibold text-[#272526] mb-4">Transaksi Terakhir</h3>
 
       <div v-if="loading" class="text-sm text-[#6f809f]">Memuat data...</div>
 

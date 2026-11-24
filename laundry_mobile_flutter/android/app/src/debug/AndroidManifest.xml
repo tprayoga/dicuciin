@@ -4,4 +4,7 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- HTTP (tanpa TLS) hanya untuk build debug ke server lokal. Build rilis
+         hanya HTTPS (QA 2026-11-24 MOB-006). -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>
