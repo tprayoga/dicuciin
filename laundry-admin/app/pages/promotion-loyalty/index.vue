@@ -977,7 +977,7 @@ onMounted(loadData)
             <thead class="bg-[#0349a8] text-white text-left"><tr><th class="p-2">Tier</th><th class="p-2">Level</th><th class="p-2">Spending</th><th class="p-2">Txn</th><th class="p-2">Point x</th><th class="p-2">Voucher Benefit</th><th class="p-2">Status</th></tr></thead>
             <tbody>
               <tr v-if="retailTiers.length === 0"><td colspan="7" class="p-4 text-center text-[#6f809f]">Belum ada konfigurasi tier retail.</td></tr>
-              <tr v-for="item in retailTiers" :key="item.id" class="border-b border-[#e1e8f2]"><td class="p-2 font-semibold">{{ item.name }} ({{ item.tier }})</td><td class="p-2">{{ item.level }}</td><td class="p-2">{{ formatMoney(item.thresholdSpending) }}</td><td class="p-2">{{ item.thresholdTxnCount ?? '-' }}</td><td class="p-2">{{ item.pointMultiplier }}x</td><td class="p-2">{{ item.benefitDescription || 'TODO: link monthly voucher benefit API' }}</td><td class="p-2"><UBadge :color="badgeColor(item.isActive) as any" variant="soft" size="xs">{{ item.isActive ? 'ACTIVE' : 'INACTIVE' }}</UBadge></td></tr>
+              <tr v-for="item in retailTiers" :key="item.id" class="border-b border-[#e1e8f2]"><td class="p-2 font-semibold">{{ item.name }} ({{ item.tier }})</td><td class="p-2">{{ item.level }}</td><td class="p-2">{{ formatMoney(item.thresholdSpending) }}</td><td class="p-2">{{ item.thresholdTxnCount ?? '-' }}</td><td class="p-2">{{ item.pointMultiplier }}x</td><td class="p-2">{{ item.benefitDescription || '-' }}</td><td class="p-2"><UBadge :color="badgeColor(item.isActive) as any" variant="soft" size="xs">{{ item.isActive ? 'ACTIVE' : 'INACTIVE' }}</UBadge></td></tr>
             </tbody>
           </table>
         </div>

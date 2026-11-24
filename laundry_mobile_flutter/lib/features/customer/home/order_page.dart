@@ -139,12 +139,12 @@ class _OrderPageState extends State<_OrderPage> {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<CustomerController>();
-    final now = DateTime.now();
+    final now = DateTime.now().toWib();
     final todayOrders = controller.orders
-        .where((order) => _isSameDay(order.orderDate.toLocal(), now))
+        .where((order) => _isSameDay(order.orderDate.toWib(), now))
         .toList();
     final historyOrders = controller.orders
-        .where((order) => !_isSameDay(order.orderDate.toLocal(), now))
+        .where((order) => !_isSameDay(order.orderDate.toWib(), now))
         .toList();
 
     return Column(
@@ -356,7 +356,7 @@ class _BackendOrderCard extends StatelessWidget {
             _DetailRow(left: 'Outlet', right: order.outletName),
             _DetailRow(
               left: 'Tanggal',
-              right: _formatDateId(order.orderDate.toLocal()),
+              right: _formatDateId(order.orderDate.toWib()),
             ),
             _DetailRow(
               left: 'Total',
@@ -412,7 +412,7 @@ class _BookingOrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheduled = booking.scheduledAt?.toLocal();
+    final scheduled = booking.scheduledAt?.toWib();
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

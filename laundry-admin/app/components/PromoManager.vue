@@ -275,7 +275,7 @@ onMounted(load)
 
           <div class="grid md:grid-cols-2 gap-4">
             <UFormField label="Nilai Promo">
-              <UInput v-model.number="form.value" type="number" min="0" placeholder="Masukkan nominal" class="w-full" :disabled="form.promoType === 'FREE_DELIVERY'">
+              <UInput v-model.number="form.value" type="number" min="0" :max="valueSuffix === '%' ? 100 : undefined" placeholder="Masukkan nominal" class="w-full" :disabled="form.promoType === 'FREE_DELIVERY'">
                 <template v-if="valueSuffix" #trailing>
                   <span class="text-xs text-[#6f809f]">{{ valueSuffix }}</span>
                 </template>

@@ -97,7 +97,7 @@ class _CheckoutData {
 
   /// Batch 6 (S8): jadwal pakai sebenarnya (dulu teks tetap "11:00 s/d 11:30").
   String get scheduleLabel {
-    final start = (scheduledAt ?? DateTime.now()).toLocal();
+    final start = (scheduledAt ?? DateTime.now()).toWib();
     final minutes = int.tryParse(RegExp(r'\d+').firstMatch(estimasi)?.group(0) ?? '') ?? 30;
     final end = start.add(Duration(minutes: minutes));
     String hm(DateTime t) =>

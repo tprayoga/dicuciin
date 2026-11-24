@@ -54,7 +54,7 @@ class _OrderDetailPageState extends State<_OrderDetailPage> {
     price: d.totalAmount.round(),
     locationName: d.outletName,
     orderNo: d.orderNumber,
-    date: _formatDateId(d.orderDate.toLocal()),
+    date: _formatDateId(d.orderDate.toWib()),
     serviceId: '',
     outletId: d.outletId,
   );
@@ -273,7 +273,7 @@ class _OrderDetailPageState extends State<_OrderDetailPage> {
                             if (d.scheduledAt != null)
                               _DetailRow(
                                 left: 'Jadwal',
-                                right: _formatDateId(d.scheduledAt!.toLocal()),
+                                right: _formatDateId(d.scheduledAt!.toWib()),
                               ),
                             if (d.estimatedMinutes != null)
                               _DetailRow(
@@ -282,7 +282,7 @@ class _OrderDetailPageState extends State<_OrderDetailPage> {
                               ),
                             _DetailRow(
                               left: 'Tanggal',
-                              right: _formatDateId(d.orderDate.toLocal()),
+                              right: _formatDateId(d.orderDate.toWib()),
                             ),
                           ]),
                           const SizedBox(height: 12),
@@ -335,7 +335,7 @@ class _OrderDetailPageState extends State<_OrderDetailPage> {
                                 left: _BackendOrderCard._statusLabel(
                                   log.status,
                                 ),
-                                right: _formatDateId(log.createdAt.toLocal()),
+                                right: _formatDateId(log.createdAt.toWib()),
                               ),
                           ]),
                           // Batch 6 (S8): ulasan diminta setelah cucian selesai.

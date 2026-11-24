@@ -195,9 +195,9 @@ class ApiClient {
           throw ApiException('Unsupported method: $method');
       }
     } on TimeoutException {
-      throw ApiException('Request timeout. Periksa koneksi internet atau API base URL.');
+      throw ApiException('Koneksi lambat atau terputus. Periksa internet kamu lalu coba lagi.');
     } on SocketException {
-      throw ApiException('Tidak bisa terhubung ke server. Cek API base URL dan jaringan.');
+      throw ApiException('Tidak bisa terhubung ke server. Periksa internet kamu lalu coba lagi.');
     }
 
     // 401 = guard menolak SEBELUM handler berjalan, sehingga aman mengulang

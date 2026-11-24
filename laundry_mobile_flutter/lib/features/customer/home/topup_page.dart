@@ -344,7 +344,7 @@ class _TopUpPageState extends State<_TopUpPage> {
               title: Text(_rupiahText((t.creditAmount ?? t.amount).round())),
               subtitle: Text(
                 '${t.method == 'QRIS' ? 'QRIS' : 'VA ${t.bank ?? ''}'} • '
-                '${t.createdAt != null ? _formatDateId(t.createdAt!.toLocal()) : ''}',
+                '${t.createdAt != null ? _formatDateId(t.createdAt!.toWib()) : ''}',
               ),
               trailing: Text(_statusLabel(t.status)),
             ),

@@ -52,6 +52,11 @@ export class CustomersService {
       throw new BadRequestException("Email atau nomor telepon wajib diisi");
     }
 
+    // QA 2026-11-24 (BUG-053): tanggal lahir tidak boleh di masa depan.
+    if (birthDate && new Date(birthDate).getTime() > Date.now()) {
+      throw new BadRequestException("Tanggal lahir tidak boleh di masa depan");
+    }
+
     if (email) {
       const existingEmail = await this.prisma.user.findUnique({
         where: { email },
@@ -170,7 +175,12 @@ export class CustomersService {
     const digits = keyword?.replace(/\D/g, "") ?? "";
     const phoneTerms =
       digits.length >= 3
-        ? [digits, ...(digits.startsWith("0") ? [`62${digits.slice(1)}`] : [])]
+        ? [
+            digits,
+            // Data lama bisa tersimpan "08…" atau "62…" — cari kedua bentuk.
+            ...(digits.startsWith("0") ? [`62${digits.slice(1)}`] : []),
+            ...(digits.startsWith("62") && digits.length > 4 ? [`0${digits.slice(2)}`] : []),
+          ]
         : [];
     const searchWhere: Prisma.CustomerWhereInput = keyword
       ? {

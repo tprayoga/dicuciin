@@ -85,7 +85,46 @@ export class VoucherService {
     } as Prisma.VoucherTemplateCreateInput;
   }
 
+  /**
+   * QA 2026-11-24 (BUG-003): persentase 1–100, potongan nominal > 0, kode
+   * template tanpa spasi. Update memakai nilai lama untuk field yang tak dikirim.
+   */
+  private assertTemplateValues(t: {
+    code: string;
+    voucherType: VoucherType;
+    value: number;
+    startDate?: Date | null;
+    endDate?: Date | null;
+  }) {
+    if (t.startDate && t.endDate && t.endDate.getTime() < t.startDate.getTime()) {
+      throw new BadRequestException('Tanggal selesai tidak boleh sebelum tanggal mulai');
+    }
+    if (!/^[A-Za-z0-9_-]{3,40}$/.test(t.code)) {
+      throw new BadRequestException(
+        'Kode voucher 3–40 karakter, hanya huruf, angka, "-" atau "_" (tanpa spasi)',
+      );
+    }
+    if (t.voucherType === VoucherType.PERCENTAGE_DISCOUNT && (t.value <= 0 || t.value > 100)) {
+      throw new BadRequestException('Nilai persentase voucher harus di antara 1 dan 100');
+    }
+    const nominal: VoucherType[] = [
+      VoucherType.NOMINAL_DISCOUNT,
+      VoucherType.TIER_EXCLUSIVE,
+      VoucherType.B2B_EXCLUSIVE,
+    ];
+    if (nominal.includes(t.voucherType) && t.value <= 0) {
+      throw new BadRequestException('Nilai potongan voucher harus lebih dari 0');
+    }
+  }
+
   async createTemplate(data: Prisma.VoucherTemplateCreateInput) {
+    this.assertTemplateValues({
+      code: data.code,
+      voucherType: data.voucherType,
+      value: Number(data.value),
+      startDate: (data.startDate as Date | undefined) ?? null,
+      endDate: (data.endDate as Date | undefined) ?? null,
+    });
     const existing = await this.prisma.voucherTemplate.findUnique({
       where: { code: data.code },
     });
@@ -118,6 +157,13 @@ export class VoucherService {
   async updateTemplate(id: string, data: Prisma.VoucherTemplateUpdateInput) {
     const template = await this.prisma.voucherTemplate.findUnique({ where: { id } });
     if (!template) throw new NotFoundException('Template voucher tidak ditemukan');
+    this.assertTemplateValues({
+      code: typeof data.code === 'string' ? data.code : template.code,
+      voucherType: (data.voucherType as VoucherType | undefined) ?? template.voucherType,
+      value: Number((data.value as Prisma.Decimal | number | undefined) ?? template.value),
+      startDate: (data.startDate as Date | undefined) ?? template.startDate,
+      endDate: (data.endDate as Date | undefined) ?? template.endDate,
+    });
     return this.prisma.voucherTemplate.update({ where: { id }, data });
   }
 

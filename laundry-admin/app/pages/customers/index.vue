@@ -5,6 +5,8 @@ import type { PaginatedResponse } from '~/types'
 
 const api = useApi()
 const toast = useToast()
+// Tanggal lahir tidak boleh di masa depan (QA 2026-11-24 BUG-053).
+const todayIso = new Date().toISOString().slice(0, 10)
 const authStore = useAuthStore()
 const canRefund = computed(() =>
   ['SUPER_ADMIN', 'OWNER', 'ADMIN_OUTLET'].includes(authStore.user?.role || ''),
@@ -379,7 +381,7 @@ onMounted(() => load())
               />
             </UFormField>
             <UFormField label="Tanggal Lahir">
-              <UInput v-model="createForm.birthDate" type="date" class="w-full" />
+              <UInput v-model="createForm.birthDate" type="date" :max="todayIso" class="w-full" />
             </UFormField>
           </div>
 

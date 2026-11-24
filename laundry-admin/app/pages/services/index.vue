@@ -27,6 +27,7 @@ const search = ref('')
 
 const serviceTypeItems = [
   { label: 'Mesin Cuci (WASH)', value: 'WASH' },
+  { label: 'Pengering (DRY)', value: 'DRY' },
   { label: 'Setrika (IRON)', value: 'IRON' },
   { label: 'Mesin Express (EXPRESS)', value: 'EXPRESS' },
   { label: 'Cuci + Setrika (WASH_IRON)', value: 'WASH_IRON' },
@@ -84,6 +85,17 @@ function openEdit(s: ServiceItem) {
 }
 
 async function save() {
+  // QA 2026-11-24 (BUG-001): harga & estimasi wajib angka > 0.
+  const price = Number(form.price)
+  const minutes = Number(form.duration)
+  if (!form.price || !(price > 0)) {
+    toast.add({ title: 'Harga wajib diisi', description: 'Harga harus lebih dari 0.', color: 'error' })
+    return
+  }
+  if (!form.duration || !Number.isInteger(minutes) || minutes < 1) {
+    toast.add({ title: 'Estimasi wajib diisi', description: 'Estimasi berupa angka menit, minimal 1.', color: 'error' })
+    return
+  }
   try {
     const payload = {
       name: form.name,
@@ -189,7 +201,7 @@ onMounted(() => load())
 
         <div class="grid grid-cols-2 gap-3 mt-3">
           <div>
-            <p class="text-sm text-[#6f809f]">Kapasitan Mesin</p>
+            <p class="text-sm text-[#6f809f]">Kapasitas Mesin</p>
             <p class="font-medium">{{ service.capacityKg != null ? `${service.capacityKg} KG` : '-' }}</p>
           </div>
           <div>
@@ -224,10 +236,10 @@ onMounted(() => load())
           </UFormField>
           <div class="grid md:grid-cols-2 gap-4">
             <UFormField label="Harga (Rp)">
-              <UInput v-model="form.price" type="number" min="0" placeholder="Masukkan harga" class="w-full" />
+              <UInput v-model="form.price" type="number" min="1" placeholder="Masukkan harga" class="w-full" required />
             </UFormField>
             <UFormField label="Estimasi (menit)">
-              <UInput v-model="form.duration" placeholder="Masukkan estimasi" class="w-full" />
+              <UInput v-model="form.duration" type="number" min="1" step="1" placeholder="Masukkan estimasi" class="w-full" required />
             </UFormField>
           </div>
           <UFormField label="Status">

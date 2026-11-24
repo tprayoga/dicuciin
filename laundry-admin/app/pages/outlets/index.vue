@@ -50,6 +50,8 @@ const form = reactive({
   phone: '',
   openTime: '',
   closeTime: '',
+  // Tutup tengah malam disimpan '24:00' (input type=time tak bisa menampilkannya).
+  closesAtMidnight: false,
   imageUrl: '',
   isActive: true,
 })
@@ -231,7 +233,7 @@ const filteredOutlets = computed(() => {
 
 function openCreate() {
   editTarget.value = null
-  Object.assign(form, { name: '', code: '', address: '', phone: '', openTime: '', closeTime: '', imageUrl: '', isActive: true })
+  Object.assign(form, { name: '', code: '', address: '', phone: '', openTime: '', closeTime: '', closesAtMidnight: false, imageUrl: '', isActive: true })
   showModal.value = true
 }
 
@@ -243,7 +245,8 @@ function openEdit(outlet: Outlet) {
     address: outlet.address,
     phone: outlet.phone,
     openTime: outlet.openTime || '',
-    closeTime: outlet.closeTime || '',
+    closeTime: outlet.closeTime === '24:00' ? '' : (outlet.closeTime || ''),
+    closesAtMidnight: outlet.closeTime === '24:00',
     imageUrl: outlet.imageUrl || '',
     isActive: outlet.isActive !== false,
   })
@@ -258,7 +261,7 @@ async function save() {
         address: form.address,
         phone: form.phone,
         openTime: form.openTime || undefined,
-        closeTime: form.closeTime || undefined,
+        closeTime: form.closesAtMidnight ? '24:00' : (form.closeTime || undefined),
         imageUrl: form.imageUrl || null,
         isActive: form.isActive,
       })
@@ -270,7 +273,7 @@ async function save() {
         address: form.address,
         phone: form.phone,
         openTime: form.openTime || undefined,
-        closeTime: form.closeTime || undefined,
+        closeTime: form.closesAtMidnight ? '24:00' : (form.closeTime || undefined),
         imageUrl: form.imageUrl || undefined,
       })
       toast.add({ title: 'Outlet dibuat', color: 'success' })
@@ -397,7 +400,8 @@ onMounted(() => load())
               <UInput v-model="form.openTime" type="time" class="w-full" />
             </UFormField>
             <UFormField label="Jam Tutup">
-              <UInput v-model="form.closeTime" type="time" class="w-full" />
+              <UInput v-model="form.closeTime" type="time" class="w-full" :disabled="form.closesAtMidnight" />
+              <UCheckbox v-model="form.closesAtMidnight" label="Tutup tengah malam (24:00)" class="mt-2" />
             </UFormField>
           </div>
           <UFormField label="Alamat Outlet">
